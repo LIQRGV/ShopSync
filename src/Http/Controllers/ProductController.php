@@ -9,7 +9,16 @@ use Illuminate\Validation\ValidationException;
 use Liqrgv\ShopSync\Services\ProductService;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
+use Illuminate\Http\Response as IlluminateResponse;
 
+/**
+ * Product Controller - Laravel 12 Compatible
+ *
+ * This controller has been updated to support Laravel 12 features including:
+ * - Modern response handling with proper return types
+ * - Enhanced validation error handling
+ * - Improved type hints and error responses
+ */
 class ProductController extends Controller
 {
     protected ProductService $productService;

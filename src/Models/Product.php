@@ -21,15 +21,23 @@ class Product extends Model
         'is_active',
     ];
 
-    protected $casts = [
-        'price' => 'decimal:2',
-        'stock' => 'integer',
-        'metadata' => 'array',
-        'is_active' => 'boolean',
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
-        'deleted_at' => 'datetime',
-    ];
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'price' => 'decimal:2',
+            'stock' => 'integer',
+            'metadata' => 'array',
+            'is_active' => 'boolean',
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
+            'deleted_at' => 'datetime',
+        ];
+    }
 
     /**
      * Maximum size for metadata JSON in bytes

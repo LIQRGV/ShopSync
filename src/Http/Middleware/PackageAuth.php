@@ -6,17 +6,16 @@ use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class PackageAuth
 {
     /**
      * Handle an incoming request.
      *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \Closure  $next
-     * @return mixed
+     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
      */
-    public function handle(Request $request, Closure $next)
+    public function handle(Request $request, Closure $next): SymfonyResponse
     {
         // Check if package auth is enabled
         if (!config('products-package.enable_package_auth', false)) {
@@ -66,7 +65,7 @@ class PackageAuth
     /**
      * Handle Bearer token authentication
      */
-    protected function handleBearerAuth(Request $request, Closure $next)
+    protected function handleBearerAuth(Request $request, Closure $next): SymfonyResponse
     {
         $token = $request->bearerToken();
         $expectedToken = config('products-package.package_auth_key');
@@ -96,7 +95,7 @@ class PackageAuth
     /**
      * Handle API key authentication
      */
-    protected function handleApiKeyAuth(Request $request, Closure $next)
+    protected function handleApiKeyAuth(Request $request, Closure $next): SymfonyResponse
     {
         $apiKey = $request->header('X-API-Key') ?? $request->get('api_key');
         $expectedKey = config('products-package.package_auth_key');
@@ -126,7 +125,7 @@ class PackageAuth
     /**
      * Handle Basic authentication
      */
-    protected function handleBasicAuth(Request $request, Closure $next)
+    protected function handleBasicAuth(Request $request, Closure $next): SymfonyResponse
     {
         $credentials = $this->parseBasicAuth($request);
 
@@ -189,7 +188,7 @@ class PackageAuth
     /**
      * Return an unauthorized response
      */
-    protected function unauthorized(string $message = 'Unauthorized')
+    protected function unauthorized(string $message = 'Unauthorized'): SymfonyResponse
     {
         return response()->json([
             'message' => $message,
