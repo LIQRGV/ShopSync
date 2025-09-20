@@ -21,7 +21,7 @@ class ProductFetcherFactory
             'wl' => new DatabaseProductFetcher(),
             'wtm' => new ApiProductFetcher(),
             default => throw new InvalidArgumentException(
-                "Invalid mode: {$mode}. Must be 'wl' (WhiteLabel) or 'wtm' (Watcher of the Market)."
+                "Invalid mode: {$mode}. Must be 'wl' (WhiteLabel) or 'wtm' (Watch the Market)."
             )
         };
     }
@@ -64,7 +64,7 @@ class ProductFetcherFactory
                 'class' => DatabaseProductFetcher::class
             ],
             'wtm' => [
-                'name' => 'Watcher of the Market',
+                'name' => 'Watch the Market',
                 'description' => 'API-based manipulation for admin panel/market monitoring',
                 'class' => ApiProductFetcher::class
             ]

@@ -8,7 +8,7 @@ return [
     |
     | This package can operate in two modes:
     | - 'wl' (WhiteLabel): Direct database manipulation for local shop pages
-    | - 'wtm' (Watcher of the Market): API-based manipulation for admin panel/market monitoring
+    | - 'wtm' (Watch the Market): API-based manipulation for admin panel/market monitoring
     |
     */
     'mode' => env('PRODUCT_PACKAGE_MODE', 'wl'),
@@ -18,7 +18,7 @@ return [
     | WTM API Configuration
     |--------------------------------------------------------------------------
     |
-    | Configuration for the WTM (Watcher of the Market) mode.
+    | Configuration for the WTM (Watch the Market) mode.
     | These settings are only used when mode is set to 'wtm'.
     |
     */
