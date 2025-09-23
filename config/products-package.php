@@ -123,6 +123,50 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Diamond Box Database Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for connecting to the Diamond Box database.
+    |
+    */
+    'diamond_box_connection' => [
+        'driver' => env('DIAMOND_BOX_DB_DRIVER', 'mysql'),
+        'host' => env('DIAMOND_BOX_DB_HOST', '127.0.0.1'),
+        'port' => env('DIAMOND_BOX_DB_PORT', '3306'),
+        'database' => env('DIAMOND_BOX_DB_DATABASE'),
+        'username' => env('DIAMOND_BOX_DB_USERNAME'),
+        'password' => env('DIAMOND_BOX_DB_PASSWORD'),
+        'charset' => env('DIAMOND_BOX_DB_CHARSET', 'utf8mb4'),
+        'collation' => env('DIAMOND_BOX_DB_COLLATION', 'utf8mb4_unicode_ci'),
+        'prefix' => env('DIAMOND_BOX_DB_PREFIX', ''),
+        'strict' => env('DIAMOND_BOX_DB_STRICT', true),
+        'engine' => env('DIAMOND_BOX_DB_ENGINE'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | JSON API Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for JSON API format responses.
+    |
+    */
+    'json_api' => [
+        'include_meta' => env('JSON_API_INCLUDE_META', true),
+        'include_links' => env('JSON_API_INCLUDE_LINKS', true),
+        'max_include_depth' => env('JSON_API_MAX_INCLUDE_DEPTH', 3),
+        'allowed_includes' => [
+            'category',
+            'brand',
+            'location',
+            'supplier',
+            'attributes',
+        ],
+        'default_includes' => env('JSON_API_DEFAULT_INCLUDES', ''),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Validation Configuration
     |--------------------------------------------------------------------------
     |

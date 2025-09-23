@@ -5,71 +5,152 @@ namespace Liqrgv\ShopSync\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
+/**
+ * Product Model
+ *
+ * Unified product model with comprehensive field mapping and relationships.
+ * Supports all 23 product fields for complete e-commerce functionality.
+ */
 class Product extends Model
 {
     use HasFactory, SoftDeletes;
 
+    protected $table = 'products';
+
     protected $fillable = [
         'name',
-        'description',
+        'sku_prefix',
+        'rol_number',
+        'sku_custom_ref',
+        'status',
+        'sell_status',
+        'purchase_date',
+        'cost_price',
         'price',
-        'stock',
-        'sku',
-        'category',
-        'metadata',
-        'is_active',
+        'sale_price',
+        'trade_price',
+        'vat_scheme',
+        'image',
+        'original_image',
+        'description',
+        'seo_keywords',
+        'slug',
+        'seo_description',
+        'related_products',
+        'category_id',
+        'brand_id',
+        'location_id',
+        'supplier_id',
     ];
 
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array
-     */
     protected $casts = [
+        'cost_price' => 'decimal:2',
         'price' => 'decimal:2',
-        'stock' => 'integer',
-        'metadata' => 'array',
-        'is_active' => 'boolean',
+        'sale_price' => 'decimal:2',
+        'trade_price' => 'decimal:2',
+        'purchase_date' => 'date',
+        'related_products' => 'array',
+        'category_id' => 'integer',
+        'brand_id' => 'integer',
+        'location_id' => 'integer',
+        'supplier_id' => 'integer',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
     ];
 
-    /**
-     * Maximum size for metadata JSON in bytes
-     */
-    const METADATA_MAX_SIZE = 65536; // 64KB
+    protected $hidden = [
+        'cost_price', // Hide cost price from API responses
+    ];
 
     /**
-     * Maximum nesting depth for metadata
+     * Get the category that owns the product
      */
-    const METADATA_MAX_DEPTH = 10;
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class, 'category_id');
+    }
 
-    protected $hidden = [];
+    /**
+     * Get the brand that owns the product
+     */
+    public function brand(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class, 'brand_id');
+    }
+
+    /**
+     * Get the location that owns the product
+     */
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'location_id');
+    }
+
+    /**
+     * Get the supplier that owns the product
+     */
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class, 'supplier_id');
+    }
+
+    /**
+     * Get the attributes for the product
+     */
+    public function attributes(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Attribute::class,
+            'product_attributes',
+            'product_id',
+            'attribute_id'
+        )->withPivot('value')
+          ->withTimestamps()
+          ->using(ProductAttribute::class);
+    }
+
+    /**
+     * Get the product attributes (pivot records) for the product
+     */
+    public function productAttributes()
+    {
+        return $this->hasMany(ProductAttribute::class, 'product_id');
+    }
 
     /**
      * Scope to filter active products
      */
     public function scopeActive($query)
     {
-        return $query->where('is_active', true);
+        return $query->where('status', 'active');
     }
 
     /**
-     * Scope to filter inactive products
+     * Scope to filter by sell status
      */
-    public function scopeInactive($query)
+    public function scopeBySellStatus($query, $sellStatus)
     {
-        return $query->where('is_active', false);
+        return $query->where('sell_status', $sellStatus);
     }
 
     /**
      * Scope to filter by category
      */
-    public function scopeByCategory($query, $category)
+    public function scopeByCategory($query, $categoryId)
     {
-        return $query->where('category', $category);
+        return $query->where('category_id', $categoryId);
+    }
+
+    /**
+     * Scope to filter by brand
+     */
+    public function scopeByBrand($query, $brandId)
+    {
+        return $query->where('brand_id', $brandId);
     }
 
     /**
@@ -89,27 +170,11 @@ class Product extends Model
     }
 
     /**
-     * Scope to filter by stock level
+     * Get the full SKU (combines prefix and value)
      */
-    public function scopeMinStock($query, $minStock)
+    public function getFullSkuAttribute(): string
     {
-        return $query->where('stock', '>=', $minStock);
-    }
-
-    /**
-     * Check if product is in stock
-     */
-    public function inStock(): bool
-    {
-        return $this->stock > 0;
-    }
-
-    /**
-     * Check if product is out of stock
-     */
-    public function outOfStock(): bool
-    {
-        return $this->stock <= 0;
+        return $this->sku_prefix . $this->rol_number;
     }
 
     /**
@@ -117,184 +182,62 @@ class Product extends Model
      */
     public function getFormattedPriceAttribute(): string
     {
-        return '$' . number_format($this->price, 2);
+        return '£' . number_format($this->price, 2);
     }
 
     /**
-     * Get stock status
+     * Get formatted sale price
      */
-    public function getStockStatusAttribute(): string
+    public function getFormattedSalePriceAttribute(): ?string
     {
-        if ($this->stock > 10) {
-            return 'In Stock';
-        } elseif ($this->stock > 0) {
-            return 'Low Stock';
-        } else {
-            return 'Out of Stock';
-        }
+        return $this->sale_price ? '£' . number_format($this->sale_price, 2) : null;
     }
 
     /**
-     * Set metadata attribute with validation and sanitization
+     * Check if product is on sale
      */
-    public function setMetadataAttribute($value)
+    public function isOnSale(): bool
     {
-        if (is_null($value)) {
-            $this->attributes['metadata'] = null;
-            return;
-        }
-
-        // Convert to array if it's a string
-        if (is_string($value)) {
-            $decoded = json_decode($value, true);
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                throw new \InvalidArgumentException('Invalid JSON provided for metadata field');
-            }
-            $value = $decoded;
-        }
-
-        // Ensure it's an array
-        if (!is_array($value)) {
-            throw new \InvalidArgumentException('Metadata must be an array or valid JSON string');
-        }
-
-        // Validate and sanitize the metadata
-        $sanitized = $this->validateAndSanitizeMetadata($value);
-
-        // Check size constraints
-        $jsonString = json_encode($sanitized, JSON_UNESCAPED_UNICODE);
-        if (strlen($jsonString) > self::METADATA_MAX_SIZE) {
-            throw new \InvalidArgumentException('Metadata exceeds maximum size limit of ' . self::METADATA_MAX_SIZE . ' bytes');
-        }
-
-        $this->attributes['metadata'] = $jsonString;
+        return $this->sale_price !== null && $this->sale_price < $this->price;
     }
 
     /**
-     * Validate and sanitize metadata array
+     * Get the effective selling price (sale price if available, otherwise regular price)
      */
-    protected function validateAndSanitizeMetadata(array $metadata, int $depth = 1): array
+    public function getEffectivePriceAttribute(): float
     {
-        // Check nesting depth to prevent deep recursion attacks
-        if ($depth > self::METADATA_MAX_DEPTH) {
-            throw new \InvalidArgumentException('Metadata nesting depth exceeds maximum allowed depth of ' . self::METADATA_MAX_DEPTH);
-        }
-
-        $sanitized = [];
-        $keyCount = 0;
-
-        foreach ($metadata as $key => $value) {
-            // Limit number of keys to prevent memory exhaustion
-            if (++$keyCount > 1000) {
-                throw new \InvalidArgumentException('Metadata contains too many keys (maximum 1000 allowed)');
-            }
-
-            // Sanitize and validate key
-            $sanitizedKey = $this->sanitizeMetadataKey($key);
-            if ($sanitizedKey === null) {
-                continue; // Skip invalid keys
-            }
-
-            // Sanitize and validate value
-            $sanitizedValue = $this->sanitizeMetadataValue($value, $depth);
-            if ($sanitizedValue !== null) {
-                $sanitized[$sanitizedKey] = $sanitizedValue;
-            }
-        }
-
-        return $sanitized;
+        return $this->sale_price ?? $this->price;
     }
 
     /**
-     * Sanitize metadata key
+     * Get the image URL with fallback
      */
-    protected function sanitizeMetadataKey($key): ?string
+    public function getImageUrlAttribute(): ?string
     {
-        // Ensure key is a string
-        if (!is_string($key) && !is_numeric($key)) {
-            return null;
-        }
-
-        $key = (string) $key;
-
-        // Limit key length
-        if (strlen($key) > 255) {
-            return null;
-        }
-
-        // Remove control characters and null bytes
-        $key = preg_replace('/[\x00-\x1F\x7F]/', '', $key);
-
-        // Trim whitespace
-        $key = trim($key);
-
-        return empty($key) ? null : $key;
+        return $this->image ?: $this->original_image;
     }
 
     /**
-     * Sanitize metadata value
+     * Check if product has image
      */
-    protected function sanitizeMetadataValue($value, int $depth)
+    public function hasImage(): bool
     {
-        if (is_null($value)) {
-            return null;
-        }
-
-        if (is_bool($value)) {
-            return $value;
-        }
-
-        if (is_numeric($value)) {
-            // Prevent extremely large numbers that could cause issues
-            if (is_float($value) && !is_finite($value)) {
-                return null;
-            }
-            return $value;
-        }
-
-        if (is_string($value)) {
-            // Limit string length to prevent memory issues
-            if (strlen($value) > 10000) {
-                return substr($value, 0, 10000);
-            }
-
-            // Remove null bytes and control characters (except newlines and tabs)
-            $value = preg_replace('/[\x00\x01-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $value);
-
-            return $value;
-        }
-
-        if (is_array($value)) {
-            return $this->validateAndSanitizeMetadata($value, $depth + 1);
-        }
-
-        // Reject objects and other types
-        return null;
+        return !empty($this->image) || !empty($this->original_image);
     }
 
     /**
-     * Get metadata attribute with safe deserialization
+     * Get related products as collection
      */
-    public function getMetadataAttribute($value)
+    public function getRelatedProductsCollectionAttribute()
     {
-        if (is_null($value)) {
-            return null;
+        if (empty($this->related_products)) {
+            return collect([]);
         }
 
-        if (is_array($value)) {
-            return $value;
-        }
+        $relatedIds = is_array($this->related_products) 
+            ? $this->related_products 
+            : json_decode($this->related_products, true);
 
-        // Safe JSON decode with error handling
-        $decoded = json_decode($value, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            \Log::warning('Invalid JSON in product metadata', [
-                'product_id' => $this->id,
-                'error' => json_last_error_msg()
-            ]);
-            return [];
-        }
-
-        return $decoded ?: [];
+        return static::whereIn('id', $relatedIds)->get();
     }
 }

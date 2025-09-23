@@ -2,229 +2,321 @@
 
 namespace Liqrgv\ShopSync\Services;
 
-use Liqrgv\ShopSync\Services\Contracts\ProductFetcherInterface;
-use Liqrgv\ShopSync\Services\ProductFetchers\ProductFetcherFactory;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\ValidationException;
+use Liqrgv\ShopSync\Models\Product;
+use Liqrgv\ShopSync\Models\Category;
+use Liqrgv\ShopSync\Models\Brand;
+use Liqrgv\ShopSync\Models\Attribute;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 
+/**
+ * Product Service
+ *
+ * This service provides high-level operations for working with
+ * products and their relationships.
+ */
 class ProductService
 {
-    protected $productFetcher;
-
-    public function __construct(ProductFetcherInterface $productFetcher = null)
-    {
-        $this->productFetcher = $productFetcher ?? ProductFetcherFactory::makeFromConfig();
-    }
-
     /**
-     * Get all products with filters
+     * Get products with all relationships loaded
+     *
+     * @param array $filters
+     * @return Collection
      */
-    public function getAll(array $filters = [])
+    public function getProductsWithRelationships(array $filters = []): Collection
     {
-        $validatedFilters = $this->validateFilters($filters);
-        return $this->productFetcher->getAll($validatedFilters);
-    }
-
-    /**
-     * Get paginated products
-     */
-    public function paginate(int $perPage = null, array $filters = [])
-    {
-        $perPage = $perPage ?? config('products-package.per_page', 15);
-
-        // Validate per page limit
-        $perPage = max(1, min($perPage, 100)); // Limit between 1 and 100
-
-        $validatedFilters = $this->validateFilters($filters);
-        return $this->productFetcher->paginate($perPage, $validatedFilters);
-    }
-
-    /**
-     * Create a new product
-     */
-    public function create(array $data)
-    {
-        $validatedData = $this->validateProductData($data);
-
-        Log::info('Creating new product', ['data' => $validatedData]);
-
-        return $this->productFetcher->create($validatedData);
-    }
-
-    /**
-     * Update an existing product
-     */
-    public function update($id, array $data)
-    {
-        $validatedData = $this->validateProductData($data, $id);
-
-        Log::info('Updating product', ['id' => $id, 'data' => $validatedData]);
-
-        return $this->productFetcher->update($id, $validatedData);
-    }
-
-    /**
-     * Delete a product (soft delete)
-     */
-    public function delete($id)
-    {
-        Log::info('Soft deleting product', ['id' => $id]);
-
-        $this->productFetcher->delete($id);
-    }
-
-    /**
-     * Restore a soft-deleted product
-     */
-    public function restore($id)
-    {
-        Log::info('Restoring product', ['id' => $id]);
-
-        return $this->productFetcher->restore($id);
-    }
-
-    /**
-     * Permanently delete a product
-     */
-    public function forceDelete($id)
-    {
-        Log::warning('Force deleting product', ['id' => $id]);
-
-        $this->productFetcher->forceDelete($id);
-    }
-
-    /**
-     * Find a single product by ID
-     */
-    public function find($id, $withTrashed = false)
-    {
-        return $this->productFetcher->find($id, $withTrashed);
-    }
-
-    /**
-     * Search products
-     */
-    public function search($query, array $filters = [])
-    {
-        if (empty(trim($query))) {
-            return $this->getAll($filters);
-        }
-
-        $validatedFilters = $this->validateFilters($filters);
-
-        Log::debug('Searching products', ['query' => $query, 'filters' => $validatedFilters]);
-
-        return $this->productFetcher->search(trim($query), $validatedFilters);
-    }
-
-    /**
-     * Export products to CSV
-     */
-    public function exportToCsv(array $filters = [])
-    {
-        $validatedFilters = $this->validateFilters($filters);
-
-        Log::info('Exporting products to CSV', ['filters' => $validatedFilters]);
-
-        return $this->productFetcher->exportToCsv($validatedFilters);
-    }
-
-    /**
-     * Import products from CSV
-     */
-    public function importFromCsv($csvContent)
-    {
-        if (empty(trim($csvContent))) {
-            throw new \InvalidArgumentException('CSV content cannot be empty');
-        }
-
-        Log::info('Importing products from CSV', ['content_length' => strlen($csvContent)]);
-
-        $result = $this->productFetcher->importFromCsv($csvContent);
-
-        Log::info('CSV import completed', [
-            'imported' => $result['imported'] ?? 0,
-            'errors_count' => count($result['errors'] ?? [])
+        $query = Product::with([
+            'category',
+            'brand',
+            'location',
+            'supplier',
+            'attributes'
         ]);
 
-        return $result;
+        // Apply filters
+        if (isset($filters['active']) && $filters['active']) {
+            $query->active();
+        }
+
+        if (isset($filters['category_id'])) {
+            $query->byCategory($filters['category_id']);
+        }
+
+        if (isset($filters['brand_id'])) {
+            $query->byBrand($filters['brand_id']);
+        }
+
+        if (isset($filters['min_price']) || isset($filters['max_price'])) {
+            $query->priceRange($filters['min_price'] ?? null, $filters['max_price'] ?? null);
+        }
+
+        if (isset($filters['sell_status'])) {
+            $query->bySellStatus($filters['sell_status']);
+        }
+
+        return $query->get();
     }
 
     /**
-     * Get current mode and configuration status
+     * Get product hierarchy data for display
+     *
+     * @param int $productId
+     * @return array
      */
-    public function getStatus(): array
+    public function getProductHierarchy(int $productId): array
     {
+        $product = Product::with([
+            'category.ancestors',
+            'brand',
+            'location',
+            'supplier',
+            'productAttributes.attribute'
+        ])->findOrFail($productId);
+
         return [
-            'fetcher_class' => get_class($this->productFetcher),
-            'config_status' => ProductFetcherFactory::getConfigStatus(),
-            'mode' => config('products-package.mode', 'wl')
+            'product' => $product,
+            'category_breadcrumb' => $this->getCategoryBreadcrumb($product->category),
+            'attributes' => $this->formatProductAttributes($product->productAttributes),
+            'related_products' => $this->getRelatedProducts($product),
+            'pricing' => $this->getProductPricing($product),
         ];
     }
 
     /**
-     * Validate product data
+     * Get category breadcrumb trail
+     *
+     * @param Category|null $category
+     * @return array
      */
-    protected function validateProductData(array $data, $id = null): array
+    protected function getCategoryBreadcrumb(?Category $category): array
     {
-        $rules = [
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'price' => 'required|numeric|min:0',
-            'stock' => 'required|integer|min:0',
-            'sku' => 'nullable|string|max:255',
-            'category' => 'nullable|string|max:255',
-            'metadata' => 'nullable|array',
-            'is_active' => 'boolean',
-        ];
-
-        // Add unique rule for SKU if provided and not updating
-        if (isset($data['sku']) && !empty($data['sku'])) {
-            $rules['sku'] .= $id ? "|unique:products,sku,{$id}" : '|unique:products,sku';
-        }
-
-        $validator = Validator::make($data, $rules);
-
-        if ($validator->fails()) {
-            throw new ValidationException($validator);
-        }
-
-        return $validator->validated();
-    }
-
-    /**
-     * Validate filter parameters
-     */
-    protected function validateFilters(array $filters): array
-    {
-        $validator = Validator::make($filters, [
-            'category' => 'nullable|string|max:255',
-            'is_active' => 'nullable|boolean',
-            'min_price' => 'nullable|numeric|min:0',
-            'max_price' => 'nullable|numeric|min:0',
-            'min_stock' => 'nullable|integer|min:0',
-            'with_trashed' => 'nullable|boolean',
-            'only_trashed' => 'nullable|boolean',
-            'sort_by' => 'nullable|string|in:id,name,price,stock,category,created_at,updated_at',
-            'sort_order' => 'nullable|string|in:asc,desc',
-        ]);
-
-        if ($validator->fails()) {
-            Log::warning('Invalid filters provided', ['errors' => $validator->errors()->toArray()]);
-            // Return empty array for invalid filters instead of throwing exception
+        if (!$category) {
             return [];
         }
 
-        $validated = $validator->validated();
+        $breadcrumb = [];
 
-        // Additional validation logic
-        if (isset($validated['min_price']) && isset($validated['max_price'])
-            && $validated['min_price'] > $validated['max_price']) {
-            Log::warning('min_price is greater than max_price, ignoring max_price');
-            unset($validated['max_price']);
+        // Add ancestors
+        foreach ($category->ancestors() as $ancestor) {
+            $breadcrumb[] = [
+                'id' => $ancestor->id,
+                'name' => $ancestor->name,
+                'slug' => $ancestor->slug,
+            ];
         }
 
-        return $validated;
+        // Add current category
+        $breadcrumb[] = [
+            'id' => $category->id,
+            'name' => $category->name,
+            'slug' => $category->slug,
+        ];
+
+        return $breadcrumb;
+    }
+
+    /**
+     * Format product attributes for display
+     *
+     * @param Collection $productAttributes
+     * @return array
+     */
+    protected function formatProductAttributes(Collection $productAttributes): array
+    {
+        return $productAttributes->map(function ($productAttribute) {
+            return [
+                'name' => $productAttribute->attribute_name,
+                'code' => $productAttribute->attribute_code,
+                'value' => $productAttribute->value,
+                'formatted_value' => $productAttribute->formatted_value,
+                'type' => $productAttribute->attribute->type,
+                'is_filterable' => $productAttribute->isFilterable(),
+                'is_searchable' => $productAttribute->isSearchable(),
+            ];
+        })->groupBy('code')->toArray();
+    }
+
+    /**
+     * Get related products
+     *
+     * @param Product $product
+     * @return Collection
+     */
+    protected function getRelatedProducts(Product $product): Collection
+    {
+        return $product->related_products_collection ?? collect();
+    }
+
+    /**
+     * Get comprehensive pricing information
+     *
+     * @param Product $product
+     * @return array
+     */
+    protected function getProductPricing(Product $product): array
+    {
+        return [
+            'cost_price' => $product->cost_price,
+            'regular_price' => $product->price,
+            'sale_price' => $product->sale_price,
+            'trade_price' => $product->trade_price,
+            'effective_price' => $product->effective_price,
+            'formatted_price' => $product->formatted_price,
+            'formatted_sale_price' => $product->formatted_sale_price,
+            'is_on_sale' => $product->isOnSale(),
+            'vat_scheme' => $product->vat_scheme,
+        ];
+    }
+
+    /**
+     * Search products by various criteria
+     *
+     * @param string $searchTerm
+     * @param array $filters
+     * @return Collection
+     */
+    public function searchProducts(string $searchTerm, array $filters = []): Collection
+    {
+        $query = Product::with(['category', 'brand']);
+
+        // Basic text search
+        $query->where(function ($q) use ($searchTerm) {
+            $q->where('name', 'LIKE', "%{$searchTerm}%")
+              ->orWhere('description', 'LIKE', "%{$searchTerm}%")
+              ->orWhere('seo_keywords', 'LIKE', "%{$searchTerm}%")
+              ->orWhere('slug', 'LIKE', "%{$searchTerm}%")
+              ->orWhereRaw("CONCAT(sku_prefix, rol_number) LIKE ?", ["%{$searchTerm}%"]);
+        });
+
+        // Search in related models
+        $query->orWhereHas('category', function ($q) use ($searchTerm) {
+            $q->where('name', 'LIKE', "%{$searchTerm}%");
+        });
+
+        $query->orWhereHas('brand', function ($q) use ($searchTerm) {
+            $q->where('name', 'LIKE', "%{$searchTerm}%");
+        });
+
+        // Search in attributes
+        $query->orWhereHas('attributes', function ($q) use ($searchTerm) {
+            $q->where('is_searchable', true)
+              ->where(function ($subQ) use ($searchTerm) {
+                  $subQ->where('name', 'LIKE', "%{$searchTerm}%")
+                       ->orWherePivot('value', 'LIKE', "%{$searchTerm}%");
+              });
+        });
+
+        // Apply additional filters
+        if (isset($filters['category_id'])) {
+            $query->where('category_id', $filters['category_id']);
+        }
+
+        if (isset($filters['brand_id'])) {
+            $query->where('brand_id', $filters['brand_id']);
+        }
+
+        $query->active();
+
+        return $query->distinct()->get();
+    }
+
+    /**
+     * Get products by attribute filters
+     *
+     * @param array $attributeFilters ['attribute_code' => 'value']
+     * @param array $additionalFilters
+     * @return Collection
+     */
+    public function getProductsByAttributes(array $attributeFilters, array $additionalFilters = []): Collection
+    {
+        $query = Product::with(['category', 'brand', 'attributes']);
+
+        // Apply attribute filters
+        foreach ($attributeFilters as $attributeCode => $value) {
+            $query->whereHas('attributes', function ($q) use ($attributeCode, $value) {
+                $q->where('code', $attributeCode)
+                  ->where('is_filterable', true)
+                  ->wherePivot('value', $value);
+            });
+        }
+
+        // Apply additional filters
+        if (isset($additionalFilters['category_id'])) {
+            $query->byCategory($additionalFilters['category_id']);
+        }
+
+        if (isset($additionalFilters['brand_id'])) {
+            $query->byBrand($additionalFilters['brand_id']);
+        }
+
+        if (isset($additionalFilters['min_price']) || isset($additionalFilters['max_price'])) {
+            $query->priceRange(
+                $additionalFilters['min_price'] ?? null,
+                $additionalFilters['max_price'] ?? null
+            );
+        }
+
+        $query->active();
+
+        return $query->get();
+    }
+
+    /**
+     * Get filterable attributes for a category
+     *
+     * @param int|null $categoryId
+     * @return Collection
+     */
+    public function getFilterableAttributes(?int $categoryId = null): Collection
+    {
+        $attributeQuery = Attribute::active()->filterable()->ordered();
+
+        if ($categoryId) {
+            // Get attributes that are actually used by products in this category
+            $attributeQuery->whereHas('products', function ($q) use ($categoryId) {
+                $q->where('category_id', $categoryId);
+            });
+        }
+
+        return $attributeQuery->get();
+    }
+
+    /**
+     * Get product statistics
+     *
+     * @return array
+     */
+    public function getProductStatistics(): array
+    {
+        return [
+            'total_products' => Product::count(),
+            'active_products' => Product::active()->count(),
+            'products_on_sale' => Product::whereNotNull('sale_price')->count(),
+            'categories_count' => Category::active()->count(),
+            'brands_count' => Brand::active()->count(),
+            'average_price' => Product::active()->avg('price'),
+            'total_inventory_value' => Product::active()->sum(DB::raw('price * 1')), // Assuming quantity of 1
+        ];
+    }
+
+    /**
+     * Sync related products for a product
+     *
+     * @param int $productId
+     * @param array $relatedProductIds
+     * @return bool
+     */
+    public function syncRelatedProducts(int $productId, array $relatedProductIds): bool
+    {
+        $product = Product::findOrFail($productId);
+
+        // Validate that all related product IDs exist
+        $validIds = Product::whereIn('id', $relatedProductIds)->pluck('id')->toArray();
+
+        $product->update([
+            'related_products' => $validIds
+        ]);
+
+        return true;
     }
 }
