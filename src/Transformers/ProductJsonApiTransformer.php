@@ -106,7 +106,7 @@ class ProductJsonApiTransformer extends JsonApiTransformer
 
         // Format dates consistently
         if (isset($attributes['purchase_date']) && $attributes['purchase_date']) {
-            $attributes['purchase_date'] = $product->purchase_date?->format('Y-m-d');
+            $attributes['purchase_date'] = $product->purchase_date ? $product->purchase_date->format('Y-m-d') : null;
         }
 
         // Format decimal prices to ensure consistent formatting

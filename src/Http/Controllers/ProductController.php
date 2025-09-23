@@ -10,7 +10,7 @@ use Liqrgv\ShopSync\Services\ProductService;
 use Liqrgv\ShopSync\Http\Requests\StoreProductRequest;
 use Liqrgv\ShopSync\Http\Requests\UpdateProductRequest;
 use Liqrgv\ShopSync\Http\Requests\SearchProductRequest;
-use Liqrgv\ShopSync\Http\Requests\BaseProductRequest;
+use Liqrgv\ShopSync\Http\Requests\GetProductRequest;
 use Liqrgv\ShopSync\Helpers\JsonApiErrorResponse;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
@@ -28,10 +28,10 @@ class ProductController extends Controller
     /**
      * Display a listing of products with JSON API support
      *
-     * @param BaseProductRequest $request
+     * @param GetProductRequest $request
      * @return JsonResponse
      */
-    public function index(BaseProductRequest $request): JsonResponse
+    public function index(GetProductRequest $request): JsonResponse
     {
         try {
             $includes = $request->getIncludes();
@@ -110,11 +110,11 @@ class ProductController extends Controller
     /**
      * Display the specified product with JSON API support
      *
-     * @param BaseProductRequest $request
+     * @param GetProductRequest $request
      * @param mixed $id
      * @return JsonResponse
      */
-    public function show(BaseProductRequest $request, $id): JsonResponse
+    public function show(GetProductRequest $request, $id): JsonResponse
     {
         try {
             $includes = $request->getIncludes();
@@ -241,11 +241,11 @@ class ProductController extends Controller
     /**
      * Restore a soft-deleted Product with JSON API response
      *
-     * @param BaseProductRequest $request
+     * @param GetProductRequest $request
      * @param mixed $id
      * @return JsonResponse
      */
-    public function restore(BaseProductRequest $request, $id): JsonResponse
+    public function restore(GetProductRequest $request, $id): JsonResponse
     {
         try {
             $includes = $request->getIncludes();

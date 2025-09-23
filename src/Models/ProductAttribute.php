@@ -124,7 +124,7 @@ class ProductAttribute extends Model
      */
     public function getAttributeNameAttribute(): ?string
     {
-        return $this->attribute?->name;
+        return $this->attribute ? $this->attribute->name : null;
     }
 
     /**
@@ -132,7 +132,7 @@ class ProductAttribute extends Model
      */
     public function getAttributeCodeAttribute(): ?string
     {
-        return $this->attribute?->code;
+        return $this->attribute ? $this->attribute->code : null;
     }
 
     /**
@@ -140,7 +140,7 @@ class ProductAttribute extends Model
      */
     public function isRequired(): bool
     {
-        return $this->attribute?->is_required ?? false;
+        return $this->attribute ? $this->attribute->is_required : false;
     }
 
     /**
@@ -148,7 +148,7 @@ class ProductAttribute extends Model
      */
     public function isFilterable(): bool
     {
-        return $this->attribute?->is_filterable ?? false;
+        return $this->attribute ? $this->attribute->is_filterable : false;
     }
 
     /**
@@ -156,6 +156,6 @@ class ProductAttribute extends Model
      */
     public function isSearchable(): bool
     {
-        return $this->attribute?->is_searchable ?? false;
+        return $this->attribute ? $this->attribute->is_searchable : false;
     }
 }
