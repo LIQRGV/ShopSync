@@ -17,10 +17,10 @@ class ApiProductFetcher implements ProductFetcherInterface
     protected $apiKey;
     protected $timeout;
 
-    public function __construct()
+    public function __construct($client)
     {
-        $this->baseUrl = config('products-package.wtm_api_url');
-        $this->apiKey = config('products-package.wtm_api_key');
+        $this->baseUrl = $client->getActiveUrl() . '/' . config('products-package.route_prefix', 'api/v1');
+        $this->apiKey = decrypt($client->access_token);
         $this->timeout = config('products-package.wtm_api_timeout', 5);
 
         if (empty($this->baseUrl) || empty($this->apiKey)) {

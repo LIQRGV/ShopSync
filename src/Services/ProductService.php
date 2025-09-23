@@ -27,9 +27,9 @@ class ProductService
     protected $productFetcher;
     protected $transformer;
 
-    public function __construct(ProductJsonApiTransformer $transformer = null)
+    public function __construct(ProductJsonApiTransformer $transformer = null, Request $request = null)
     {
-        $this->productFetcher = ProductFetcherFactory::makeFromConfig();
+        $this->productFetcher = ProductFetcherFactory::makeFromConfig($request);
         $this->transformer = $transformer ?? new ProductJsonApiTransformer();
     }
     /**

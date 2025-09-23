@@ -3,10 +3,9 @@
 namespace Liqrgv\ShopSync\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Product Model
@@ -16,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  */
 class Product extends Model
 {
-    use HasFactory, SoftDeletes;
+    use SoftDeletes;
 
     protected $table = 'products';
 
@@ -204,7 +203,7 @@ class Product extends Model
     /**
      * Get the effective selling price (sale price if available, otherwise regular price)
      */
-    public function getEffectivePriceAttribute(): float
+    public function getEffectivePriceAttribute()
     {
         return $this->sale_price ?? $this->price;
     }

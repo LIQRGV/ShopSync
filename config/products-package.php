@@ -22,8 +22,6 @@ return [
     | These settings are only used when mode is set to 'wtm'.
     |
     */
-    'wtm_api_url' => env('PRODUCT_PACKAGE_WTM_API_URL', 'https://api.example.com'),
-    'wtm_api_key' => env('PRODUCT_PACKAGE_WTM_API_KEY'),
     'wtm_api_timeout' => env('PRODUCT_PACKAGE_WTM_API_TIMEOUT', 30), // seconds
 
     /*
@@ -120,28 +118,6 @@ return [
     */
     'connection' => env('PRODUCT_PACKAGE_DB_CONNECTION'),
     'table_prefix' => env('PRODUCT_PACKAGE_TABLE_PREFIX', ''),
-
-    /*
-    |--------------------------------------------------------------------------
-    | Diamond Box Database Configuration
-    |--------------------------------------------------------------------------
-    |
-    | Configuration for connecting to the Diamond Box database.
-    |
-    */
-    'diamond_box_connection' => [
-        'driver' => env('DIAMOND_BOX_DB_DRIVER', 'mysql'),
-        'host' => env('DIAMOND_BOX_DB_HOST', '127.0.0.1'),
-        'port' => env('DIAMOND_BOX_DB_PORT', '3306'),
-        'database' => env('DIAMOND_BOX_DB_DATABASE'),
-        'username' => env('DIAMOND_BOX_DB_USERNAME'),
-        'password' => env('DIAMOND_BOX_DB_PASSWORD'),
-        'charset' => env('DIAMOND_BOX_DB_CHARSET', 'utf8mb4'),
-        'collation' => env('DIAMOND_BOX_DB_COLLATION', 'utf8mb4_unicode_ci'),
-        'prefix' => env('DIAMOND_BOX_DB_PREFIX', ''),
-        'strict' => env('DIAMOND_BOX_DB_STRICT', true),
-        'engine' => env('DIAMOND_BOX_DB_ENGINE'),
-    ],
 
     /*
     |--------------------------------------------------------------------------

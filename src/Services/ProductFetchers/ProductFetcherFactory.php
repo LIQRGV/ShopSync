@@ -2,6 +2,7 @@
 
 namespace Liqrgv\ShopSync\Services\ProductFetchers;
 
+use Liqrgv\ShopSync\Models\Client;
 use Liqrgv\ShopSync\Services\Contracts\ProductFetcherInterface;
 use InvalidArgumentException;
 use Illuminate\Support\Facades\Log;
@@ -15,13 +16,15 @@ class ProductFetcherFactory
      * @return ProductFetcherInterface
      * @throws InvalidArgumentException
      */
-    public static function make($mode)
+    public static function make($mode, $request)
     {
         switch (strtolower($mode)) {
             case 'wl':
                 return new DatabaseProductFetcher();
             case 'wtm':
-                return new ApiProductFetcher();
+                $clientID = $request->header('client-id');
+                $client = Client::query()->find($clientID);
+                return new ApiProductFetcher($client);
             default:
                 throw new InvalidArgumentException(
                     "Invalid mode: {$mode}. Must be 'wl' (WhiteLabel) or 'wtm' (Watch the Market)."
@@ -34,14 +37,14 @@ class ProductFetcherFactory
      *
      * @return ProductFetcherInterface
      */
-    public static function makeFromConfig()
+    public static function makeFromConfig($request = null)
     {
         $mode = config('products-package.mode', 'wl');
 
         Log::info('Creating ProductFetcher', ['mode' => $mode]);
 
         try {
-            return static::make($mode);
+            return static::make($mode, $request);
         } catch (InvalidArgumentException $e) {
             Log::error('Invalid ProductFetcher mode in config, falling back to WL mode', [
                 'invalid_mode' => $mode,
