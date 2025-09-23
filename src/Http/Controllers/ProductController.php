@@ -7,167 +7,53 @@ use Illuminate\Routing\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
 use Liqrgv\ShopSync\Services\ProductService;
-use Liqrgv\ShopSync\Models\Product;
-use Liqrgv\ShopSync\Transformers\ProductJsonApiTransformer;
-use Liqrgv\ShopSync\Helpers\JsonApiIncludeParser;
+use Liqrgv\ShopSync\Http\Requests\StoreProductRequest;
+use Liqrgv\ShopSync\Http\Requests\UpdateProductRequest;
+use Liqrgv\ShopSync\Http\Requests\SearchProductRequest;
+use Liqrgv\ShopSync\Http\Requests\BaseProductRequest;
 use Liqrgv\ShopSync\Helpers\JsonApiErrorResponse;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
-use Illuminate\Http\Response as IlluminateResponse;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
-/**
- * Product Controller - Laravel 12 Compatible with JSON API Support
- *
- * This controller provides JSON API compliant endpoints for Product management including:
- * - Modern response handling with proper return types
- * - JSON API transformation with include parameters
- * - Enhanced validation error handling
- * - Support for category, brand, location, supplier, and attributes relationships
- * - Improved type hints and error responses
- */
 class ProductController extends Controller
 {
-    protected ProductService $productService;
-    protected ProductJsonApiTransformer $transformer;
+    protected $productService;
 
-    public function __construct(ProductService $productService, ProductJsonApiTransformer $transformer)
+    public function __construct(ProductService $productService)
     {
         $this->productService = $productService;
-        $this->transformer = $transformer;
     }
 
     /**
      * Display a listing of products with JSON API support
      *
-     * Supports include parameters: category, brand, location, supplier, attributes
-     * Example: GET /api/products?include=category,brand&page=1
+     * @param BaseProductRequest $request
+     * @return JsonResponse
      */
-    public function index(Request $request): JsonResponse
+    public function index(BaseProductRequest $request): JsonResponse
     {
         try {
-            // Parse include parameters
-            $includes = JsonApiIncludeParser::parseFromRequest($request);
+            $includes = $request->getIncludes();
 
             // Validate includes
-            $includeErrors = $this->transformer->validateIncludes($includes);
+            $includeErrors = $this->productService->validateIncludes($includes);
             if (!empty($includeErrors)) {
                 return response()->json(JsonApiErrorResponse::multiple($includeErrors), 400);
             }
 
-            // Build filters for Product
-            $filters = $request->only([
-                'category_id',
-                'brand_id',
-                'location_id',
-                'supplier_id',
-                'active',
-                'sell_status',
-                'min_price',
-                'max_price',
-                'with_trashed',
-                'only_trashed',
-                'sort_by',
-                'sort_order',
-            ]);
+            $filters = $request->getFilters();
+            $pagination = $request->getPagination();
 
-            // Get products using the service
-            $query = Product::query();
-
-            // Apply eager loading based on includes
-            $with = [];
-            if (in_array('category', $includes)) $with[] = 'category';
-            if (in_array('brand', $includes)) $with[] = 'brand';
-            if (in_array('location', $includes)) $with[] = 'location';
-            if (in_array('supplier', $includes)) $with[] = 'supplier';
-            if (in_array('attributes', $includes)) $with[] = 'attributes';
-            if (in_array('productAttributes', $includes)) $with[] = 'productAttributes.attribute';
-
-            if (!empty($with)) {
-                $query->with($with);
-            }
-
-            // Apply filters
-            if (isset($filters['category_id'])) {
-                $query->where('category_id', $filters['category_id']);
-            }
-
-            if (isset($filters['brand_id'])) {
-                $query->where('brand_id', $filters['brand_id']);
-            }
-
-            if (isset($filters['location_id'])) {
-                $query->where('location_id', $filters['location_id']);
-            }
-
-            if (isset($filters['supplier_id'])) {
-                $query->where('supplier_id', $filters['supplier_id']);
-            }
-
-            if (isset($filters['sell_status'])) {
-                $query->where('sell_status', $filters['sell_status']);
-            }
-
-            if (isset($filters['min_price']) || isset($filters['max_price'])) {
-                $query->where(function ($q) use ($filters) {
-                    if (isset($filters['min_price'])) {
-                        $q->where('price', '>=', $filters['min_price']);
-                    }
-                    if (isset($filters['max_price'])) {
-                        $q->where('price', '<=', $filters['max_price']);
-                    }
-                });
-            }
-
-            // Handle trashed records
-            if (isset($filters['with_trashed']) && $filters['with_trashed']) {
-                $query->withTrashed();
-            } elseif (isset($filters['only_trashed']) && $filters['only_trashed']) {
-                $query->onlyTrashed();
-            }
-
-            // Apply sorting
-            $sortBy = $filters['sort_by'] ?? 'id';
-            $sortOrder = $filters['sort_order'] ?? 'desc';
-            $allowedSorts = ['id', 'name', 'price', 'cost_price', 'created_at', 'updated_at', 'purchase_date'];
-
-            if (in_array($sortBy, $allowedSorts)) {
-                $query->orderBy($sortBy, $sortOrder);
-            }
-
-            // Handle pagination
-            if ($request->has('page')) {
-                $perPage = (int) $request->get('per_page', config('shopsync.per_page', 15));
-                $perPage = min($perPage, 100); // Max 100 items per page
-
-                $products = $query->paginate($perPage);
-
-                // Transform to JSON API format
-                $result = $this->transformer->transformProducts($products->items(), $includes);
-
-                // Add pagination meta
-                $result['meta'] = [
-                    'pagination' => [
-                        'count' => $products->count(),
-                        'current_page' => $products->currentPage(),
-                        'per_page' => $products->perPage(),
-                        'total' => $products->total(),
-                        'total_pages' => $products->lastPage()
-                    ]
-                ];
-            } else {
-                $products = $query->get();
-                $result = $this->transformer->transformProducts($products, $includes);
-            }
+            $result = $this->productService->getProductsWithPagination($filters, $includes, $pagination);
 
             return response()->json($result);
 
         } catch (\Exception $e) {
             Log::error('Failed to fetch products', [
                 'error' => $e->getMessage(),
-                'filters' => $filters ?? [],
-                'includes' => $includes ?? []
+                'filters' => $request->getFilters(),
+                'includes' => $request->getIncludes()
             ]);
 
             $error = JsonApiErrorResponse::internalError(
@@ -179,89 +65,28 @@ class ProductController extends Controller
 
     /**
      * Store a newly created Product with JSON API response
+     *
+     * @param StoreProductRequest $request
+     * @return JsonResponse
      */
-    public function store(Request $request): JsonResponse
+    public function store(StoreProductRequest $request): JsonResponse
     {
         try {
-            // Parse include parameters for response transformation
-            $includes = JsonApiIncludeParser::parseFromRequest($request);
+            $includes = $request->getIncludes();
 
             // Validate includes
-            $includeErrors = $this->transformer->validateIncludes($includes);
+            $includeErrors = $this->productService->validateIncludes($includes);
             if (!empty($includeErrors)) {
                 return response()->json(JsonApiErrorResponse::multiple($includeErrors), 400);
             }
 
-            // Validate Product data
-            $validated = $request->validate([
-                'name' => 'required|string|max:255',
-                'sku_prefix' => 'nullable|string|max:50',
-                'rol_number' => 'nullable|string|max:100',
-                'sku_custom_ref' => 'nullable|string|max:255',
-                'status' => 'nullable|string|in:active,inactive,draft',
-                'sell_status' => 'nullable|string|in:available,sold,reserved,pending',
-                'purchase_date' => 'nullable|date',
-                'cost_price' => 'nullable|numeric|min:0',
-                'price' => 'required|numeric|min:0',
-                'sale_price' => 'nullable|numeric|min:0',
-                'trade_price' => 'nullable|numeric|min:0',
-                'vat_scheme' => 'nullable|string|max:50',
-                'image' => 'nullable|string|max:500',
-                'original_image' => 'nullable|string|max:500',
-                'description' => 'nullable|string',
-                'seo_keywords' => 'nullable|string',
-                'slug' => 'nullable|string|max:255|unique:products,slug',
-                'seo_description' => 'nullable|string',
-                'related_products' => 'nullable|array',
-                'related_products.*' => 'integer|exists:products,id',
-                'category_id' => 'nullable|integer|exists:categories,id',
-                'brand_id' => 'nullable|integer|exists:brands,id',
-                'location_id' => 'nullable|integer|exists:locations,id',
-                'supplier_id' => 'nullable|integer|exists:suppliers,id',
-            ]);
+            $data = $request->getValidatedDataWithDefaults();
+            $result = $this->productService->createProduct($data, $includes);
 
-            // Convert related_products array to JSON for storage
-            if (isset($validated['related_products'])) {
-                $validated['related_products'] = json_encode($validated['related_products']);
+            if (!$result) {
+                $error = JsonApiErrorResponse::internalError('Failed to create product');
+                return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
             }
-
-            // Set default values
-            $validated['status'] = $validated['status'] ?? 'active';
-            $validated['sell_status'] = $validated['sell_status'] ?? 'available';
-
-            // Generate slug if not provided
-            if (empty($validated['slug'])) {
-                $validated['slug'] = Str::slug($validated['name']);
-
-                // Ensure unique slug
-                $baseSlug = $validated['slug'];
-                $counter = 1;
-                while (Product::where('slug', $validated['slug'])->exists()) {
-                    $validated['slug'] = $baseSlug . '-' . $counter;
-                    $counter++;
-                }
-            }
-
-            // Create the product
-            $product = Product::create($validated);
-
-            // Load relationships if needed for response
-            if (!empty($includes)) {
-                $with = [];
-                if (in_array('category', $includes)) $with[] = 'category';
-                if (in_array('brand', $includes)) $with[] = 'brand';
-                if (in_array('location', $includes)) $with[] = 'location';
-                if (in_array('supplier', $includes)) $with[] = 'supplier';
-                if (in_array('attributes', $includes)) $with[] = 'attributes';
-                if (in_array('productAttributes', $includes)) $with[] = 'productAttributes.attribute';
-
-                if (!empty($with)) {
-                    $product->load($with);
-                }
-            }
-
-            // Transform to JSON API format
-            $result = $this->transformer->transformProduct($product, $includes);
 
             return response()->json($result, Response::HTTP_CREATED);
 
@@ -285,46 +110,28 @@ class ProductController extends Controller
     /**
      * Display the specified product with JSON API support
      *
-     * Supports include parameters: category, brand, location, supplier, attributes
-     * Example: GET /api/products/1?include=category,brand,attributes
+     * @param BaseProductRequest $request
+     * @param mixed $id
+     * @return JsonResponse
      */
-    public function show(Request $request, $id): JsonResponse
+    public function show(BaseProductRequest $request, $id): JsonResponse
     {
         try {
-            // Parse include parameters
-            $includes = JsonApiIncludeParser::parseFromRequest($request);
+            $includes = $request->getIncludes();
 
             // Validate includes
-            $includeErrors = $this->transformer->validateIncludes($includes);
+            $includeErrors = $this->productService->validateIncludes($includes);
             if (!empty($includeErrors)) {
                 return response()->json(JsonApiErrorResponse::multiple($includeErrors), 400);
             }
 
-            // Build query with eager loading based on includes
-            $query = Product::query();
+            $withTrashed = $request->includesTrashed();
+            $result = $this->productService->findProduct($id, $includes, $withTrashed);
 
-            $with = [];
-            if (in_array('category', $includes)) $with[] = 'category';
-            if (in_array('brand', $includes)) $with[] = 'brand';
-            if (in_array('location', $includes)) $with[] = 'location';
-            if (in_array('supplier', $includes)) $with[] = 'supplier';
-            if (in_array('attributes', $includes)) $with[] = 'attributes';
-            if (in_array('productAttributes', $includes)) $with[] = 'productAttributes.attribute';
-
-            if (!empty($with)) {
-                $query->with($with);
+            if (!$result) {
+                $error = JsonApiErrorResponse::notFound('product', $id);
+                return response()->json($error, Response::HTTP_NOT_FOUND);
             }
-
-            // Handle trashed records
-            $withTrashed = $request->boolean('with_trashed');
-            if ($withTrashed) {
-                $query->withTrashed();
-            }
-
-            $product = $query->findOrFail($id);
-
-            // Transform to JSON API format
-            $result = $this->transformer->transformProduct($product, $includes);
 
             return response()->json($result);
 
@@ -347,89 +154,29 @@ class ProductController extends Controller
 
     /**
      * Update the specified Product with JSON API response
+     *
+     * @param UpdateProductRequest $request
+     * @param mixed $id
+     * @return JsonResponse
      */
-    public function update(Request $request, $id): JsonResponse
+    public function update(UpdateProductRequest $request, $id): JsonResponse
     {
         try {
-            // Parse include parameters for response transformation
-            $includes = JsonApiIncludeParser::parseFromRequest($request);
+            $includes = $request->getIncludes();
 
             // Validate includes
-            $includeErrors = $this->transformer->validateIncludes($includes);
+            $includeErrors = $this->productService->validateIncludes($includes);
             if (!empty($includeErrors)) {
                 return response()->json(JsonApiErrorResponse::multiple($includeErrors), 400);
             }
 
-            // Find the product
-            $product = Product::findOrFail($id);
+            $data = $request->getValidatedDataWithFormatting();
+            $result = $this->productService->updateProduct($id, $data, $includes);
 
-            // Validate Product update data
-            $validated = $request->validate([
-                'name' => 'sometimes|required|string|max:255',
-                'sku_prefix' => 'nullable|string|max:50',
-                'rol_number' => 'nullable|string|max:100',
-                'sku_custom_ref' => 'nullable|string|max:255',
-                'status' => 'nullable|string|in:active,inactive,draft',
-                'sell_status' => 'nullable|string|in:available,sold,reserved,pending',
-                'purchase_date' => 'nullable|date',
-                'cost_price' => 'nullable|numeric|min:0',
-                'price' => 'sometimes|required|numeric|min:0',
-                'sale_price' => 'nullable|numeric|min:0',
-                'trade_price' => 'nullable|numeric|min:0',
-                'vat_scheme' => 'nullable|string|max:50',
-                'image' => 'nullable|string|max:500',
-                'original_image' => 'nullable|string|max:500',
-                'description' => 'nullable|string',
-                'seo_keywords' => 'nullable|string',
-                'slug' => 'nullable|string|max:255|unique:products,slug,' . $id,
-                'seo_description' => 'nullable|string',
-                'related_products' => 'nullable|array',
-                'related_products.*' => 'integer|exists:products,id',
-                'category_id' => 'nullable|integer|exists:categories,id',
-                'brand_id' => 'nullable|integer|exists:brands,id',
-                'location_id' => 'nullable|integer|exists:locations,id',
-                'supplier_id' => 'nullable|integer|exists:suppliers,id',
-            ]);
-
-            // Convert related_products array to JSON for storage
-            if (isset($validated['related_products'])) {
-                $validated['related_products'] = json_encode($validated['related_products']);
+            if (!$result) {
+                $error = JsonApiErrorResponse::notFound('product', $id);
+                return response()->json($error, Response::HTTP_NOT_FOUND);
             }
-
-            // Generate slug if name changed and slug not provided
-            if (isset($validated['name']) && !isset($validated['slug'])) {
-                $baseSlug = Str::slug($validated['name']);
-                $validated['slug'] = $baseSlug;
-
-                // Ensure unique slug
-                $counter = 1;
-                while (Product::where('slug', $validated['slug'])
-                    ->where('id', '!=', $id)->exists()) {
-                    $validated['slug'] = $baseSlug . '-' . $counter;
-                    $counter++;
-                }
-            }
-
-            // Update the product
-            $product->update($validated);
-
-            // Load relationships if needed for response
-            if (!empty($includes)) {
-                $with = [];
-                if (in_array('category', $includes)) $with[] = 'category';
-                if (in_array('brand', $includes)) $with[] = 'brand';
-                if (in_array('location', $includes)) $with[] = 'location';
-                if (in_array('supplier', $includes)) $with[] = 'supplier';
-                if (in_array('attributes', $includes)) $with[] = 'attributes';
-                if (in_array('productAttributes', $includes)) $with[] = 'productAttributes.attribute';
-
-                if (!empty($with)) {
-                    $product->load($with);
-                }
-            }
-
-            // Transform to JSON API format
-            $result = $this->transformer->transformProduct($product, $includes);
 
             return response()->json($result);
 
@@ -456,22 +203,33 @@ class ProductController extends Controller
 
     /**
      * Remove the specified Product (soft delete)
+     *
+     * @param mixed $id
+     * @return JsonResponse
      */
     public function destroy($id): JsonResponse
     {
         try {
-            $product = Product::findOrFail($id);
-            $product->delete();
+            $success = $this->productService->deleteProduct($id);
+
+            if (!$success) {
+                $error = JsonApiErrorResponse::notFound('product', $id);
+                return response()->json($error, Response::HTTP_NOT_FOUND);
+            }
 
             return response()->json(null, Response::HTTP_NO_CONTENT);
-        } catch (ModelNotFoundException $e) {
-            $error = JsonApiErrorResponse::notFound('product', $id);
-            return response()->json($error, Response::HTTP_NOT_FOUND);
+
         } catch (\Exception $e) {
             Log::error('Failed to delete product', [
                 'error' => $e->getMessage(),
                 'id' => $id
             ]);
+
+            // Check if it's a not found error
+            if (strpos($e->getMessage(), 'not found') !== false || strpos($e->getMessage(), 'No query results') !== false) {
+                $error = JsonApiErrorResponse::notFound('product', $id);
+                return response()->json($error, Response::HTTP_NOT_FOUND);
+            }
 
             $error = JsonApiErrorResponse::internalError(
                 app()->environment('local') ? $e->getMessage() : 'Failed to delete product'
@@ -482,47 +240,31 @@ class ProductController extends Controller
 
     /**
      * Restore a soft-deleted Product with JSON API response
+     *
+     * @param BaseProductRequest $request
+     * @param mixed $id
+     * @return JsonResponse
      */
-    public function restore(Request $request, $id): JsonResponse
+    public function restore(BaseProductRequest $request, $id): JsonResponse
     {
         try {
-            // Parse include parameters for response transformation
-            $includes = JsonApiIncludeParser::parseFromRequest($request);
+            $includes = $request->getIncludes();
 
             // Validate includes
-            $includeErrors = $this->transformer->validateIncludes($includes);
+            $includeErrors = $this->productService->validateIncludes($includes);
             if (!empty($includeErrors)) {
                 return response()->json(JsonApiErrorResponse::multiple($includeErrors), 400);
             }
 
-            $product = Product::withTrashed()->findOrFail($id);
+            $result = $this->productService->restoreProduct($id, $includes);
 
-            if (!$product->trashed()) {
-                $error = JsonApiErrorResponse::badRequest('Product is not deleted and cannot be restored.');
-                return response()->json($error, Response::HTTP_BAD_REQUEST);
+            if (!$result) {
+                $error = JsonApiErrorResponse::notFound('product', $id);
+                return response()->json($error, Response::HTTP_NOT_FOUND);
             }
-
-            $product->restore();
-
-            // Load relationships if needed for response
-            if (!empty($includes)) {
-                $with = [];
-                if (in_array('category', $includes)) $with[] = 'category';
-                if (in_array('brand', $includes)) $with[] = 'brand';
-                if (in_array('location', $includes)) $with[] = 'location';
-                if (in_array('supplier', $includes)) $with[] = 'supplier';
-                if (in_array('attributes', $includes)) $with[] = 'attributes';
-                if (in_array('productAttributes', $includes)) $with[] = 'productAttributes.attribute';
-
-                if (!empty($with)) {
-                    $product->load($with);
-                }
-            }
-
-            // Transform to JSON API format
-            $result = $this->transformer->transformProduct($product, $includes);
 
             return response()->json($result);
+
         } catch (ModelNotFoundException $e) {
             $error = JsonApiErrorResponse::notFound('product', $id);
             return response()->json($error, Response::HTTP_NOT_FOUND);
@@ -542,22 +284,33 @@ class ProductController extends Controller
 
     /**
      * Permanently delete the specified Product
+     *
+     * @param mixed $id
+     * @return JsonResponse
      */
     public function forceDelete($id): JsonResponse
     {
         try {
-            $product = Product::withTrashed()->findOrFail($id);
-            $product->forceDelete();
+            $success = $this->productService->forceDeleteProduct($id);
+
+            if (!$success) {
+                $error = JsonApiErrorResponse::notFound('product', $id);
+                return response()->json($error, Response::HTTP_NOT_FOUND);
+            }
 
             return response()->json(null, Response::HTTP_NO_CONTENT);
-        } catch (ModelNotFoundException $e) {
-            $error = JsonApiErrorResponse::notFound('product', $id);
-            return response()->json($error, Response::HTTP_NOT_FOUND);
+
         } catch (\Exception $e) {
             Log::error('Failed to force delete product', [
                 'error' => $e->getMessage(),
                 'id' => $id
             ]);
+
+            // Check if it's a not found error
+            if (strpos($e->getMessage(), 'not found') !== false || strpos($e->getMessage(), 'No query results') !== false) {
+                $error = JsonApiErrorResponse::notFound('product', $id);
+                return response()->json($error, Response::HTTP_NOT_FOUND);
+            }
 
             $error = JsonApiErrorResponse::internalError(
                 app()->environment('local') ? $e->getMessage() : 'Failed to permanently delete product'
@@ -569,118 +322,30 @@ class ProductController extends Controller
     /**
      * Search Products with JSON API support
      *
-     * Supports include parameters: category, brand, location, supplier, attributes
-     * Example: GET /api/products/search?q=diamond&include=category,brand
+     * @param SearchProductRequest $request
+     * @return JsonResponse
      */
-    public function search(Request $request): JsonResponse
+    public function search(SearchProductRequest $request): JsonResponse
     {
         try {
-            // Parse include parameters
-            $includes = JsonApiIncludeParser::parseFromRequest($request);
+            $includes = $request->getIncludes();
 
             // Validate includes
-            $includeErrors = $this->transformer->validateIncludes($includes);
+            $includeErrors = $this->productService->validateIncludes($includes);
             if (!empty($includeErrors)) {
                 return response()->json(JsonApiErrorResponse::multiple($includeErrors), 400);
             }
 
-            // Validate search parameters
-            $validated = $request->validate([
-                'q' => 'required|string|min:1|max:255',
-                'category_id' => 'nullable|integer|exists:categories,id',
-                'brand_id' => 'nullable|integer|exists:brands,id',
-                'location_id' => 'nullable|integer|exists:locations,id',
-                'supplier_id' => 'nullable|integer|exists:suppliers,id',
-                'sell_status' => 'nullable|string|in:available,sold,reserved,pending',
-                'min_price' => 'nullable|numeric|min:0',
-                'max_price' => 'nullable|numeric|min:0',
-                'with_trashed' => 'nullable|boolean',
-                'sort_by' => 'nullable|string|in:id,name,price,cost_price,created_at,updated_at,purchase_date',
-                'sort_order' => 'nullable|string|in:asc,desc',
-                'per_page' => 'nullable|integer|min:1|max:100'
-            ]);
+            $searchTerm = $request->getSearchTerm();
+            $filters = $request->getSearchFilters();
+            $pagination = $request->getPaginationSettings();
 
-            $searchTerm = $validated['q'];
-
-            // Use the ProductService search functionality
-            $products = $this->productService->searchProducts($searchTerm, [
-                'category_id' => $validated['category_id'] ?? null,
-                'brand_id' => $validated['brand_id'] ?? null,
-                'location_id' => $validated['location_id'] ?? null,
-                'supplier_id' => $validated['supplier_id'] ?? null,
-                'min_price' => $validated['min_price'] ?? null,
-                'max_price' => $validated['max_price'] ?? null,
-            ]);
-
-            // Apply additional filters manually if needed
-            $query = $products->toQuery();
-
-            // Apply eager loading based on includes
-            $with = [];
-            if (in_array('category', $includes)) $with[] = 'category';
-            if (in_array('brand', $includes)) $with[] = 'brand';
-            if (in_array('location', $includes)) $with[] = 'location';
-            if (in_array('supplier', $includes)) $with[] = 'supplier';
-            if (in_array('attributes', $includes)) $with[] = 'attributes';
-            if (in_array('productAttributes', $includes)) $with[] = 'productAttributes.attribute';
-
-            if (!empty($with)) {
-                $query->with($with);
-            }
-
-            // Apply sell status filter
-            if (isset($validated['sell_status'])) {
-                $query->where('sell_status', $validated['sell_status']);
-            }
-
-            // Handle trashed records
-            if (isset($validated['with_trashed']) && $validated['with_trashed']) {
-                $query->withTrashed();
-            }
-
-            // Apply sorting
-            $sortBy = $validated['sort_by'] ?? 'name';
-            $sortOrder = $validated['sort_order'] ?? 'asc';
-            $query->orderBy($sortBy, $sortOrder);
-
-            // Handle pagination
-            if ($request->has('page')) {
-                $perPage = (int) ($validated['per_page'] ?? config('shopsync.per_page', 15));
-                $perPage = min($perPage, 100); // Max 100 items per page
-
-                $paginatedResults = $query->paginate($perPage);
-
-                // Transform to JSON API format
-                $result = $this->transformer->transformProducts($paginatedResults->items(), $includes);
-
-                // Add pagination meta and search meta
-                $result['meta'] = [
-                    'search' => [
-                        'query' => $searchTerm,
-                        'total_results' => $paginatedResults->total()
-                    ],
-                    'pagination' => [
-                        'count' => $paginatedResults->count(),
-                        'current_page' => $paginatedResults->currentPage(),
-                        'per_page' => $paginatedResults->perPage(),
-                        'total' => $paginatedResults->total(),
-                        'total_pages' => $paginatedResults->lastPage()
-                    ]
-                ];
-            } else {
-                $searchResults = $query->get();
-
-                // Transform to JSON API format
-                $result = $this->transformer->transformProducts($searchResults, $includes);
-
-                // Add search meta
-                $result['meta'] = [
-                    'search' => [
-                        'query' => $searchTerm,
-                        'total_results' => $searchResults->count()
-                    ]
-                ];
-            }
+            $result = $this->productService->searchProductsWithPagination(
+                $searchTerm,
+                $filters,
+                $includes,
+                $pagination
+            );
 
             return response()->json($result);
 
@@ -704,6 +369,9 @@ class ProductController extends Controller
 
     /**
      * Export products to CSV
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\Response|JsonResponse
      */
     public function export(Request $request)
     {
@@ -718,8 +386,7 @@ class ProductController extends Controller
                 'only_trashed' => 'nullable|boolean',
             ]);
 
-            $csv = $this->productService->exportToCsv($filters);
-
+            $csv = $this->productService->exportProducts($filters);
             $filename = 'products-' . date('Y-m-d-H-i-s') . '.csv';
 
             return response($csv, Response::HTTP_OK)
@@ -728,6 +395,7 @@ class ProductController extends Controller
                 ->header('Cache-Control', 'no-cache, no-store, must-revalidate')
                 ->header('Pragma', 'no-cache')
                 ->header('Expires', '0');
+
         } catch (ValidationException $e) {
             return response()->json([
                 'message' => 'Validation failed',
@@ -748,12 +416,15 @@ class ProductController extends Controller
 
     /**
      * Import products from CSV
+     *
+     * @param Request $request
+     * @return JsonResponse
      */
     public function import(Request $request): JsonResponse
     {
         try {
             $validated = $request->validate([
-                'file' => 'required|file|mimes:csv,txt|max:2048', // Reduced to 2MB max for security
+                'file' => 'required|file|mimes:csv,txt|max:2048',
             ]);
 
             $file = $validated['file'];
@@ -780,7 +451,7 @@ class ProductController extends Controller
                 ], Response::HTTP_UNPROCESSABLE_ENTITY);
             }
 
-            $result = $this->productService->importFromCsv($csvContent);
+            $result = $this->productService->importProducts($csvContent);
 
             return response()->json([
                 'message' => 'Import completed',
@@ -788,6 +459,7 @@ class ProductController extends Controller
                 'errors' => $result['errors'],
                 'total_errors' => count($result['errors'])
             ]);
+
         } catch (ValidationException $e) {
             return response()->json([
                 'message' => 'Validation failed',
@@ -812,29 +484,15 @@ class ProductController extends Controller
 
     /**
      * Get Product statistics and status with JSON API support
+     *
+     * @return JsonResponse
      */
     public function status(): JsonResponse
     {
         try {
-            $statistics = $this->productService->getProductStatistics();
-
-            $result = [
-                'data' => [
-                    'type' => 'product-status',
-                    'id' => '1',
-                    'attributes' => [
-                        'status' => 'healthy',
-                        'model' => 'Product',
-                        'database_table' => 'products',
-                        'statistics' => $statistics,
-                        'supported_includes' => $this->transformer->getAvailableIncludes(),
-                        'json_api_version' => '1.1',
-                        'timestamp' => now()->toISOString()
-                    ]
-                ]
-            ];
-
+            $result = $this->productService->getProductStatus();
             return response()->json($result);
+
         } catch (\Exception $e) {
             Log::error('Failed to get product status', [
                 'error' => $e->getMessage()
@@ -849,8 +507,11 @@ class ProductController extends Controller
 
     /**
      * Validate uploaded file for security issues
+     *
+     * @param mixed $file
+     * @return bool
      */
-    protected function validateUploadedFile($file): bool
+    protected function validateUploadedFile($file)
     {
         // Check if file exists and is readable
         if (!$file || !$file->isValid()) {
@@ -904,8 +565,11 @@ class ProductController extends Controller
 
     /**
      * Validate CSV content for potential security issues
+     *
+     * @param string $content
+     * @return bool
      */
-    protected function validateCsvContent(string $content): bool
+    protected function validateCsvContent($content)
     {
         // Check for extremely long lines that might indicate malicious content
         $lines = explode("\n", $content);
@@ -983,8 +647,11 @@ class ProductController extends Controller
 
     /**
      * Check for malicious file signatures
+     *
+     * @param string $content
+     * @return bool
      */
-    protected function containsMaliciousSignatures(string $content): bool
+    protected function containsMaliciousSignatures($content)
     {
         $maliciousSignatures = [
             "\x00", // Null bytes
