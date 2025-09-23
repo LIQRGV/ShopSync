@@ -10,9 +10,9 @@ use Illuminate\Http\Client\RequestException;
 
 class ApiProductFetcher implements ProductFetcherInterface
 {
-    protected string $baseUrl;
-    protected string $apiKey;
-    protected int $timeout;
+    protected $baseUrl;
+    protected $apiKey;
+    protected $timeout;
 
     public function __construct()
     {
@@ -129,7 +129,7 @@ class ApiProductFetcher implements ProductFetcherInterface
         });
     }
 
-    public function find($id, bool $withTrashed = false)
+    public function find($id, $withTrashed = false)
     {
         return $this->handleRequest(function () use ($id, $withTrashed) {
             $params = $withTrashed ? ['with_trashed' => true] : [];
@@ -137,7 +137,7 @@ class ApiProductFetcher implements ProductFetcherInterface
         }, null);
     }
 
-    public function search(string $query, array $filters = [])
+    public function search($query, array $filters = [])
     {
         return $this->handleRequest(function () use ($query, $filters) {
             $filters['q'] = $query;
@@ -145,7 +145,7 @@ class ApiProductFetcher implements ProductFetcherInterface
         }, []);
     }
 
-    public function exportToCsv(array $filters = []): string
+    public function exportToCsv(array $filters = [])
     {
         return $this->handleRequest(function () use ($filters) {
             $response = $this->client()->get('/products/export', $filters);
@@ -158,7 +158,7 @@ class ApiProductFetcher implements ProductFetcherInterface
         }, '');
     }
 
-    public function importFromCsv(string $csvContent): array
+    public function importFromCsv($csvContent)
     {
         return $this->handleRequest(function () use ($csvContent) {
             return $this->client()

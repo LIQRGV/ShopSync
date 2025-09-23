@@ -69,7 +69,7 @@ interface ProductFetcherInterface
      * @param bool $withTrashed
      * @return mixed
      */
-    public function find($id, bool $withTrashed = false);
+    public function find($id, $withTrashed = false);
 
     /**
      * Search products
@@ -78,7 +78,7 @@ interface ProductFetcherInterface
      * @param array $filters
      * @return mixed
      */
-    public function search(string $query, array $filters = []);
+    public function search($query, array $filters = []);
 
     /**
      * Export products to CSV
@@ -86,7 +86,7 @@ interface ProductFetcherInterface
      * @param array $filters
      * @return string CSV content
      */
-    public function exportToCsv(array $filters = []): string;
+    public function exportToCsv(array $filters = []);
 
     /**
      * Import products from CSV
@@ -94,5 +94,5 @@ interface ProductFetcherInterface
      * @param string $csvContent
      * @return array Import results
      */
-    public function importFromCsv(string $csvContent): array;
+    public function importFromCsv($csvContent);
 }

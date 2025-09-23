@@ -13,9 +13,9 @@ class PackageAuth
     /**
      * Handle an incoming request.
      *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  \Closure  $next
      */
-    public function handle(Request $request, Closure $next): SymfonyResponse
+    public function handle(Request $request, Closure $next)
     {
         // Check if package auth is enabled
         if (!config('products-package.enable_package_auth', false)) {
@@ -40,7 +40,7 @@ class PackageAuth
     /**
      * Determine the authentication method based on request headers
      */
-    protected function getAuthMethod(Request $request): string
+    protected function getAuthMethod(Request $request)
     {
         // Check for Bearer token
         if ($request->bearerToken()) {
@@ -54,7 +54,7 @@ class PackageAuth
 
         // Check for Basic auth
         if ($request->hasHeader('Authorization') &&
-            str_starts_with($request->header('Authorization'), 'Basic ')) {
+            substr($request->header('Authorization'), 0, 6) === 'Basic ') {
             return 'basic';
         }
 
@@ -65,7 +65,7 @@ class PackageAuth
     /**
      * Handle Bearer token authentication
      */
-    protected function handleBearerAuth(Request $request, Closure $next): SymfonyResponse
+    protected function handleBearerAuth(Request $request, Closure $next)
     {
         $token = $request->bearerToken();
         $expectedToken = config('products-package.package_auth_key');
@@ -95,7 +95,7 @@ class PackageAuth
     /**
      * Handle API key authentication
      */
-    protected function handleApiKeyAuth(Request $request, Closure $next): SymfonyResponse
+    protected function handleApiKeyAuth(Request $request, Closure $next)
     {
         $apiKey = $request->header('X-API-Key') ?? $request->get('api_key');
         $expectedKey = config('products-package.package_auth_key');
@@ -125,7 +125,7 @@ class PackageAuth
     /**
      * Handle Basic authentication
      */
-    protected function handleBasicAuth(Request $request, Closure $next): SymfonyResponse
+    protected function handleBasicAuth(Request $request, Closure $next)
     {
         $credentials = $this->parseBasicAuth($request);
 
@@ -163,17 +163,17 @@ class PackageAuth
     /**
      * Parse Basic authentication header
      */
-    protected function parseBasicAuth(Request $request): ?array
+    protected function parseBasicAuth(Request $request)
     {
         $authHeader = $request->header('Authorization');
 
-        if (!$authHeader || !str_starts_with($authHeader, 'Basic ')) {
+        if (!$authHeader || substr($authHeader, 0, 6) !== 'Basic ') {
             return null;
         }
 
         $credentials = base64_decode(substr($authHeader, 6));
 
-        if (!$credentials || !str_contains($credentials, ':')) {
+        if (!$credentials || strpos($credentials, ':') === false) {
             return null;
         }
 
@@ -188,7 +188,7 @@ class PackageAuth
     /**
      * Return an unauthorized response
      */
-    protected function unauthorized(string $message = 'Unauthorized'): SymfonyResponse
+    protected function unauthorized($message = 'Unauthorized')
     {
         return response()->json([
             'message' => $message,

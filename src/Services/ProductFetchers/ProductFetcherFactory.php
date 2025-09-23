@@ -15,15 +15,18 @@ class ProductFetcherFactory
      * @return ProductFetcherInterface
      * @throws InvalidArgumentException
      */
-    public static function make(string $mode): ProductFetcherInterface
+    public static function make($mode)
     {
-        return match(strtolower($mode)) {
-            'wl' => new DatabaseProductFetcher(),
-            'wtm' => new ApiProductFetcher(),
-            default => throw new InvalidArgumentException(
-                "Invalid mode: {$mode}. Must be 'wl' (WhiteLabel) or 'wtm' (Watch the Market)."
-            )
-        };
+        switch (strtolower($mode)) {
+            case 'wl':
+                return new DatabaseProductFetcher();
+            case 'wtm':
+                return new ApiProductFetcher();
+            default:
+                throw new InvalidArgumentException(
+                    "Invalid mode: {$mode}. Must be 'wl' (WhiteLabel) or 'wtm' (Watch the Market)."
+                );
+        }
     }
 
     /**
@@ -31,7 +34,7 @@ class ProductFetcherFactory
      *
      * @return ProductFetcherInterface
      */
-    public static function makeFromConfig(): ProductFetcherInterface
+    public static function makeFromConfig()
     {
         $mode = config('products-package.mode', 'wl');
 

@@ -13,7 +13,7 @@ class ProductPackageServiceProvider extends ServiceProvider
     /**
      * Register any application services.
      */
-    public function register(): void
+    public function register()
     {
         // Merge package configuration
         $this->mergeConfigFrom(
@@ -35,10 +35,9 @@ class ProductPackageServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
-    public function boot(): void
+    public function boot()
     {
         $this->bootConfig();
-        $this->bootViews();
         $this->bootMigrations();
         $this->bootMiddleware();
         $this->bootRoutes();
@@ -48,24 +47,16 @@ class ProductPackageServiceProvider extends ServiceProvider
     /**
      * Boot configuration
      */
-    protected function bootConfig(): void
+    protected function bootConfig()
     {
         // Configuration is already merged in register method
     }
 
-    /**
-     * Boot views
-     */
-    protected function bootViews(): void
-    {
-        // Load views from package
-        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'products-package');
-    }
 
     /**
      * Boot migrations
      */
-    protected function bootMigrations(): void
+    protected function bootMigrations()
     {
         // Load migrations from package
         $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
@@ -74,7 +65,7 @@ class ProductPackageServiceProvider extends ServiceProvider
     /**
      * Boot middleware
      */
-    protected function bootMiddleware(): void
+    protected function bootMiddleware()
     {
         // Register package authentication middleware
         $this->app['router']->aliasMiddleware('package.auth', \Liqrgv\ShopSync\Http\Middleware\PackageAuth::class);
@@ -83,7 +74,7 @@ class ProductPackageServiceProvider extends ServiceProvider
     /**
      * Boot routes
      */
-    protected function bootRoutes(): void
+    protected function bootRoutes()
     {
         // Only register routes if they haven't been disabled
         if (config('products-package.register_routes', true)) {
@@ -96,7 +87,7 @@ class ProductPackageServiceProvider extends ServiceProvider
     /**
      * Boot publishing
      */
-    protected function bootPublishing(): void
+    protected function bootPublishing()
     {
         if ($this->app->runningInConsole()) {
             // Publish configuration
@@ -104,27 +95,15 @@ class ProductPackageServiceProvider extends ServiceProvider
                 __DIR__ . '/../config/products-package.php' => config_path('products-package.php'),
             ], ['products-package-config', 'config']);
 
-            // Publish views
-            $this->publishes([
-                __DIR__ . '/../resources/views' => resource_path('views/vendor/products-package'),
-            ], ['products-package-views', 'views']);
-
             // Publish migrations
             $this->publishes([
                 __DIR__ . '/../database/migrations' => database_path('migrations'),
             ], ['products-package-migrations', 'migrations']);
 
-            // Publish assets (if any)
-            $this->publishes([
-                __DIR__ . '/../resources/assets' => public_path('vendor/products-package'),
-            ], ['products-package-assets', 'assets']);
-
             // Publish everything
             $this->publishes([
                 __DIR__ . '/../config/products-package.php' => config_path('products-package.php'),
-                __DIR__ . '/../resources/views' => resource_path('views/vendor/products-package'),
                 __DIR__ . '/../database/migrations' => database_path('migrations'),
-                __DIR__ . '/../resources/assets' => public_path('vendor/products-package'),
             ], 'products-package');
         }
     }
@@ -177,7 +156,7 @@ class ProductPackageServiceProvider extends ServiceProvider
     /**
      * Get the services provided by the provider.
      */
-    public function provides(): array
+    public function provides()
     {
         return [
             ProductService::class,

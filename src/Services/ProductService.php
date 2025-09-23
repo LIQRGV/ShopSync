@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
 
 class ProductService
 {
-    protected ProductFetcherInterface $productFetcher;
+    protected $productFetcher;
 
     public function __construct(ProductFetcherInterface $productFetcher = null)
     {
@@ -97,7 +97,7 @@ class ProductService
     /**
      * Find a single product by ID
      */
-    public function find($id, bool $withTrashed = false)
+    public function find($id, $withTrashed = false)
     {
         return $this->productFetcher->find($id, $withTrashed);
     }
@@ -105,7 +105,7 @@ class ProductService
     /**
      * Search products
      */
-    public function search(string $query, array $filters = [])
+    public function search($query, array $filters = [])
     {
         if (empty(trim($query))) {
             return $this->getAll($filters);
@@ -121,7 +121,7 @@ class ProductService
     /**
      * Export products to CSV
      */
-    public function exportToCsv(array $filters = []): string
+    public function exportToCsv(array $filters = [])
     {
         $validatedFilters = $this->validateFilters($filters);
 
@@ -133,7 +133,7 @@ class ProductService
     /**
      * Import products from CSV
      */
-    public function importFromCsv(string $csvContent): array
+    public function importFromCsv($csvContent)
     {
         if (empty(trim($csvContent))) {
             throw new \InvalidArgumentException('CSV content cannot be empty');

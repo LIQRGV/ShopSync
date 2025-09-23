@@ -48,13 +48,13 @@ class DatabaseProductFetcher implements ProductFetcherInterface
         Product::withTrashed()->findOrFail($id)->forceDelete();
     }
 
-    public function find($id, bool $withTrashed = false)
+    public function find($id, $withTrashed = false)
     {
         $query = $withTrashed ? Product::withTrashed() : Product::query();
         return $query->findOrFail($id);
     }
 
-    public function search(string $query, array $filters = [])
+    public function search($query, array $filters = [])
     {
         $queryBuilder = $this->buildQuery($filters);
 
@@ -136,7 +136,7 @@ class DatabaseProductFetcher implements ProductFetcherInterface
         return $query;
     }
 
-    public function exportToCsv(array $filters = []): string
+    public function exportToCsv(array $filters = [])
     {
         // Use chunked processing to prevent memory exhaustion
         $chunkSize = 1000; // Process 1000 records at a time
@@ -196,7 +196,7 @@ class DatabaseProductFetcher implements ProductFetcherInterface
         ]);
     }
 
-    public function importFromCsv(string $csvContent): array
+    public function importFromCsv($csvContent)
     {
         $rows = array_map('str_getcsv', explode("\n", $csvContent));
         $header = array_shift($rows);

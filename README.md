@@ -1,16 +1,17 @@
-# Product Management Package
+# ShopSync - Laravel Product Management API Package
 
-A Laravel package for product management with flexible authentication and dual-mode operations (Database/API).
+A Laravel API-only package for product management with flexible authentication and dual-mode operations (Database/API). This package is designed for headless applications and API integrations.
 
 ## Features
 
+- **API-Only Architecture**: Pure REST API implementation for headless applications
 - **Dual Operation Modes**: WL (WhiteLabel) for direct database operations, WTM (Watch the Market) for API-based operations
 - **Complete REST API**: Full CRUD operations with search, export, and import functionality
-- **Flexible Authentication**: Support for multiple authentication methods
+- **Flexible Authentication**: Support for multiple authentication methods including Bearer tokens, API keys, and Basic auth
 - **Soft Deletes**: Products can be soft deleted and restored
-- **Search Functionality**: Advanced search with database optimization
-- **Export/Import**: CSV export and import capabilities
-- **Frontend Interface**: Complete Bootstrap-based frontend component
+- **Advanced Search**: Database-optimized search with MySQL FULLTEXT support
+- **Export/Import**: Secure CSV export and import with validation
+- **PHP 7.2+ & Laravel 7-12 Compatible**: Works across a wide range of PHP and Laravel versions
 - **Comprehensive Configuration**: Highly configurable with sensible defaults
 
 ## Installation
@@ -27,13 +28,7 @@ composer require liqrgv/shopsync
 php artisan vendor:publish --tag=products-package-config
 ```
 
-### 3. Publish Views (Optional)
-
-```bash
-php artisan vendor:publish --tag=products-package-views
-```
-
-### 4. Run Migrations
+### 3. Run Migrations
 
 ```bash
 php artisan migrate
@@ -65,21 +60,9 @@ PRODUCT_PACKAGE_AUTH_KEY=your-secret-key
 
 ## Usage
 
-### Include in Your View
-
-```blade
-@extends('layouts.app')
-
-@section('content')
-<div class="container">
-    <h1>Product Management</h1>
-
-    @include('products-package::partials.product-table')
-</div>
-@endsection
-```
-
 ### API Endpoints
+
+All endpoints are API-only and return JSON responses. The package does not include any Blade views or frontend components.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -111,6 +94,62 @@ PRODUCT_PACKAGE_AUTH_KEY=your-secret-key
 | `sort_by` | string | Sort column |
 | `sort_order` | string | `asc` or `desc` |
 
+### Response Format
+
+All API responses follow a consistent JSON format:
+
+#### Single Product Response
+```json
+{
+  "id": 1,
+  "name": "Product Name",
+  "description": "Product description",
+  "price": "29.99",
+  "stock": 100,
+  "sku": "PROD-001",
+  "category": "Electronics",
+  "metadata": {},
+  "is_active": true,
+  "created_at": "2023-01-01T00:00:00.000000Z",
+  "updated_at": "2023-01-01T00:00:00.000000Z",
+  "deleted_at": null
+}
+```
+
+#### Collection Response
+```json
+{
+  "data": [
+    // Array of product objects
+  ],
+  "links": {
+    "first": "...",
+    "last": "...",
+    "prev": null,
+    "next": "..."
+  },
+  "meta": {
+    "current_page": 1,
+    "from": 1,
+    "last_page": 10,
+    "per_page": 15,
+    "to": 15,
+    "total": 150
+  }
+}
+```
+
+#### Error Response
+```json
+{
+  "message": "Error description",
+  "error": "Detailed error information",
+  "errors": {
+    "field_name": ["Validation error message"]
+  }
+}
+```
+
 ## Package Structure
 
 ```
@@ -139,18 +178,13 @@ database/
 routes/
 └── api.php
 
-resources/
-└── views/
-    └── partials/
-        └── product-table.blade.php
-
 config/
 └── products-package.php
 ```
 
 ## Authentication
 
-The package supports multiple authentication methods:
+The package supports multiple authentication methods for API access:
 
 ### Laravel Sanctum
 ```php
@@ -166,6 +200,28 @@ The package supports multiple authentication methods:
 ```php
 'enable_package_auth' => true,
 'package_auth_key' => 'your-secret-key',
+```
+
+#### Bearer Token Authentication
+```bash
+curl -H "Authorization: Bearer your-secret-key" \
+     https://your-app.com/api/v1/products
+```
+
+#### API Key Authentication
+```bash
+# Header method
+curl -H "X-API-Key: your-secret-key" \
+     https://your-app.com/api/v1/products
+
+# Query parameter method
+curl "https://your-app.com/api/v1/products?api_key=your-secret-key"
+```
+
+#### Basic Authentication
+```bash
+curl -u "username:your-secret-key" \
+     https://your-app.com/api/v1/products
 ```
 
 ## Advanced Features
@@ -187,13 +243,51 @@ class CustomProductFetcher implements ProductFetcherInterface
 }
 ```
 
-### Caching
+### Security Features
 
-Enable caching for better performance:
+- **Input Validation**: All inputs are validated and sanitized
+- **SQL Injection Protection**: Parameterized queries and input sanitization
+- **File Upload Security**: CSV imports include malicious file detection
+- **Authentication Options**: Multiple secure authentication methods
+- **Rate Limiting**: Compatible with Laravel's built-in rate limiting
 
-```env
-PRODUCT_PACKAGE_CACHE_ENABLED=true
-PRODUCT_PACKAGE_CACHE_TTL=3600
+### Performance Optimization
+
+- **Database Indexing**: Optimized database queries with proper indexing
+- **Chunked Processing**: Large exports/imports use chunked processing
+- **MySQL FULLTEXT**: Native MySQL search optimization when available
+- **Memory Management**: Efficient memory usage for large datasets
+
+## Frontend Integration
+
+Since this is an API-only package, you can integrate it with any frontend framework:
+
+### JavaScript/Vue.js Example
+```javascript
+// Fetch products
+const response = await fetch('/api/v1/products', {
+  headers: {
+    'Authorization': 'Bearer your-api-key',
+    'Accept': 'application/json'
+  }
+});
+const products = await response.json();
+```
+
+### React Example
+```javascript
+const fetchProducts = async () => {
+  try {
+    const response = await axios.get('/api/v1/products', {
+      headers: {
+        'Authorization': 'Bearer your-api-key'
+      }
+    });
+    setProducts(response.data.data);
+  } catch (error) {
+    console.error('Error fetching products:', error);
+  }
+};
 ```
 
 ## Testing

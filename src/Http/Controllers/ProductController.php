@@ -21,7 +21,7 @@ use Illuminate\Http\Response as IlluminateResponse;
  */
 class ProductController extends Controller
 {
-    protected ProductService $productService;
+    protected $productService;
 
     public function __construct(ProductService $productService)
     {
