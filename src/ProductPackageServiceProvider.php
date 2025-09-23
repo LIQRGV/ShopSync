@@ -21,23 +21,11 @@ class ProductPackageServiceProvider extends ServiceProvider
             'products-package'
         );
 
-        // Note: All models now use the default database connection
-
         // Bind the ProductFetcherInterface
         $this->app->bind(ProductFetcherInterface::class, function ($app) {
             return ProductFetcherFactory::makeFromConfig();
         });
-
-        // Bind the ProductService
-        $this->app->singleton(ProductService::class, function ($app) {
-            return new ProductService($app->make(ProductFetcherInterface::class));
-        });
     }
-
-    /**
-     * Note: Database connection registration removed
-     * All models now use the default database connection for better portability
-     */
 
     /**
      * Bootstrap any application services.
@@ -58,7 +46,6 @@ class ProductPackageServiceProvider extends ServiceProvider
     {
         // Configuration is already merged in register method
     }
-
 
     /**
      * Boot migrations
