@@ -13,7 +13,7 @@ class Category extends Model
 {
     use SoftDeletes;
 
-    protected $table = 'categories';
+    protected $table = 'category'; // see table name on WL
 
     protected $fillable = [
         'name',
