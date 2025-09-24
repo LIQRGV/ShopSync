@@ -2,9 +2,13 @@
 
 namespace Liqrgv\ShopSync\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-class Client extends Model
+/**
+ * Client Model - WTM (Watch the Market) Specific
+ *
+ * This model is only available in WTM mode as it handles
+ * API client connections with access tokens.
+ */
+class Client extends WtmModel
 {
     protected $dates = ['deleted_at'];
 

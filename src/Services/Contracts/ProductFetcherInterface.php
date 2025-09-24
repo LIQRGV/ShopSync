@@ -5,21 +5,23 @@ namespace Liqrgv\ShopSync\Services\Contracts;
 interface ProductFetcherInterface
 {
     /**
-     * Get all products with optional filters
+     * Get all products with optional filters and includes
      *
      * @param array $filters
+     * @param array $includes
      * @return mixed
      */
-    public function getAll(array $filters = []);
+    public function getAll(array $filters = [], array $includes = []);
 
     /**
      * Get paginated products
      *
      * @param int $perPage
      * @param array $filters
+     * @param array $includes
      * @return mixed
      */
-    public function paginate(int $perPage = 15, array $filters = []);
+    public function paginate(int $perPage = 15, array $filters = [], array $includes = []);
 
     /**
      * Create a new product
@@ -76,9 +78,10 @@ interface ProductFetcherInterface
      *
      * @param string $query
      * @param array $filters
+     * @param array $includes
      * @return mixed
      */
-    public function search($query, array $filters = []);
+    public function search($query, array $filters = [], array $includes = []);
 
     /**
      * Export products to CSV

@@ -9,14 +9,14 @@ use Illuminate\Support\Facades\Log;
 
 class DatabaseProductFetcher implements ProductFetcherInterface
 {
-    public function getAll(array $filters = [])
+    public function getAll(array $filters = [], array $includes = [])
     {
-        return $this->buildQuery($filters)->get();
+        return $this->buildQuery($filters, $includes)->get();
     }
 
-    public function paginate(int $perPage = 15, array $filters = [])
+    public function paginate(int $perPage = 15, array $filters = [], array $includes = [])
     {
-        return $this->buildQuery($filters)->paginate($perPage);
+        return $this->buildQuery($filters, $includes)->paginate($perPage);
     }
 
     public function create(array $data)
@@ -54,9 +54,9 @@ class DatabaseProductFetcher implements ProductFetcherInterface
         return $query->findOrFail($id);
     }
 
-    public function search($query, array $filters = [])
+    public function search($query, array $filters = [], array $includes = [])
     {
-        $queryBuilder = $this->buildQuery($filters);
+        $queryBuilder = $this->buildQuery($filters, $includes);
 
         // Sanitize search query to prevent SQL injection
         $sanitizedQuery = $this->sanitizeSearchQuery($query);
@@ -154,7 +154,7 @@ class DatabaseProductFetcher implements ProductFetcherInterface
             fwrite($tempHandle, $csv);
 
             // Process data in chunks to prevent memory exhaustion
-            $this->buildQuery($filters)->chunk($chunkSize, function ($products) use ($tempHandle) {
+            $this->buildQuery($filters, [])->chunk($chunkSize, function ($products) use ($tempHandle) {
                 foreach ($products as $product) {
                     $row = $this->formatCsvRow($product);
                     fwrite($tempHandle, $row . "\n");
@@ -269,11 +269,19 @@ class DatabaseProductFetcher implements ProductFetcherInterface
     }
 
     /**
-     * Build query with filters
+     * Build query with filters and eager loading
      */
-    protected function buildQuery(array $filters = [])
+    protected function buildQuery(array $filters = [], array $includes = [])
     {
         $query = Product::query();
+
+        // Add eager loading for relationships
+        if (!empty($includes)) {
+            $with = $this->mapIncludesToRelationships($includes);
+            if (!empty($with)) {
+                $query->with($with);
+            }
+        }
 
         // Include trashed if requested
         if (isset($filters['with_trashed']) && $filters['with_trashed']) {
@@ -319,5 +327,38 @@ class DatabaseProductFetcher implements ProductFetcherInterface
         }
 
         return $query;
+    }
+
+    /**
+     * Map include parameters to Eloquent relationships
+     */
+    protected function mapIncludesToRelationships(array $includes): array
+    {
+        $relationships = [];
+
+        foreach ($includes as $include) {
+            switch ($include) {
+                case 'category':
+                    $relationships[] = 'category';
+                    break;
+                case 'brand':
+                    $relationships[] = 'brand';
+                    break;
+                case 'location':
+                    $relationships[] = 'location';
+                    break;
+                case 'supplier':
+                    $relationships[] = 'supplier';
+                    break;
+                case 'attributes':
+                    $relationships[] = 'attributes';
+                    break;
+                case 'productAttributes':
+                    $relationships[] = 'productAttributes.attribute';
+                    break;
+            }
+        }
+
+        return $relationships;
     }
 }

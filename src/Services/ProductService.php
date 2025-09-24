@@ -190,9 +190,9 @@ class ProductService
      * @param array $filters
      * @return Collection
      */
-    public function searchProducts(string $searchTerm, array $filters = []): Collection
+    public function searchProducts(string $searchTerm, array $filters = [], array $includes = []): Collection
     {
-        return $this->productFetcher->search($searchTerm, $filters);
+        return $this->productFetcher->search($searchTerm, $filters, $includes);
     }
 
     /**
@@ -337,15 +337,7 @@ class ProductService
     public function getProductsWithPagination(array $filters, array $includes, array $pagination)
     {
         if ($pagination['paginate']) {
-            $products = $this->productFetcher->paginate($pagination['per_page'], $filters);
-
-            // Load relationships if needed for WL mode
-            if ($products->count() > 0 && method_exists($products->first(), 'load')) {
-                $with = $this->getRelationshipsWith($includes);
-                if (!empty($with)) {
-                    $products->getCollection()->load($with);
-                }
-            }
+            $products = $this->productFetcher->paginate($pagination['per_page'], $filters, $includes);
 
             // Transform to JSON API format
             $result = $this->transformer->transformProducts($products->items(), $includes);
@@ -361,15 +353,7 @@ class ProductService
                 ]
             ];
         } else {
-            $products = $this->productFetcher->getAll($filters);
-
-            // Load relationships if needed for WL mode
-            if ($products->count() > 0 && method_exists($products->first(), 'load')) {
-                $with = $this->getRelationshipsWith($includes);
-                if (!empty($with)) {
-                    $products->load($with);
-                }
-            }
+            $products = $this->productFetcher->getAll($filters, $includes);
 
             $result = $this->transformer->transformProducts($products, $includes);
         }
@@ -539,15 +523,7 @@ class ProductService
      */
     public function searchProductsWithPagination($searchTerm, array $filters, array $includes, array $pagination)
     {
-        $products = $this->productFetcher->search($searchTerm, $filters);
-
-        // Load relationships if needed for WL mode
-        if ($products->count() > 0 && method_exists($products->first(), 'load')) {
-            $with = $this->getRelationshipsWith($includes);
-            if (!empty($with)) {
-                $products->load($with);
-            }
-        }
+        $products = $this->productFetcher->search($searchTerm, $filters, $includes);
 
         // Handle pagination
         if ($pagination['paginate']) {

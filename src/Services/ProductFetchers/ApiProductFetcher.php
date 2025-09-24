@@ -86,15 +86,22 @@ class ApiProductFetcher implements ProductFetcherInterface
      * Get all products as Collection of Product models
      *
      * @param array $filters
+     * @param array $includes
      * @return Collection
      */
-    public function getAll(array $filters = [])
+    public function getAll(array $filters = [], array $includes = [])
     {
-        $response = $this->handleRequest(function () use ($filters) {
-            return $this->client()->get('/products', $filters);
+        // Add includes to the request parameters
+        $params = $filters;
+        if (!empty($includes)) {
+            $params['include'] = implode(',', $includes);
+        }
+
+        $response = $this->handleRequest(function () use ($params) {
+            return $this->client()->get('/products', $params);
         }, ['data' => []]);
 
-        return $this->convertToProductCollection($response['data'] ?? []);
+        return $this->convertToProductCollection($response['data'] ?? [], $response['included'] ?? []);
     }
 
     /**
@@ -104,14 +111,19 @@ class ApiProductFetcher implements ProductFetcherInterface
      * @param array $filters
      * @return LengthAwarePaginator
      */
-    public function paginate($perPage = 15, array $filters = [])
+    public function paginate($perPage = 15, array $filters = [], array $includes = [])
     {
-        $filters['per_page'] = $perPage;
-        $response = $this->handleRequest(function () use ($filters) {
-            return $this->client()->get('/products', $filters);
+        $params = $filters;
+        $params['per_page'] = $perPage;
+        if (!empty($includes)) {
+            $params['include'] = implode(',', $includes);
+        }
+
+        $response = $this->handleRequest(function () use ($params) {
+            return $this->client()->get('/products', $params);
         }, ['data' => [], 'total' => 0, 'current_page' => 1, 'last_page' => 1, 'per_page' => $perPage]);
 
-        $products = $this->convertToProductCollection($response['data'] ?? []);
+        $products = $this->convertToProductCollection($response['data'] ?? [], $response['included'] ?? []);
 
         return new LengthAwarePaginator(
             $products,
@@ -209,14 +221,19 @@ class ApiProductFetcher implements ProductFetcherInterface
      * @param array $filters
      * @return Collection
      */
-    public function search($query, array $filters = [])
+    public function search($query, array $filters = [], array $includes = [])
     {
-        $response = $this->handleRequest(function () use ($query, $filters) {
-            $filters['q'] = $query;
-            return $this->client()->get('/products/search', $filters);
+        $params = $filters;
+        $params['q'] = $query;
+        if (!empty($includes)) {
+            $params['include'] = implode(',', $includes);
+        }
+
+        $response = $this->handleRequest(function () use ($params) {
+            return $this->client()->get('/products/search', $params);
         }, ['data' => []]);
 
-        return $this->convertToProductCollection($response['data'] ?? []);
+        return $this->convertToProductCollection($response['data'] ?? [], $response['included'] ?? []);
     }
 
     public function exportToCsv(array $filters = [])
@@ -276,18 +293,50 @@ class ApiProductFetcher implements ProductFetcherInterface
      * Convert API response data to Product model
      *
      * @param array $data
+     * @param array $includedMap
      * @return Product|null
      */
-    protected function convertToProduct($data)
+    protected function convertToProduct($data, $includedMap = [])
     {
         if (empty($data) || !is_array($data)) {
             return null;
         }
 
         // Handle JSON API format
-        if (isset($data['type']) && $data['type'] === 'product' && isset($data['attributes'])) {
+        if (isset($data['type']) && $data['type'] === 'products' && isset($data['attributes'])) {
             $attributes = $data['attributes'];
             $attributes['id'] = $data['id'];
+
+            // Process relationships if present
+            if (isset($data['relationships']) && !empty($includedMap)) {
+                foreach ($data['relationships'] as $relationName => $relationData) {
+                    if (isset($relationData['data'])) {
+                        if (is_array($relationData['data']) && isset($relationData['data']['type']) && isset($relationData['data']['id'])) {
+                            // Single relationship
+                            $key = $relationData['data']['type'] . ':' . $relationData['data']['id'];
+                            if (isset($includedMap[$key])) {
+                                $attributes[$relationName] = $includedMap[$key]['attributes'] ?? [];
+                                $attributes[$relationName]['id'] = $includedMap[$key]['id'];
+                            }
+                        } elseif (is_array($relationData['data'])) {
+                            // Multiple relationships
+                            $relatedItems = [];
+                            foreach ($relationData['data'] as $item) {
+                                if (isset($item['type']) && isset($item['id'])) {
+                                    $key = $item['type'] . ':' . $item['id'];
+                                    if (isset($includedMap[$key])) {
+                                        $relatedItem = $includedMap[$key]['attributes'] ?? [];
+                                        $relatedItem['id'] = $includedMap[$key]['id'];
+                                        $relatedItems[] = $relatedItem;
+                                    }
+                                }
+                            }
+                            $attributes[$relationName] = $relatedItems;
+                        }
+                    }
+                }
+            }
+
             $data = $attributes;
         }
 
@@ -301,6 +350,13 @@ class ApiProductFetcher implements ProductFetcherInterface
             $product->setAttribute($product->getKeyName(), $data['id']);
         }
 
+        // Set relationships if they were included
+        foreach (['category', 'brand', 'location', 'supplier', 'attributes'] as $relation) {
+            if (isset($data[$relation])) {
+                $product->setRelation($relation, $data[$relation]);
+            }
+        }
+
         return $product;
     }
 
@@ -308,17 +364,29 @@ class ApiProductFetcher implements ProductFetcherInterface
      * Convert API response data array to Collection of Product models
      *
      * @param array $dataArray
+     * @param array $includedData
      * @return Collection
      */
-    protected function convertToProductCollection($dataArray)
+    protected function convertToProductCollection($dataArray, $includedData = [])
     {
         if (empty($dataArray) || !is_array($dataArray)) {
             return collect([]);
         }
 
+        // Build a map of included resources for easier access
+        $includedMap = [];
+        if (!empty($includedData) && is_array($includedData)) {
+            foreach ($includedData as $included) {
+                if (isset($included['type']) && isset($included['id'])) {
+                    $key = $included['type'] . ':' . $included['id'];
+                    $includedMap[$key] = $included;
+                }
+            }
+        }
+
         $products = [];
         foreach ($dataArray as $productData) {
-            $product = $this->convertToProduct($productData);
+            $product = $this->convertToProduct($productData, $includedMap);
             if ($product) {
                 $products[] = $product;
             }
