@@ -2,15 +2,33 @@
 
 namespace Liqrgv\ShopSync\Http\Requests;
 
-use Illuminate\Http\Request;
-use Liqrgv\ShopSync\Http\Traits\ProductRequestHelpers;
-
 /**
  * Get Product Request
  *
  * Simple request class for getting products with helper methods
  */
-class GetProductRequest extends Request
+class GetProductRequest extends BaseProductRequest
 {
-    use ProductRequestHelpers;
+
+    /**
+     * Determine if the user is authorized to make this request.
+     *
+     * @return bool
+     */
+    public function authorize()
+    {
+        return true; // Allow all requests for now
+    }
+
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array
+     */
+    public function rules()
+    {
+        return [
+            // No validation rules for GET requests
+        ];
+    }
 }
