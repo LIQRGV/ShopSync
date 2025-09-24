@@ -14,7 +14,7 @@ class DatabaseProductFetcher implements ProductFetcherInterface
         return $this->buildQuery($filters, $includes)->get();
     }
 
-    public function paginate(int $perPage = 15, array $filters = [], array $includes = [])
+    public function paginate(int $perPage = 25, array $filters = [], array $includes = [])
     {
         return $this->buildQuery($filters, $includes)->paginate($perPage);
     }

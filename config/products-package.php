@@ -56,7 +56,7 @@ return [
     | Configure default pagination settings.
     |
     */
-    'per_page' => env('PRODUCT_PACKAGE_PER_PAGE', 15),
+    'per_page' => env('PRODUCT_PACKAGE_PER_PAGE', 25),
     'max_per_page' => env('PRODUCT_PACKAGE_MAX_PER_PAGE', 100),
 
     /*

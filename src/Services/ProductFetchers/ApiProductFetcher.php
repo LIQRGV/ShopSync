@@ -113,32 +113,93 @@ class ApiProductFetcher implements ProductFetcherInterface
      *
      * @param int $perPage
      * @param array $filters
+     * @param array $includes
      * @return LengthAwarePaginator
      */
-    public function paginate($perPage = 15, array $filters = [], array $includes = [])
+    public function paginate($perPage = 25, array $filters = [], array $includes = [])
     {
-        $params = $filters;
-        $params['per_page'] = $perPage;
+        $currentPage = $this->getCurrentPage();
+        $perPage = $this->getPerPage($perPage);
+
+        $params = array_merge($filters, [
+            'page' => $currentPage,
+            'per_page' => $perPage
+        ]);
+
         if (!empty($includes)) {
             $params['include'] = implode(',', $includes);
         }
 
         $response = $this->handleRequest(function () use ($params) {
             return $this->client()->get('/products', $params);
-        }, ['data' => [], 'total' => 0, 'current_page' => 1, 'last_page' => 1, 'per_page' => $perPage]);
+        }, [
+            'data' => [],
+            'meta' => [
+                'pagination' => [
+                    'total' => 0,
+                    'count' => 0,
+                    'per_page' => $perPage,
+                    'current_page' => $currentPage,
+                    'total_pages' => 1,
+                    'from' => 0,
+                    'to' => 0
+                ]
+            ]
+        ]);
 
-        $products = $this->convertToProductCollection($response['data'] ?? [], $response['included'] ?? []);
+        $paginationMeta = $response['meta']['pagination'] ?? null;
+
+        if (!$paginationMeta) {
+            $items = $this->convertToProductCollection($response['data'] ?? [], $response['included'] ?? []);
+            $total = $response['meta']['total'] ?? count($response['data'] ?? []);
+
+            return new LengthAwarePaginator(
+                $items,
+                $total,
+                $perPage,
+                $currentPage,
+                [
+                    'path' => request()->url(),
+                    'pageName' => 'page'
+                ]
+            );
+        }
+
+        $items = $this->convertToProductCollection($response['data'] ?? [], $response['included'] ?? []);
 
         return new LengthAwarePaginator(
-            $products,
-            $response['total'] ?? 0,
-            $response['per_page'] ?? $perPage,
-            $response['current_page'] ?? 1,
+            $items,
+            $paginationMeta['total'] ?? $items->count(),
+            $paginationMeta['per_page'] ?? $perPage,
+            $paginationMeta['current_page'] ?? $currentPage,
             [
                 'path' => request()->url(),
-                'pageName' => 'page',
+                'pageName' => 'page'
             ]
         );
+    }
+
+    /**
+     * Get current page number from request
+     *
+     * @return int
+     */
+    protected function getCurrentPage(): int
+    {
+        $page = request()->input('page', 1);
+        return max(1, (int) $page);
+    }
+
+    /**
+     * Get per page limit from request with reasonable bounds
+     *
+     * @param int $default
+     * @return int
+     */
+    protected function getPerPage(int $default): int
+    {
+        $perPage = request()->input('per_page', $default);
+        return min(100, max(1, (int) $perPage)); // Limit: 1-100 items per page
     }
 
     /**
@@ -312,30 +373,38 @@ class ApiProductFetcher implements ProductFetcherInterface
             $attributes['id'] = $data['id'];
 
             // Process relationships if present
-            if (isset($data['relationships']) && !empty($includedMap)) {
+            if (isset($data['relationships'])) {
                 foreach ($data['relationships'] as $relationName => $relationData) {
                     if (isset($relationData['data'])) {
-                        if (is_array($relationData['data']) && isset($relationData['data']['type']) && isset($relationData['data']['id'])) {
-                            // Single relationship
-                            $key = $relationData['data']['type'] . ':' . $relationData['data']['id'];
-                            if (isset($includedMap[$key])) {
-                                $attributes[$relationName] = $includedMap[$key]['attributes'] ?? [];
-                                $attributes[$relationName]['id'] = $includedMap[$key]['id'];
+                        if (is_array($relationData['data'])) {
+                            // Check if it's an empty array (no relationships)
+                            if (empty($relationData['data'])) {
+                                $attributes[$relationName] = null; // Set to null for empty relationships
                             }
-                        } elseif (is_array($relationData['data'])) {
-                            // Multiple relationships
-                            $relatedItems = [];
-                            foreach ($relationData['data'] as $item) {
-                                if (isset($item['type']) && isset($item['id'])) {
-                                    $key = $item['type'] . ':' . $item['id'];
-                                    if (isset($includedMap[$key])) {
-                                        $relatedItem = $includedMap[$key]['attributes'] ?? [];
-                                        $relatedItem['id'] = $includedMap[$key]['id'];
-                                        $relatedItems[] = $relatedItem;
-                                    }
+                            // Check if it's a single relationship with type and id
+                            elseif (isset($relationData['data']['type']) && isset($relationData['data']['id'])) {
+                                // Single relationship
+                                $key = $relationData['data']['type'] . ':' . $relationData['data']['id'];
+                                if (isset($includedMap[$key])) {
+                                    $attributes[$relationName] = $includedMap[$key]['attributes'] ?? [];
+                                    $attributes[$relationName]['id'] = $includedMap[$key]['id'];
                                 }
                             }
-                            $attributes[$relationName] = $relatedItems;
+                            // Handle multiple relationships (array of objects with type and id)
+                            else {
+                                $relatedItems = [];
+                                foreach ($relationData['data'] as $item) {
+                                    if (isset($item['type']) && isset($item['id'])) {
+                                        $key = $item['type'] . ':' . $item['id'];
+                                        if (isset($includedMap[$key])) {
+                                            $relatedItem = $includedMap[$key]['attributes'] ?? [];
+                                            $relatedItem['id'] = $includedMap[$key]['id'];
+                                            $relatedItems[] = $relatedItem;
+                                        }
+                                    }
+                                }
+                                $attributes[$relationName] = $relatedItems;
+                            }
                         }
                     }
                 }
@@ -354,10 +423,76 @@ class ApiProductFetcher implements ProductFetcherInterface
             $product->setAttribute($product->getKeyName(), $data['id']);
         }
 
-        // Set relationships if they were included
+        // Set relationships if they were included - convert arrays to proper model instances
+        $relationshipModelMap = [
+            'category' => \Liqrgv\ShopSync\Models\Category::class,
+            'brand' => \Liqrgv\ShopSync\Models\Brand::class,
+            'location' => \Liqrgv\ShopSync\Models\Location::class,
+            'supplier' => \Liqrgv\ShopSync\Models\Supplier::class,
+            'attributes' => \Liqrgv\ShopSync\Models\Attribute::class,
+        ];
+
         foreach (['category', 'brand', 'location', 'supplier', 'attributes'] as $relation) {
             if (isset($data[$relation])) {
-                $product->setRelation($relation, $data[$relation]);
+                $relationData = $data[$relation];
+
+                if ($relationData === null) {
+                    $product->setRelation($relation, null);
+                } elseif (is_array($relationData)) {
+                    $modelClass = $relationshipModelMap[$relation];
+
+                    if ($relation === 'attributes') {
+                        // Has-many relationship - create collection of models
+                        $models = collect($relationData)->map(function ($item) use ($modelClass) {
+                            if (is_array($item)) {
+                                $model = new $modelClass();
+                                $model->fill($item);
+                                if (isset($item['id'])) {
+                                    $model->setAttribute($model->getKeyName(), $item['id']);
+                                }
+                                $model->exists = true;
+                                return $model;
+                            }
+                            return null;
+                        })->filter();
+
+                        $product->setRelation($relation, $models);
+                    } else {
+                        // Belongs-to relationship - create single model
+                        if (!empty($relationData)) {
+                            $model = new $modelClass();
+                            $model->fill($relationData);
+
+                            // Set count data for specific models to prevent database queries
+                            if ($relation === 'category' && isset($relationData['products_count'])) {
+                                $model->setAttribute('products_count', $relationData['products_count']);
+                            }
+                            if ($relation === 'category' && isset($relationData['active_products_count'])) {
+                                $model->setAttribute('active_products_count', $relationData['active_products_count']);
+                            }
+                            if ($relation === 'brand' && isset($relationData['products_count'])) {
+                                $model->setAttribute('products_count', $relationData['products_count']);
+                            }
+                            if ($relation === 'supplier' && isset($relationData['products_count'])) {
+                                $model->setAttribute('products_count', $relationData['products_count']);
+                            }
+                            if ($relation === 'location' && isset($relationData['products_count'])) {
+                                $model->setAttribute('products_count', $relationData['products_count']);
+                            }
+
+                            if (isset($relationData['id'])) {
+                                $model->setAttribute($model->getKeyName(), $relationData['id']);
+                            }
+                            $model->exists = true;
+                            $product->setRelation($relation, $model);
+                        } else {
+                            $product->setRelation($relation, null);
+                        }
+                    }
+                }
+            } else {
+                // Mark relationship as loaded but empty to prevent further loading attempts
+                $product->setRelation($relation, null);
             }
         }
 
