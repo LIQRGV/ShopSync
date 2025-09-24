@@ -184,7 +184,7 @@ class JsonApiTransformer
         $related = $model->getRelation($relationshipName);
         
         if ($related === null) {
-            return ['data' => null];
+            return ['data' => []];
         }
         
         if ($related instanceof Collection || is_array($related)) {

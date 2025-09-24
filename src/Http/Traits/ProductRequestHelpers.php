@@ -51,13 +51,13 @@ trait ProductRequestHelpers
      */
     public function getPagination()
     {
-        $perPage = (int) $this->get('per_page', config('shopsync.per_page', 15));
+        $perPage = (int) $this->get('per_page', config('products-package.per_page', 25));
         $perPage = min($perPage, 100); // Max 100 items per page
 
         return [
             'per_page' => $perPage,
             'page' => (int) $this->get('page', 1),
-            'paginate' => $this->has('page')
+            'paginate' => true
         ];
     }
 

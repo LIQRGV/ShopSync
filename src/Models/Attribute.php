@@ -198,6 +198,9 @@ class Attribute extends Model
      */
     public function getProductsCountAttribute(): int
     {
+        if (config('products-package.mode') === 'wtm') {
+            return $this->attributes['products_count'] ?? 0;
+        }
         return $this->products()->count();
     }
 }

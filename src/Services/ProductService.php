@@ -40,36 +40,8 @@ class ProductService
      */
     public function getProductsWithRelationships(array $filters = []): Collection
     {
-        $query = Product::with([
-            'category',
-            'brand',
-            'location',
-            'supplier',
-            'attributes'
-        ]);
-
-        // Apply filters
-        if (isset($filters['active']) && $filters['active']) {
-            $query->active();
-        }
-
-        if (isset($filters['category_id'])) {
-            $query->byCategory($filters['category_id']);
-        }
-
-        if (isset($filters['brand_id'])) {
-            $query->byBrand($filters['brand_id']);
-        }
-
-        if (isset($filters['min_price']) || isset($filters['max_price'])) {
-            $query->priceRange($filters['min_price'] ?? null, $filters['max_price'] ?? null);
-        }
-
-        if (isset($filters['sell_status'])) {
-            $query->bySellStatus($filters['sell_status']);
-        }
-
-        return $query->get();
+        $includes = ['category', 'brand', 'location', 'supplier', 'attributes'];
+        return $this->productFetcher->getAll($filters, $includes);
     }
 
     /**
@@ -80,18 +52,16 @@ class ProductService
      */
     public function getProductHierarchy(int $productId): array
     {
-        $product = Product::with([
-            'category.ancestors',
-            'brand',
-            'location',
-            'supplier',
-            'productAttributes.attribute'
-        ])->findOrFail($productId);
+        $product = $this->productFetcher->find($productId);
+
+        if (!$product) {
+            throw new \Illuminate\Database\Eloquent\ModelNotFoundException();
+        }
 
         return [
             'product' => $product,
-            'category_breadcrumb' => $this->getCategoryBreadcrumb($product->category),
-            'attributes' => $this->formatProductAttributes($product->productAttributes),
+            'category_breadcrumb' => $this->getCategoryBreadcrumb($product->category ?? null),
+            'attributes' => $this->formatProductAttributes($product->productAttributes ?? collect()),
             'related_products' => $this->getRelatedProducts($product),
             'pricing' => $this->getProductPricing($product),
         ];
@@ -204,6 +174,26 @@ class ProductService
      */
     public function getProductsByAttributes(array $attributeFilters, array $additionalFilters = []): Collection
     {
+        if (config('products-package.mode') === 'wtm') {
+            $allProducts = $this->productFetcher->getAll($additionalFilters, ['category', 'brand', 'attributes']);
+
+            return $allProducts->filter(function ($product) use ($attributeFilters) {
+                foreach ($attributeFilters as $attributeCode => $value) {
+                    $hasAttribute = false;
+                    foreach ($product->attributes ?? [] as $attribute) {
+                        if ($attribute->code === $attributeCode && $attribute->is_filterable && $attribute->pivot->value === $value) {
+                            $hasAttribute = true;
+                            break;
+                        }
+                    }
+                    if (!$hasAttribute) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+        }
+
         $query = Product::with(['category', 'brand', 'attributes']);
 
         // Apply attribute filters
@@ -244,6 +234,10 @@ class ProductService
      */
     public function getFilterableAttributes(?int $categoryId = null): Collection
     {
+        if (config('products-package.mode') === 'wtm') {
+            return collect();
+        }
+
         $attributeQuery = Attribute::active()->filterable()->ordered();
 
         if ($categoryId) {
@@ -303,6 +297,10 @@ class ProductService
      */
     public function syncRelatedProducts(int $productId, array $relatedProductIds): bool
     {
+        if (config('products-package.mode') === 'wtm') {
+            return false;
+        }
+
         $product = Product::findOrFail($productId);
 
         // Validate that all related product IDs exist
@@ -349,8 +347,17 @@ class ProductService
                     'current_page' => $products->currentPage(),
                     'per_page' => $products->perPage(),
                     'total' => $products->total(),
-                    'total_pages' => $products->lastPage()
+                    'total_pages' => $products->lastPage(),
+                    'from' => $products->firstItem() ?: 0,
+                    'to' => $products->lastItem() ?: 0
                 ]
+            ];
+
+            $result['links'] = [
+                'first' => $products->url(1),
+                'last' => $products->url($products->lastPage()),
+                'prev' => $products->previousPageUrl(),
+                'next' => $products->nextPageUrl()
             ];
         } else {
             $products = $this->productFetcher->getAll($filters, $includes);
@@ -547,8 +554,21 @@ class ProductService
                     'current_page' => $currentPage,
                     'per_page' => $perPage,
                     'total' => $total,
-                    'total_pages' => (int) ceil($total / $perPage)
+                    'total_pages' => (int) ceil($total / $perPage),
+                    'from' => $offset + 1,
+                    'to' => $offset + $paginatedItems->count()
                 ]
+            ];
+
+            $baseUrl = request()->url();
+            $queryParams = request()->except(['page']);
+            $lastPage = (int) ceil($total / $perPage);
+
+            $result['links'] = [
+                'first' => $baseUrl . '?' . http_build_query(array_merge($queryParams, ['page' => 1])),
+                'last' => $baseUrl . '?' . http_build_query(array_merge($queryParams, ['page' => $lastPage])),
+                'prev' => $currentPage > 1 ? $baseUrl . '?' . http_build_query(array_merge($queryParams, ['page' => $currentPage - 1])) : null,
+                'next' => $currentPage < $lastPage ? $baseUrl . '?' . http_build_query(array_merge($queryParams, ['page' => $currentPage + 1])) : null
             ];
         } else {
             // Transform to JSON API format

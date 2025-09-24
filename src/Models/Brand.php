@@ -73,6 +73,9 @@ class Brand extends Model
      */
     public function getProductsCountAttribute(): int
     {
+        if (config('products-package.mode') === 'wtm') {
+            return $this->attributes['products_count'] ?? 0;
+        }
         return $this->products()->count();
     }
 
@@ -81,6 +84,9 @@ class Brand extends Model
      */
     public function getActiveProductsCountAttribute(): int
     {
+        if (config('products-package.mode') === 'wtm') {
+            return $this->attributes['active_products_count'] ?? 0;
+        }
         return $this->activeProducts()->count();
     }
 
