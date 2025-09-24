@@ -191,6 +191,7 @@ class JsonApiTransformer
             // Has many relationship
             $data = [];
             foreach ($related as $item) {
+                if (!($item instanceof Model)) continue;
                 $type = $this->getTypeFromModel($item);
                 $data[] = [
                     'type' => $type,

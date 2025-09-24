@@ -19,6 +19,10 @@ class ApiProductFetcher implements ProductFetcherInterface
 
     public function __construct($client)
     {
+        if (!$client) { // possibly for route:list
+            return;
+        }
+
         $this->baseUrl = $client->getActiveUrl() . '/' . config('products-package.route_prefix', 'api/v1');
         $this->apiKey = decrypt($client->access_token);
         $this->timeout = config('products-package.wtm_api_timeout', 5);
