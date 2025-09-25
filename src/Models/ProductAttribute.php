@@ -2,8 +2,9 @@
 
 namespace Liqrgv\ShopSync\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\Pivot;
+use Carbon\Carbon;
 
 /**
  * Product Attribute Pivot Model for Diamond Box Integration
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * This model represents the many-to-many relationship between
  * products and attributes with additional pivot data.
  */
-class ProductAttribute extends Model
+class ProductAttribute extends Pivot
 {
     protected $table = 'product_attributes';
 
@@ -83,7 +84,41 @@ class ProductAttribute extends Model
                 return $this->value ? 'Yes' : 'No';
 
             case Attribute::TYPE_DATE:
-                return $this->value ? date('Y-m-d', strtotime($this->value)) : null;
+                if (!$this->value) {
+                    return null;
+                }
+
+                try {
+                    // Try to parse different date formats
+                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $this->value)) {
+                        // Already in Y-m-d format
+                        return $this->value;
+                    }
+
+                    if (preg_match('/^\d{1,2}\/\d{1,2}\/\d{4}$/', $this->value)) {
+                        // Try d/m/Y format first (26/08/2025)
+                        try {
+                            $date = Carbon::createFromFormat('d/m/Y', $this->value);
+                            return $date->format('Y-m-d');
+                        } catch (\Exception $e) {
+                            // Try m/d/Y format if d/m/Y fails
+                            $date = Carbon::createFromFormat('m/d/Y', $this->value);
+                            return $date->format('Y-m-d');
+                        }
+                    }
+
+                    // Fallback to Carbon's automatic parsing
+                    $date = Carbon::parse($this->value);
+                    return $date->format('Y-m-d');
+                } catch (\Exception $e) {
+                    // If all parsing fails, log and return the original value
+                    \Log::warning("Could not parse date value in ProductAttribute: {$this->value}", [
+                        'exception' => $e->getMessage(),
+                        'product_id' => $this->product_id,
+                        'attribute_id' => $this->attribute_id
+                    ]);
+                    return $this->value;
+                }
 
             case Attribute::TYPE_SELECT:
             case Attribute::TYPE_MULTISELECT:
