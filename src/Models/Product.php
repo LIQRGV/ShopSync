@@ -117,7 +117,7 @@ class Product extends Model
      */
     public function productAttributes()
     {
-        return $this->hasMany(ProductAttribute::class, 'product_id');
+        return $this->hasMany(ProductAttribute::class, 'product_id')->with('attribute');
     }
 
     /**

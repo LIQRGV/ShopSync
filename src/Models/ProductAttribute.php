@@ -13,7 +13,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class ProductAttribute extends Model
 {
-
     protected $table = 'product_attributes';
 
     protected $fillable = [
@@ -40,9 +39,8 @@ class ProductAttribute extends Model
     /**
      * Get the attribute that owns this relationship
      */
-    public function attribute(): BelongsTo
-    {
-        return $this->belongsTo(Attribute::class, 'attribute_id');
+    public function attribute() {
+        return $this->hasOne(Attribute::class, 'id', 'attribute_id')->withTrashed();
     }
 
     /**
