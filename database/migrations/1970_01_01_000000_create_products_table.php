@@ -26,7 +26,7 @@ return new class extends Migration
             Log::info('Products migration mode check', ['mode' => $mode]);
 
             // Only run migration in WhiteLabel mode
-            return $mode === 'wl';
+            return $mode === 'wl' && !Schema::hasTable('products');
         } catch (\Exception $e) {
             // If there's any issue reading config, log the error and default to WL mode
             // This ensures existing installations continue to work
@@ -34,7 +34,7 @@ return new class extends Migration
                 'error' => $e->getMessage()
             ]);
 
-            return true; // Default to running migration for backward compatibility
+            return false;
         }
     }
 
