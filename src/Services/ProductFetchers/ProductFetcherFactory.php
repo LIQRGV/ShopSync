@@ -31,6 +31,10 @@ class ProductFetcherFactory
                     );
                 }
 
+                if (app()->runningInConsole()) {
+                    return;
+                }
+
                 $clientID = $request->header('client-id');
 
                 if (empty($clientID)) {
