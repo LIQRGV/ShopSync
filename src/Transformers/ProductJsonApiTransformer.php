@@ -17,7 +17,7 @@ class ProductJsonApiTransformer extends JsonApiTransformer
     /**
      * Available relationships for products
      */
-    protected array $availableIncludes = [
+    protected $availableIncludes = [
         'category',
         'brand',
         'location',
@@ -29,7 +29,7 @@ class ProductJsonApiTransformer extends JsonApiTransformer
     /**
      * Maximum include depth to prevent infinite recursion
      */
-    protected int $maxDepth = 3;
+    protected $maxDepth = 3;
 
     public function __construct()
     {
