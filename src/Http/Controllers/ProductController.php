@@ -53,7 +53,8 @@ class ProductController extends Controller
             Log::error('Failed to fetch products', [
                 'error' => $e->getMessage(),
                 'filters' => $request->getFilters(),
-                'includes' => $request->getIncludes()
+                'includes' => $request->getIncludes(),
+                'trace' => $e->getTrace()
             ]);
 
             $error = JsonApiErrorResponse::internalError(

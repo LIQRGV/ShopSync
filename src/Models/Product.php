@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Carbon\Carbon;
 
 /**
  * Product Model
@@ -50,7 +51,6 @@ class Product extends Model
         'price' => 'decimal:2',
         'sale_price' => 'decimal:2',
         'trade_price' => 'decimal:2',
-        'purchase_date' => 'date',
         'related_products' => 'array',
         'category_id' => 'integer',
         'brand_id' => 'integer',
@@ -233,10 +233,97 @@ class Product extends Model
             return collect([]);
         }
 
-        $relatedIds = is_array($this->related_products) 
-            ? $this->related_products 
+        $relatedIds = is_array($this->related_products)
+            ? $this->related_products
             : json_decode($this->related_products, true);
 
         return static::whereIn('id', $relatedIds)->get();
+    }
+
+    /**
+     * Get the purchase_date attribute with proper date handling
+     */
+    public function getPurchaseDateAttribute($value)
+    {
+        if (!$value) {
+            return null;
+        }
+
+        // If it's already a Carbon instance, return it
+        if ($value instanceof Carbon) {
+            return $value;
+        }
+
+        try {
+            // Try to parse different date formats
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+                // Already in Y-m-d format
+                return Carbon::parse($value);
+            }
+
+            if (preg_match('/^\d{1,2}\/\d{1,2}\/\d{4}$/', $value)) {
+                // Try d/m/Y format first (26/08/2025)
+                try {
+                    return Carbon::createFromFormat('d/m/Y', $value);
+                } catch (\Exception $e) {
+                    // Try m/d/Y format if d/m/Y fails
+                    return Carbon::createFromFormat('m/d/Y', $value);
+                }
+            }
+
+            // Fallback to Carbon's automatic parsing
+            return Carbon::parse($value);
+        } catch (\Exception $e) {
+            // If all parsing fails, log and return null
+            \Log::warning("Could not parse purchase_date in Product: {$value}", [
+                'exception' => $e->getMessage(),
+                'product_id' => $this->id ?? 'unknown'
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Set the purchase_date attribute with proper formatting
+     */
+    public function setPurchaseDateAttribute($value)
+    {
+        if (!$value) {
+            $this->attributes['purchase_date'] = null;
+            return;
+        }
+
+        try {
+            // If it's already a Carbon instance, format it
+            if ($value instanceof Carbon) {
+                $this->attributes['purchase_date'] = $value->format('Y-m-d');
+                return;
+            }
+
+            // Try to parse different date formats and convert to Y-m-d
+            if (preg_match('/^\d{1,2}\/\d{1,2}\/\d{4}$/', $value)) {
+                // Try d/m/Y format first (26/08/2025)
+                try {
+                    $date = Carbon::createFromFormat('d/m/Y', $value);
+                    $this->attributes['purchase_date'] = $date->format('Y-m-d');
+                    return;
+                } catch (\Exception $e) {
+                    // Try m/d/Y format (08/26/2025)
+                    $date = Carbon::createFromFormat('m/d/Y', $value);
+                    $this->attributes['purchase_date'] = $date->format('Y-m-d');
+                    return;
+                }
+            }
+
+            // For standard formats, let Carbon handle it
+            $date = Carbon::parse($value);
+            $this->attributes['purchase_date'] = $date->format('Y-m-d');
+        } catch (\Exception $e) {
+            \Log::warning("Could not parse purchase_date for setting in Product: {$value}", [
+                'exception' => $e->getMessage(),
+                'product_id' => $this->id ?? 'unknown'
+            ]);
+            $this->attributes['purchase_date'] = null;
+        }
     }
 }
