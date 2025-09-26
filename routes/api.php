@@ -17,9 +17,12 @@ use Liqrgv\ShopSync\Http\Controllers\SseController;
 |
 */
 
-// Server-Sent Events endpoint
+// Server-Sent Events endpoints
 Route::get('/sse/events', [SseController::class, 'events'])
     ->name('sse.events');
+
+Route::get('/sse/status', [SseController::class, 'status'])
+    ->name('sse.status');
 
 // Package status endpoint (if enabled)
 if (config('products-package.features.status_endpoint', true)) {

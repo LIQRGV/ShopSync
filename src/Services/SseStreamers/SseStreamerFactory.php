@@ -1,21 +1,21 @@
 <?php
 
-namespace Liqrgv\ShopSync\Services\ProductFetchers;
+namespace Liqrgv\ShopSync\Services\SseStreamers;
 
 use Liqrgv\ShopSync\Exceptions\ClientNotFoundException;
 use Liqrgv\ShopSync\Models\Client;
-use Liqrgv\ShopSync\Services\Contracts\ProductFetcherInterface;
+use Liqrgv\ShopSync\Services\Contracts\SseStreamerInterface;
 use InvalidArgumentException;
 use Illuminate\Support\Facades\Log;
 
-class ProductFetcherFactory
+class SseStreamerFactory
 {
     /**
-     * Create a product fetcher instance based on mode
+     * Create an SSE streamer instance based on mode
      *
-     * @param string $mode The mode to create a fetcher for ('wl' or 'wtm')
+     * @param string $mode The mode to create a streamer for ('wl' or 'wtm')
      * @param mixed $request The request object (required for 'wtm' mode)
-     * @return ProductFetcherInterface
+     * @return SseStreamerInterface
      * @throws InvalidArgumentException When mode is invalid
      * @throws ClientNotFoundException When client is not found in 'wtm' mode
      */
@@ -23,7 +23,7 @@ class ProductFetcherFactory
     {
         switch (strtolower($mode)) {
             case 'wl':
-                return new DatabaseProductFetcher();
+                return new DirectSseStreamer();
             case 'wtm':
                 if ($request === null) {
                     throw new InvalidArgumentException(
@@ -49,7 +49,7 @@ class ProductFetcherFactory
                     throw ClientNotFoundException::forClientId($clientID);
                 }
 
-                return new ApiProductFetcher($client);
+                return new ProxySseStreamer($client);
             default:
                 throw new InvalidArgumentException(
                     "Invalid mode: {$mode}. Must be 'wl' (WhiteLabel) or 'wtm' (Watch the Market)."
@@ -58,24 +58,24 @@ class ProductFetcherFactory
     }
 
     /**
-     * Create a product fetcher instance from config
+     * Create an SSE streamer instance from config
      *
      * @param mixed $request The request object (required for 'wtm' mode)
-     * @return ProductFetcherInterface
+     * @return SseStreamerInterface
      * @throws ClientNotFoundException When client is not found in 'wtm' mode
      */
     public static function makeFromConfig($request = null)
     {
         $mode = config('products-package.mode', 'wl');
 
-        Log::info('Creating ProductFetcher', ['mode' => $mode]);
+        Log::info('Creating SseStreamer', ['mode' => $mode]);
 
         try {
             return static::make($mode, $request);
         } catch (InvalidArgumentException $e) {
             // Check if it's a mode validation error or a request/client-id error
             if (strpos($e->getMessage(), 'Invalid mode:') === 0) {
-                Log::error('Invalid ProductFetcher mode in config, falling back to WL mode', [
+                Log::error('Invalid SseStreamer mode in config, falling back to WL mode', [
                     'invalid_mode' => $mode,
                     'error' => $e->getMessage()
                 ]);
@@ -84,7 +84,7 @@ class ProductFetcherFactory
                 return static::make('wl', $request);
             } else {
                 // For request/client-id validation errors, don't fallback - re-throw
-                Log::error('ProductFetcher creation failed due to request validation', [
+                Log::error('SseStreamer creation failed due to request validation', [
                     'mode' => $mode,
                     'error' => $e->getMessage()
                 ]);
@@ -92,7 +92,7 @@ class ProductFetcherFactory
                 throw $e;
             }
         } catch (ClientNotFoundException $e) {
-            Log::error('Client not found', [
+            Log::error('Client not found for SSE streaming', [
                 'mode' => $mode,
                 'client_id' => $e->getClientId(),
                 'error' => $e->getMessage(),
@@ -113,13 +113,13 @@ class ProductFetcherFactory
         return [
             'wl' => [
                 'name' => 'WhiteLabel',
-                'description' => 'Direct database manipulation for local shop pages',
-                'class' => DatabaseProductFetcher::class
+                'description' => 'Direct SSE event streaming for local shop pages',
+                'class' => DirectSseStreamer::class
             ],
             'wtm' => [
                 'name' => 'Watch the Market',
-                'description' => 'API-based manipulation for admin panel/market monitoring',
-                'class' => ApiProductFetcher::class
+                'description' => 'Proxy SSE events from WL server for market monitoring',
+                'class' => ProxySseStreamer::class
             ]
         ];
     }
@@ -153,16 +153,16 @@ class ProductFetcherFactory
 
         if ($isValid) {
             try {
-                $fetcher = static::make($mode, null);
+                $streamer = static::make($mode, null);
 
-                // Check if API fetcher has additional status info
-                if ($fetcher instanceof ApiProductFetcher) {
-                    $status['api_status'] = $fetcher->getConfigStatus();
+                // Check if proxy streamer has additional status info
+                if ($streamer instanceof ProxySseStreamer) {
+                    $status['proxy_status'] = $streamer->getConfigStatus();
                 }
 
-                $status['fetcher_created'] = true;
+                $status['streamer_created'] = true;
             } catch (\Exception $e) {
-                $status['fetcher_created'] = false;
+                $status['streamer_created'] = false;
                 $status['error'] = $e->getMessage();
 
                 // Add specific context for ClientNotFoundException
