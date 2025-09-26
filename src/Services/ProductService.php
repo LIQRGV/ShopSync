@@ -2,6 +2,7 @@
 
 namespace Liqrgv\ShopSync\Services;
 
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Liqrgv\ShopSync\Models\Product;
 use Liqrgv\ShopSync\Models\Category;
 use Liqrgv\ShopSync\Models\Brand;
@@ -55,7 +56,7 @@ class ProductService
         $product = $this->productFetcher->find($productId);
 
         if (!$product) {
-            throw new \Illuminate\Database\Eloquent\ModelNotFoundException();
+            throw new ModelNotFoundException();
         }
 
         return [
