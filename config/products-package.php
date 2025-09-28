@@ -108,6 +108,7 @@ return [
     'log_api_calls' => env('PRODUCT_PACKAGE_LOG_API_CALLS', false),
     'log_level' => env('PRODUCT_PACKAGE_LOG_LEVEL', 'info'),
 
+
     /*
     |--------------------------------------------------------------------------
     | Database Configuration

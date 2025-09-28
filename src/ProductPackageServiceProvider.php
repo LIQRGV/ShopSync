@@ -4,9 +4,12 @@ namespace Liqrgv\ShopSync;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Log;
 use Liqrgv\ShopSync\Services\ProductService;
 use Liqrgv\ShopSync\Services\Contracts\ProductFetcherInterface;
 use Liqrgv\ShopSync\Services\ProductFetchers\ProductFetcherFactory;
+use Liqrgv\ShopSync\Models\Product;
+use Liqrgv\ShopSync\Observers\ProductObserver;
 
 class ProductPackageServiceProvider extends ServiceProvider
 {
@@ -37,6 +40,7 @@ class ProductPackageServiceProvider extends ServiceProvider
         $this->bootMiddleware();
         $this->bootRoutes();
         $this->bootPublishing();
+        $this->bootObservers();
     }
 
     /**
@@ -100,6 +104,17 @@ class ProductPackageServiceProvider extends ServiceProvider
                 __DIR__ . '/../database/migrations' => database_path('migrations'),
             ], 'products-package');
         }
+    }
+
+    /**
+     * Boot model observers
+     */
+    protected function bootObservers()
+    {
+        // Register Product Observer for SSE broadcasting
+        Product::observe(ProductObserver::class);
+
+        Log::info("ShopSync: Registered ProductObserver for Product model");
     }
 
     /**

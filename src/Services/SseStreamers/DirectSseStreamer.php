@@ -10,6 +10,26 @@ use Illuminate\Support\Facades\Redis;
 class DirectSseStreamer implements SseStreamerInterface
 {
     /**
+     * Queue of broadcast messages to send via SSE
+     *
+     * @var array
+     */
+    private $broadcastQueue = [];
+
+    /**
+     * Redis connection for listening to broadcast channels
+     *
+     * @var mixed
+     */
+    private $redisListener;
+
+    /**
+     * Last message ID processed to avoid duplicates
+     *
+     * @var string|null
+     */
+    private $lastProcessedMessageId = null;
+    /**
      * Stream SSE events directly (WL mode)
      *
      * @param string $sessionId Unique session identifier
@@ -50,6 +70,9 @@ class DirectSseStreamer implements SseStreamerInterface
         // Increment active connections counter
         $this->incrementConnectionCounter($sessionId);
 
+        // Initialize Redis broadcast listener
+        $this->initializeRedisListener($sessionId);
+
         Log::info("SSE [WL][{$sessionId}]: Connection established successfully");
 
         // Keep the connection alive and send timestamp every minute
@@ -70,6 +93,14 @@ class DirectSseStreamer implements SseStreamerInterface
             }
 
             $currentTime = time();
+
+            // Process any pending broadcast messages
+            $this->processBroadcastQueue($sessionId, $failedWrites, $maxFailedWrites, $connectionDecrementedOnExit);
+
+            // Break if connection was closed due to failed writes
+            if ($connectionDecrementedOnExit) {
+                break;
+            }
 
             // Send timestamp event every 60 seconds
             if ($currentTime - $lastSent >= 60) {
@@ -122,6 +153,9 @@ class DirectSseStreamer implements SseStreamerInterface
             // Sleep for 1 second before checking again
             sleep(1);
         }
+
+        // Cleanup Redis listener
+        $this->cleanupRedisListener($sessionId);
 
         // Decrement connection counter on normal exit (only if not already decremented)
         if (!$connectionDecrementedOnExit) {
@@ -275,5 +309,213 @@ class DirectSseStreamer implements SseStreamerInterface
                 'error' => $e->getMessage()
             ]);
         }
+    }
+
+    /**
+     * Initialize Redis listener for broadcast messages
+     *
+     * @param string $sessionId
+     * @return void
+     */
+    private function initializeRedisListener(string $sessionId): void
+    {
+        try {
+            // Create a separate Redis connection for reading
+            $this->redisListener = Redis::connection('default');
+
+            // Set up unique consumer group for this SSE connection (for broadcasting)
+            $streamKey = 'products.updates.stream';
+            $consumerGroup = "sse-group-{$sessionId}";
+            $consumerName = "consumer-{$sessionId}";
+
+            // Try to create unique consumer group for this session
+            try {
+                $this->redisListener->xgroup('CREATE', $streamKey, $consumerGroup, '0', true);
+            } catch (\Exception $e) {
+                // Group likely already exists, which is fine
+            }
+
+            Log::debug("SSE [WL][{$sessionId}]: Initialized Redis stream listener", [
+                'stream' => $streamKey,
+                'group' => $consumerGroup,
+                'consumer' => $consumerName
+            ]);
+
+        } catch (\Exception $e) {
+            Log::warning("SSE [WL][{$sessionId}]: Failed to initialize Redis listener", [
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Process broadcast messages from Redis queue
+     *
+     * @param string $sessionId
+     * @param int &$failedWrites
+     * @param int $maxFailedWrites
+     * @param bool &$connectionDecrementedOnExit
+     * @return void
+     */
+    private function processBroadcastQueue(string $sessionId, int &$failedWrites, int $maxFailedWrites, bool &$connectionDecrementedOnExit): void
+    {
+        try {
+            // Check for new broadcast messages (non-blocking)
+            $this->checkForBroadcastMessages($sessionId);
+
+            // Process queued messages
+            while (!empty($this->broadcastQueue)) {
+                $message = array_shift($this->broadcastQueue);
+
+                $writeSuccess = $this->sendEventWithCheck(
+                    $message['event'] ?? 'broadcast',
+                    $message['data'] ?? [],
+                    $message['id'] ?? null,
+                    $sessionId
+                );
+
+                if (!$writeSuccess) {
+                    $failedWrites++;
+                    Log::warning("SSE [WL][{$sessionId}]: Failed to write broadcast message. Failed writes: {$failedWrites}");
+
+                    if ($failedWrites >= $maxFailedWrites) {
+                        Log::error("SSE [WL][{$sessionId}]: Too many failed writes for broadcast messages. Disconnecting.");
+                        $this->decrementConnectionCounter($sessionId);
+                        $connectionDecrementedOnExit = true;
+                        break;
+                    }
+                } else {
+                    $failedWrites = 0; // Reset counter on successful write
+                    Log::debug("SSE [WL][{$sessionId}]: Successfully sent broadcast message: {$message['event']}");
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning("SSE [WL][{$sessionId}]: Error processing broadcast queue", [
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Check for new broadcast messages from Redis streams (non-blocking)
+     *
+     * @param string $sessionId
+     * @return void
+     */
+    private function checkForBroadcastMessages(string $sessionId): void
+    {
+        if (!$this->redisListener) {
+            return;
+        }
+
+        try {
+            $streamKey = 'products.updates.stream';
+            // Use unique consumer group per session for broadcasting
+            $consumerGroup = "sse-group-{$sessionId}";
+            $consumerName = "consumer-{$sessionId}";
+
+            // Read new messages from the stream with very short timeout
+            $messages = $this->redisListener->xreadgroup(
+                $consumerGroup,
+                $consumerName,
+                [$streamKey => '>'],
+                1,  // Count: read 1 message at a time
+                100 // Block for 100ms max
+            );
+
+            if (!empty($messages[$streamKey])) {
+                foreach ($messages[$streamKey] as $messageId => $fields) {
+                    $this->processStreamMessage($messageId, $fields, $sessionId);
+                }
+            }
+
+        } catch (\Exception $e) {
+            // Log but don't break the SSE stream for Redis issues
+            Log::debug("SSE [WL][{$sessionId}]: Redis stream check failed (non-critical)", [
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Process a message from Redis stream
+     *
+     * @param string $messageId
+     * @param array $fields
+     * @param string $sessionId
+     * @return void
+     */
+    private function processStreamMessage(string $messageId, array $fields, string $sessionId): void
+    {
+        try {
+            // Decode the message data
+            $messageData = json_decode($fields['data'] ?? '{}', true);
+
+            if ($messageData) {
+                // Add to our internal queue for processing
+                $this->broadcastQueue[] = [
+                    'event' => $messageData['event'] ?? 'product.updated',
+                    'data' => $messageData['data'] ?? $messageData,
+                    'id' => $messageId
+                ];
+
+                Log::debug("SSE [WL][{$sessionId}]: Processed stream message", [
+                    'message_id' => $messageId,
+                    'event' => $messageData['event'] ?? 'unknown'
+                ]);
+
+                // Acknowledge the message for this session's consumer group
+                $this->redisListener->xack(
+                    'products.updates.stream',
+                    "sse-group-{$sessionId}",
+                    [$messageId]
+                );
+            }
+
+        } catch (\Exception $e) {
+            Log::warning("SSE [WL][{$sessionId}]: Failed to process stream message", [
+                'message_id' => $messageId,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Cleanup Redis listener resources
+     *
+     * @param string $sessionId
+     * @return void
+     */
+    private function cleanupRedisListener(string $sessionId): void
+    {
+        try {
+            if ($this->redisListener) {
+                // Clean up the entire consumer group for this session
+                $consumerGroup = "sse-group-{$sessionId}";
+                $this->redisListener->xgroup('DESTROY', 'products.updates.stream', $consumerGroup);
+
+                Log::debug("SSE [WL][{$sessionId}]: Cleaned up Redis stream consumer group");
+            }
+        } catch (\Exception $e) {
+            Log::debug("SSE [WL][{$sessionId}]: Redis cleanup failed (non-critical)", [
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Add a broadcast message to the queue
+     * This method can be called from external sources
+     *
+     * @param array $messageData
+     * @return void
+     */
+    public function queueBroadcastMessage(array $messageData): void
+    {
+        $this->broadcastQueue[] = [
+            'event' => $messageData['event'] ?? 'broadcast',
+            'data' => $messageData['data'] ?? [],
+            'id' => $messageData['id'] ?? uniqid('broadcast_')
+        ];
     }
 }
