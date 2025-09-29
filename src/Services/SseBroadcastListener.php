@@ -2,9 +2,8 @@
 
 namespace Liqrgv\ShopSync\Services;
 
-use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Log;
-use Liqrgv\ShopSync\Events\ProductUpdated;
+use Illuminate\Support\Facades\Redis;
 
 /**
  * SSE Broadcast Listener Service

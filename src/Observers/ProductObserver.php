@@ -3,13 +3,13 @@
 namespace Liqrgv\ShopSync\Observers;
 
 use Liqrgv\ShopSync\Models\Product;
-use Liqrgv\ShopSync\Events\ProductUpdated;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Product Observer
  *
- * Handles product model events and broadcasts them via SSE
+ * Handles product model events and pushes them to Redis stream for SSE
  */
 class ProductObserver
 {
@@ -19,9 +19,9 @@ class ProductObserver
      * @param Product $product
      * @return void
      */
-    public function created(Model $product)
+    public function created(Product $product)
     {
-        $this->broadcastProductEvent($product, [], 'created');
+        $this->pushToStream($product, [], 'created');
     }
 
     /**
@@ -35,7 +35,7 @@ class ProductObserver
         // Get the changes that were made
         $changes = $this->formatChanges($product->getChanges(), $product->getOriginal());
 
-        $this->broadcastProductEvent($product, $changes, 'updated');
+        $this->pushToStream($product, $changes, 'updated');
     }
 
     /**
@@ -46,7 +46,7 @@ class ProductObserver
      */
     public function deleted(Product $product)
     {
-        $this->broadcastProductEvent($product, [], 'deleted');
+        $this->pushToStream($product, [], 'deleted');
     }
 
     /**
@@ -57,36 +57,50 @@ class ProductObserver
      */
     public function restored(Product $product)
     {
-        $this->broadcastProductEvent($product, [], 'restored');
+        $this->pushToStream($product, [], 'restored');
     }
 
     /**
-     * Broadcast a product event via SSE
+     * Push product event directly to Redis stream
      *
      * @param Product $product
      * @param array $changes
      * @param string $eventType
      * @return void
      */
-    private function broadcastProductEvent(Product $product, array $changes, string $eventType): void
+    private function pushToStream(Product $product, array $changes, string $eventType): void
     {
         try {
-            // Create the broadcast event
-            $event = new ProductUpdated($product, $changes, $eventType);
+            $message = [
+                'event' => 'product.updated',
+                'data' => [
+                    'product_id' => $product->id,
+                    'product' => $product->toArray(),
+                    'changes' => $changes,
+                    'update_type' => $eventType,
+                    'timestamp' => now()->toISOString(),
+                    'message' => "Product {$eventType}: {$product->name}"
+                ],
+                'timestamp' => now()->toISOString()
+            ];
 
-            // Broadcast the event
-            broadcast($event);
+            // Push directly to Redis stream
+            $messageId = Redis::xadd(
+                'products.updates.stream',
+                '*',
+                ['data' => json_encode($message)]
+            );
 
-            Log::info("Product Observer: Broadcasted {$eventType} event", [
+            Log::info("Product Observer: Pushed {$eventType} event to stream", [
                 'product_id' => $product->id,
                 'product_name' => $product->name,
                 'event_type' => $eventType,
-                'changes_count' => count($changes),
-                'changes' => array_keys($changes)
+                'message_id' => $messageId,
+                'changes_count' => count($changes)
             ]);
 
         } catch (\Exception $e) {
-            Log::error("Product Observer: Failed to broadcast {$eventType} event", [
+            Log::error("Product Observer: Failed to push {$eventType} event to stream", [
                 'product_id' => $product->id,
                 'product_name' => $product->name,
                 'event_type' => $eventType,
