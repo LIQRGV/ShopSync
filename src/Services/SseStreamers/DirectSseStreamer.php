@@ -454,10 +454,13 @@ class DirectSseStreamer implements SseStreamerInterface
                 100 // Block for 100ms max
             );
 
-            if (!empty($messages[$streamKey])) {
-                Log::debug("SSE [WL][{$sessionId}]: Found " . count($messages[$streamKey]) . " new broadcast messages");
-                foreach ($messages[$streamKey] as $messageId => $fields) {
-                    $this->processStreamMessage($messageId, $fields, $sessionId);
+            if (!empty($messages)) {
+                $streamMessages = reset($messages);
+                if (!empty($streamMessages)) {
+                    Log::debug("SSE [WL][{$sessionId}]: Found " . count($streamMessages) . " new broadcast messages");
+                    foreach ($streamMessages as $messageId => $fields) {
+                        $this->processStreamMessage($messageId, $fields, $sessionId);
+                    }
                 }
             }
 
