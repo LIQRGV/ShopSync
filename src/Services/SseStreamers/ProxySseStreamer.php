@@ -12,6 +12,8 @@ use Illuminate\Http\Client\RequestException;
 
 class ProxySseStreamer implements SseStreamerInterface
 {
+    const CONNECTION_TIMEOUT = 600; // 10 minutes in seconds
+
     protected $baseUrl;
     protected $apiKey;
     protected $timeout;
@@ -158,7 +160,7 @@ class ProxySseStreamer implements SseStreamerInterface
             'Accept' => 'text/event-stream',
             'Cache-Control' => 'no-cache',
         ])
-        ->timeout($this->timeout)
+        ->timeout(self::CONNECTION_TIMEOUT)
         ->get($sseUrl);
 
         if (!$response->successful()) {
@@ -173,8 +175,16 @@ class ProxySseStreamer implements SseStreamerInterface
         $failedWrites = 0;
         $maxFailedWrites = 3;
         $connectionDecrementedEarly = false;
+        $connectionStartTime = time();
 
         while (!$stream->eof()) {
+            // Check for connection timeout
+            if (time() - $connectionStartTime >= self::CONNECTION_TIMEOUT) {
+                Log::info("SSE [WTM][{$sessionId}]: Connection timeout reached (" . self::CONNECTION_TIMEOUT . " seconds)");
+                $this->decrementConnectionCounter($sessionId);
+                $connectionDecrementedEarly = true;
+                break;
+            }
             // Check if client disconnected
             if (connection_aborted()) {
                 Log::info("SSE [WTM][{$sessionId}]: Client disconnected, closing proxy");

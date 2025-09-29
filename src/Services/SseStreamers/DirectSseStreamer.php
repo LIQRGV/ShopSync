@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Redis;
 
 class DirectSseStreamer implements SseStreamerInterface
 {
+    const MESSAGE_INTERVAL = 10;
+    const CONNECTION_TIMEOUT = 600; // 10 minutes in seconds
+    const HEARTBEAT_DELAY = 60; // Send heartbeat every 60 seconds
     /**
      * Queue of broadcast messages to send via SSE
      *
@@ -82,8 +85,16 @@ class DirectSseStreamer implements SseStreamerInterface
         $failedWrites = 0;
         $maxFailedWrites = 3; // Allow up to 3 failed writes before disconnecting
         $connectionDecrementedOnExit = false;
+        $connectionStartTime = time();
 
         while (true) {
+            // Check for connection timeout
+            if (time() - $connectionStartTime >= self::CONNECTION_TIMEOUT) {
+                Log::info("SSE [WL][{$sessionId}]: Connection timeout reached (" . self::CONNECTION_TIMEOUT . " seconds)");
+                $this->decrementConnectionCounter($sessionId);
+                $connectionDecrementedOnExit = true;
+                break;
+            }
             // Check if client disconnected
             if (connection_aborted()) {
                 Log::info("SSE [WL][{$sessionId}]: Connection aborted by client");
@@ -103,7 +114,7 @@ class DirectSseStreamer implements SseStreamerInterface
             }
 
             // Send timestamp event every 60 seconds
-            if ($currentTime - $lastSent >= 60) {
+            if ($currentTime - $lastSent >= self::MESSAGE_INTERVAL) {
                 $counter++;
                 $writeSuccess = $this->sendEventWithCheck('timestamp', [
                     'timestamp' => date('Y-m-d H:i:s'),
@@ -112,6 +123,8 @@ class DirectSseStreamer implements SseStreamerInterface
                     'session_id' => $sessionId,
                     'mode' => 'wl'
                 ], null, $sessionId);
+
+                Log::info("connection aborted", [connection_aborted(), connection_status()]);
 
                 if (!$writeSuccess) {
                     $failedWrites++;
@@ -130,8 +143,8 @@ class DirectSseStreamer implements SseStreamerInterface
                 }
             }
 
-            // Send heartbeat every 30 seconds to keep connection alive
-            if ($currentTime - $lastHeartbeat >= 30) {
+            // Send heartbeat every HEARTBEAT_DELAY seconds to keep connection alive
+            if ($currentTime - $lastHeartbeat >= self::HEARTBEAT_DELAY) {
                 $heartbeatSuccess = $this->sendHeartbeatWithCheck($sessionId);
 
                 if (!$heartbeatSuccess) {
@@ -147,6 +160,8 @@ class DirectSseStreamer implements SseStreamerInterface
                 } else {
                     $failedWrites = 0; // Reset counter on successful write
                     $lastHeartbeat = $currentTime;
+
+                    $this->extendSessionTTL($sessionId);
                 }
             }
 
@@ -167,6 +182,7 @@ class DirectSseStreamer implements SseStreamerInterface
         Log::info("SSE [WL][{$sessionId}]: Connection closed after {$duration} seconds, sent {$counter} timestamp events");
     }
 
+
     /**
      * Send an SSE event with write checking
      *
@@ -178,6 +194,11 @@ class DirectSseStreamer implements SseStreamerInterface
      */
     private function sendEventWithCheck(string $event, $data, ?string $id = null, ?string $sessionId = null): bool
     {
+        // Pre-connection test: send a minimal ping to test the connection
+        if (!$this->testConnectionHealth($sessionId)) {
+            return false;
+        }
+
         // Build the SSE message
         $message = '';
         if ($id !== null) {
@@ -186,12 +207,13 @@ class DirectSseStreamer implements SseStreamerInterface
         $message .= "event: {$event}\n";
         $message .= "data: " . json_encode($data) . "\n\n";
 
-        // Try to write using echo and capture any output errors
-        $writeSuccess = false;
+        $writeSuccess = true;
 
         // Set error handler to catch write errors
         set_error_handler(function($errno, $errstr) use (&$writeSuccess) {
-            if (strpos($errstr, 'failed to write') !== false || strpos($errstr, 'Broken pipe') !== false) {
+            if (strpos($errstr, 'failed to write') !== false ||
+                strpos($errstr, 'Broken pipe') !== false ||
+                strpos($errstr, 'Connection reset') !== false) {
                 $writeSuccess = false;
                 return true;
             }
@@ -201,25 +223,124 @@ class DirectSseStreamer implements SseStreamerInterface
         // Attempt to write
         echo $message;
 
-        $flushResult = true;
-        // Check if output was successful by flushing
+        // Flush output (flush() returns void, so we can't check return value)
         if (ob_get_level() > 0) {
-            $flushResult = ob_flush();
+            @ob_flush();
         }
-
-        flush();
+        @flush();
 
         // Restore error handler
         restore_error_handler();
 
-        // If flush failed, likely the connection is broken
-        if ($flushResult === false) {
+        // Check for socket-level errors after write
+        $socketError = $this->checkSocketErrors();
+        if ($socketError) {
+            if ($sessionId) {
+                Log::debug("SSE [WL][{$sessionId}]: Socket error detected: {$socketError}");
+            }
             return false;
         }
 
-        // Additional check for connection status
+        // If write failed during echo operation
+        if (!$writeSuccess) {
+            return false;
+        }
+
+        // Check stream metadata for connection status
+        if (!$this->validateStreamStatus()) {
+            return false;
+        }
+
+        // Final connection check
         if (connection_aborted()) {
             return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Test connection health with a minimal write
+     *
+     * @param string|null $sessionId
+     * @return bool True if connection is healthy, false if broken
+     */
+    private function testConnectionHealth(?string $sessionId = null): bool
+    {
+        // Send a minimal comment to test connection
+        echo ": ping\n\n";
+
+        // Try to flush and detect immediate failures
+        if (ob_get_level() > 0) {
+            @ob_flush();
+        }
+        @flush();
+
+        // Check for immediate connection abort
+        if (connection_aborted()) {
+            return false;
+        }
+
+        // Check for any errors from the ping write
+        $socketError = $this->checkSocketErrors();
+        if ($socketError) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Check for socket-level errors
+     *
+     * @return string|null Error description if found, null if no errors
+     */
+    private function checkSocketErrors(): ?string
+    {
+        $lastError = error_get_last();
+
+        if ($lastError && isset($lastError['message'])) {
+            $errorMessage = $lastError['message'];
+
+            // Check for connection-related errors
+            $connectionErrors = [
+                'Broken pipe',
+                'Connection reset',
+                'No such file or directory',
+                'Bad file descriptor',
+                'Connection refused',
+                'Resource temporarily unavailable'
+            ];
+
+            foreach ($connectionErrors as $errorPattern) {
+                if (strpos($errorMessage, $errorPattern) !== false) {
+                    return $errorPattern;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Validate stream status using metadata
+     *
+     * @return bool True if stream is healthy, false if broken
+     */
+    private function validateStreamStatus(): bool
+    {
+        // Check STDOUT stream metadata if available
+        if (is_resource(STDOUT)) {
+            $streamMeta = stream_get_meta_data(STDOUT);
+
+            if ($streamMeta['eof'] || $streamMeta['timed_out']) {
+                return false;
+            }
+
+            // Check if stream is still writable
+            if (isset($streamMeta['mode']) && strpos($streamMeta['mode'], 'w') === false) {
+                return false;
+            }
         }
 
         return true;
