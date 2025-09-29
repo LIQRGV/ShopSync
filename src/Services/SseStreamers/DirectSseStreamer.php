@@ -124,8 +124,6 @@ class DirectSseStreamer implements SseStreamerInterface
                     'mode' => 'wl'
                 ], null, $sessionId);
 
-                Log::info("connection aborted", [connection_aborted(), connection_status()]);
-
                 if (!$writeSuccess) {
                     $failedWrites++;
                     Log::warning("SSE [WL][{$sessionId}]: Failed to write timestamp event #{$counter}. Failed writes: {$failedWrites}");
@@ -143,28 +141,6 @@ class DirectSseStreamer implements SseStreamerInterface
                 }
             }
 
-            // Send heartbeat every HEARTBEAT_DELAY seconds to keep connection alive
-            if ($currentTime - $lastHeartbeat >= self::HEARTBEAT_DELAY) {
-                $heartbeatSuccess = $this->sendHeartbeatWithCheck($sessionId);
-
-                if (!$heartbeatSuccess) {
-                    $failedWrites++;
-                    Log::warning("SSE [WL][{$sessionId}]: Failed to write heartbeat. Failed writes: {$failedWrites}");
-
-                    if ($failedWrites >= $maxFailedWrites) {
-                        Log::error("SSE [WL][{$sessionId}]: Too many failed heartbeat writes. Disconnecting.");
-                        $this->decrementConnectionCounter($sessionId);
-                        $connectionDecrementedOnExit = true;
-                        break;
-                    }
-                } else {
-                    $failedWrites = 0; // Reset counter on successful write
-                    $lastHeartbeat = $currentTime;
-
-                    $this->extendSessionTTL($sessionId);
-                }
-            }
-
             // Sleep for 1 second before checking again
             sleep(1);
         }
@@ -173,9 +149,7 @@ class DirectSseStreamer implements SseStreamerInterface
         $this->cleanupRedisListener($sessionId);
 
         // Decrement connection counter on normal exit (only if not already decremented)
-        if (!$connectionDecrementedOnExit) {
-            $this->decrementConnectionCounter($sessionId);
-        }
+        $this->decrementConnectionCounter($sessionId);
 
         // Log final connection status
         $duration = time() - ($lastSent - (60 * $counter));
@@ -194,11 +168,6 @@ class DirectSseStreamer implements SseStreamerInterface
      */
     private function sendEventWithCheck(string $event, $data, ?string $id = null, ?string $sessionId = null): bool
     {
-        // Pre-connection test: send a minimal ping to test the connection
-        if (!$this->testConnectionHealth($sessionId)) {
-            return false;
-        }
-
         // Build the SSE message
         $message = '';
         if ($id !== null) {
@@ -246,44 +215,8 @@ class DirectSseStreamer implements SseStreamerInterface
             return false;
         }
 
-        // Check stream metadata for connection status
-        if (!$this->validateStreamStatus()) {
-            return false;
-        }
-
         // Final connection check
         if (connection_aborted()) {
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * Test connection health with a minimal write
-     *
-     * @param string|null $sessionId
-     * @return bool True if connection is healthy, false if broken
-     */
-    private function testConnectionHealth(?string $sessionId = null): bool
-    {
-        // Send a minimal comment to test connection
-        echo ": ping\n\n";
-
-        // Try to flush and detect immediate failures
-        if (ob_get_level() > 0) {
-            @ob_flush();
-        }
-        @flush();
-
-        // Check for immediate connection abort
-        if (connection_aborted()) {
-            return false;
-        }
-
-        // Check for any errors from the ping write
-        $socketError = $this->checkSocketErrors();
-        if ($socketError) {
             return false;
         }
 
@@ -320,75 +253,6 @@ class DirectSseStreamer implements SseStreamerInterface
         }
 
         return null;
-    }
-
-    /**
-     * Validate stream status using metadata
-     *
-     * @return bool True if stream is healthy, false if broken
-     */
-    private function validateStreamStatus(): bool
-    {
-        // Check STDOUT stream metadata if available
-        if (is_resource(STDOUT)) {
-            $streamMeta = stream_get_meta_data(STDOUT);
-
-            if ($streamMeta['eof'] || $streamMeta['timed_out']) {
-                return false;
-            }
-
-            // Check if stream is still writable
-            if (isset($streamMeta['mode']) && strpos($streamMeta['mode'], 'w') === false) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * Send a heartbeat with write checking
-     *
-     * @param string|null $sessionId
-     * @return bool True if write succeeded, false if failed
-     */
-    private function sendHeartbeatWithCheck(?string $sessionId = null): bool
-    {
-        $message = ": heartbeat\n\n";
-
-        // Set error handler to catch write errors
-        $writeError = false;
-        set_error_handler(function($errno, $errstr) use (&$writeError) {
-            if (strpos($errstr, 'failed to write') !== false || strpos($errstr, 'Broken pipe') !== false) {
-                $writeError = true;
-                return true;
-            }
-            return false;
-        });
-
-        // Attempt to write
-        echo $message;
-
-        // Check if output was successful by flushing
-        if (ob_get_level() > 0) {
-            $flushResult = @ob_flush();
-        }
-        $flushResult = @flush();
-
-        // Restore error handler
-        restore_error_handler();
-
-        // If write error occurred or flush failed
-        if ($writeError || $flushResult === false) {
-            return false;
-        }
-
-        // Additional check for connection status
-        if (connection_aborted()) {
-            return false;
-        }
-
-        return true;
     }
 
     /**
@@ -449,11 +313,19 @@ class DirectSseStreamer implements SseStreamerInterface
             $consumerGroup = "sse-group-{$sessionId}";
             $consumerName = "consumer-{$sessionId}";
 
+            // Ensure the stream exists before creating consumer group
+            $this->ensureStreamExists($streamKey, $sessionId);
+
             // Try to create unique consumer group for this session
             try {
                 $this->redisListener->xgroup('CREATE', $streamKey, $consumerGroup, '0', true);
+                Log::debug("SSE [WL][{$sessionId}]: Created consumer group: {$consumerGroup}");
             } catch (\Exception $e) {
                 // Group likely already exists, which is fine
+                Log::debug("SSE [WL][{$sessionId}]: Consumer group exists or creation failed", [
+                    'group' => $consumerGroup,
+                    'error' => $e->getMessage()
+                ]);
             }
 
             Log::debug("SSE [WL][{$sessionId}]: Initialized Redis stream listener", [
@@ -466,6 +338,43 @@ class DirectSseStreamer implements SseStreamerInterface
             Log::warning("SSE [WL][{$sessionId}]: Failed to initialize Redis listener", [
                 'error' => $e->getMessage()
             ]);
+        }
+    }
+
+    /**
+     * Ensure Redis stream exists, create if necessary
+     *
+     * @param string $streamKey
+     * @param string $sessionId
+     * @return void
+     */
+    private function ensureStreamExists(string $streamKey, string $sessionId): void
+    {
+        try {
+            // Check if stream exists by trying to get stream info
+            $this->redisListener->xinfo('STREAM', $streamKey);
+            Log::debug("SSE [WL][{$sessionId}]: Redis stream exists: {$streamKey}");
+        } catch (\Exception $e) {
+            // Stream doesn't exist, create it with an initial message
+            try {
+                $this->redisListener->xadd($streamKey, '*', [
+                    'data' => json_encode([
+                        'event' => 'stream.initialized',
+                        'data' => [
+                            'message' => 'Stream initialized for SSE broadcasting',
+                            'timestamp' => date('Y-m-d H:i:s'),
+                            'session_id' => $sessionId
+                        ]
+                    ])
+                ]);
+                Log::info("SSE [WL][{$sessionId}]: Created Redis stream: {$streamKey}");
+            } catch (\Exception $createException) {
+                Log::error("SSE [WL][{$sessionId}]: Failed to create Redis stream", [
+                    'stream' => $streamKey,
+                    'error' => $createException->getMessage()
+                ]);
+                throw $createException;
+            }
         }
     }
 
@@ -526,6 +435,7 @@ class DirectSseStreamer implements SseStreamerInterface
     private function checkForBroadcastMessages(string $sessionId): void
     {
         if (!$this->redisListener) {
+            Log::debug("SSE [WL][{$sessionId}]: Redis listener not initialized, skipping broadcast check");
             return;
         }
 
@@ -545,16 +455,32 @@ class DirectSseStreamer implements SseStreamerInterface
             );
 
             if (!empty($messages[$streamKey])) {
+                Log::debug("SSE [WL][{$sessionId}]: Found " . count($messages[$streamKey]) . " new broadcast messages");
                 foreach ($messages[$streamKey] as $messageId => $fields) {
                     $this->processStreamMessage($messageId, $fields, $sessionId);
                 }
             }
 
-        } catch (\Exception $e) {
-            // Log but don't break the SSE stream for Redis issues
-            Log::debug("SSE [WL][{$sessionId}]: Redis stream check failed (non-critical)", [
-                'error' => $e->getMessage()
+        } catch (\RedisException $e) {
+            // Redis connection issues
+            Log::warning("SSE [WL][{$sessionId}]: Redis connection error during broadcast check", [
+                'error' => $e->getMessage(),
+                'code' => $e->getCode()
             ]);
+        } catch (\Exception $e) {
+            // Handle specific Redis stream errors
+            if (strpos($e->getMessage(), 'NOGROUP') !== false) {
+                Log::warning("SSE [WL][{$sessionId}]: Consumer group does not exist, will be recreated on next connection", [
+                    'group' => "sse-group-{$sessionId}",
+                    'error' => $e->getMessage()
+                ]);
+            } else {
+                // Log but don't break the SSE stream for other Redis issues
+                Log::debug("SSE [WL][{$sessionId}]: Redis stream check failed (non-critical)", [
+                    'error' => $e->getMessage(),
+                    'type' => get_class($e)
+                ]);
+            }
         }
     }
 
