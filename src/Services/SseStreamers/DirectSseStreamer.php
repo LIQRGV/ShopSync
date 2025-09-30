@@ -318,7 +318,7 @@ class DirectSseStreamer implements SseStreamerInterface
 
             // Try to create unique consumer group for this session
             try {
-                $this->redisListener->xgroup('CREATE', $streamKey, $consumerGroup, '0', true);
+                $this->redisListener->xgroup('CREATE', $streamKey, $consumerGroup, '$', true);
                 Log::debug("SSE [WL][{$sessionId}]: Created consumer group: {$consumerGroup}");
             } catch (\Exception $e) {
                 // Group likely already exists, which is fine
