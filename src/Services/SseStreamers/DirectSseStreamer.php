@@ -95,6 +95,7 @@ class DirectSseStreamer implements SseStreamerInterface
                 $connectionDecrementedOnExit = true;
                 break;
             }
+
             // Check if client disconnected
             if (connection_aborted()) {
                 Log::info("SSE [WL][{$sessionId}]: Connection aborted by client");
@@ -141,8 +142,8 @@ class DirectSseStreamer implements SseStreamerInterface
                 }
             }
 
-            // Sleep for 1 second before checking again
-            sleep(1);
+            // Sleep for 0.1 second before checking again
+            usleep(100000);
         }
 
         // Cleanup Redis listener

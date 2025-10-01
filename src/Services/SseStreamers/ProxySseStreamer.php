@@ -2,6 +2,7 @@
 
 namespace Liqrgv\ShopSync\Services\SseStreamers;
 
+use Liqrgv\ShopSync\Models\Client;
 use Liqrgv\ShopSync\Services\Contracts\SseStreamerInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -18,6 +19,7 @@ class ProxySseStreamer implements SseStreamerInterface
     protected $apiKey;
     protected $timeout;
     protected $client;
+    protected $streamChunkSize;
 
     public function __construct($client)
     {
@@ -29,6 +31,7 @@ class ProxySseStreamer implements SseStreamerInterface
         $this->baseUrl = $client->getActiveUrl() . '/' . config('products-package.route_prefix', 'api/v1');
         $this->apiKey = decrypt($client->access_token);
         $this->timeout = config('products-package.wtm_api_timeout', 30); // Longer timeout for SSE
+        $this->streamChunkSize = config('products-package.sse_stream_chunk_size', 8);
 
         if (empty($this->baseUrl) || empty($this->apiKey)) {
             Log::warning('WTM SSE proxy configuration is incomplete', [
@@ -48,6 +51,15 @@ class ProxySseStreamer implements SseStreamerInterface
      */
     public function stream(string $sessionId, Request $request): void
     {
+        if (empty($this->baseUrl) || empty($this->apiKey)) {
+            header('Content-Type: text/event-stream');
+            $this->sendEventWithCheck('error', [
+                'message' => 'SSE proxy not configured correctly',
+                'error' => 'Missing WL server configuration'
+            ], null, $sessionId);
+            return;
+        }
+
         $clientIp = $request->ip();
         $userAgent = substr($request->userAgent() ?? 'Unknown', 0, 50);
         $clientId = $this->client->id ?? 'unknown';
@@ -88,7 +100,7 @@ class ProxySseStreamer implements SseStreamerInterface
         $connectionDecrementedOnError = false;
 
         try {
-            $connectionDecrementedOnError = $this->proxyFromWlServer($sessionId, $clientId);
+            $connectionDecrementedOnError = $this->proxyFromWlServer($sessionId, $this->client);
         } catch (ConnectionException $e) {
             Log::error("SSE [WTM][{$sessionId}]: Connection error to WL server", [
                 'error' => $e->getMessage(),
@@ -107,7 +119,7 @@ class ProxySseStreamer implements SseStreamerInterface
         } catch (RequestException $e) {
             Log::error("SSE [WTM][{$sessionId}]: Request error to WL server", [
                 'error' => $e->getMessage(),
-                'response_status' => $e->response?->status() ?? 'unknown'
+                'response_status' => empty($e->response) ? 'unknown' : $e->response->status()
             ]);
 
             $this->sendEventWithCheck('error', [
@@ -144,34 +156,36 @@ class ProxySseStreamer implements SseStreamerInterface
     }
 
     /**
-     * Proxy SSE stream from WL server
+     * Proxy SSE stream from WL server (transparent mode - immediate forwarding)
      *
      * @param string $sessionId
      * @param string $clientId
      * @return bool True if connection counter was already decremented, false otherwise
      */
-    private function proxyFromWlServer(string $sessionId, string $clientId): bool
+    private function proxyFromWlServer(string $sessionId, Client $client): bool
     {
-        $sseUrl = $this->baseUrl . '/sse/events';
+        $sseUrl = $client->getActiveUrl() . '/' . config('products-package.route_prefix', 'api/v1') . '/sse/events';
 
-        // Create HTTP client for SSE connection
-        $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . $this->apiKey,
-            'Accept' => 'text/event-stream',
-            'Cache-Control' => 'no-cache',
-        ])
-        ->timeout(self::CONNECTION_TIMEOUT)
-        ->get($sseUrl);
+        // Create HTTP client for SSE connection with streaming enabled
+        $response = Http::withOptions(['stream' => true])
+            ->withHeaders([
+                'Authorization' => 'Bearer ' . decrypt($client->access_token),
+                'Accept' => 'text/event-stream',
+                'Cache-Control' => 'no-cache',
+            ])
+            ->timeout(self::CONNECTION_TIMEOUT)
+            ->get($sseUrl);
 
         if (!$response->successful()) {
             throw new RequestException($response);
         }
 
-        Log::info("SSE [WTM][{$sessionId}]: Connected to WL server SSE stream");
+        Log::info("SSE [WTM][{$sessionId}]: Connected to WL server SSE stream (transparent proxy mode)");
 
         // Get the response body as a stream
         $stream = $response->getBody();
-        $buffer = '';
+
+        $buffer = "";
         $failedWrites = 0;
         $maxFailedWrites = 3;
         $connectionDecrementedEarly = false;
@@ -194,31 +208,30 @@ class ProxySseStreamer implements SseStreamerInterface
             }
 
             // Read chunk from WL server
-            $chunk = $stream->read(8192);
+            $chunk = $stream->read($this->streamChunkSize);
             if ($chunk === false || $chunk === '') {
                 continue;
             }
 
             $buffer .= $chunk;
 
-            // Process complete SSE messages
+            // Process complete SSE messages (end with \n\n)
             while (($pos = strpos($buffer, "\n\n")) !== false) {
-                $sseMessage = substr($buffer, 0, $pos + 2);
-                $buffer = substr($buffer, $pos + 2);
+                $message = substr($buffer, 0, $pos + 2); // Include the \n\n
+                $buffer = substr($buffer, $pos + 2);     // Remove processed message
 
-                // Modify the SSE message to add WTM context
-                $modifiedMessage = $this->modifySseMessage($sseMessage, $sessionId, $clientId);
+                // Log only complete messages, not every chunk
+                Log::debug("SSE [WTM][{$sessionId}]: Forwarding message", ['size' => strlen($message)]);
 
-                // Forward to client with write check
-                if (!$this->forwardSseMessage($modifiedMessage, $sessionId)) {
+                // Forward complete SSE message
+                if (!$this->forwardSseMessage($message, $sessionId)) {
                     $failedWrites++;
                     Log::warning("SSE [WTM][{$sessionId}]: Failed to forward message. Failed writes: {$failedWrites}");
 
                     if ($failedWrites >= $maxFailedWrites) {
                         Log::error("SSE [WTM][{$sessionId}]: Too many failed writes. Disconnecting proxy.");
                         $this->decrementConnectionCounter($sessionId);
-                        $connectionDecrementedEarly = true;
-                        break 2;
+                        return true;
                     }
                 } else {
                     $failedWrites = 0; // Reset on successful write
@@ -226,68 +239,25 @@ class ProxySseStreamer implements SseStreamerInterface
             }
         }
 
+        // Send any remaining buffer at the end
+        if (!empty($buffer) && !connection_aborted()) {
+            Log::debug("SSE [WTM][{$sessionId}]: Sending remaining buffer", ['size' => strlen($buffer)]);
+            $this->forwardSseMessage($buffer, $sessionId);
+        }
+
+        // Send graceful disconnect event if connection is still alive
+        if (!connection_aborted()) {
+            $this->sendEventWithCheck('disconnected', [
+                'message' => 'WL server stream ended normally',
+                'session_id' => $sessionId,
+                'reason' => 'stream_ended',
+                'timestamp' => date('Y-m-d H:i:s')
+            ], null, $sessionId);
+            Log::info("SSE [WTM][{$sessionId}]: Sent graceful disconnect event");
+        }
+
         Log::info("SSE [WTM][{$sessionId}]: WL server stream ended");
         return $connectionDecrementedEarly;
-    }
-
-    /**
-     * Modify SSE message to add WTM context
-     *
-     * @param string $sseMessage
-     * @param string $sessionId
-     * @param string $clientId
-     * @return string
-     */
-    private function modifySseMessage(string $sseMessage, string $sessionId, string $clientId): string
-    {
-        // Parse the SSE message
-        $lines = explode("\n", trim($sseMessage));
-        $event = null;
-        $data = null;
-        $id = null;
-
-        foreach ($lines as $line) {
-            if (strpos($line, 'event:') === 0) {
-                $event = trim(substr($line, 6));
-            } elseif (strpos($line, 'data:') === 0) {
-                $data = trim(substr($line, 5));
-            } elseif (strpos($line, 'id:') === 0) {
-                $id = trim(substr($line, 3));
-            }
-        }
-
-        // Skip heartbeat messages
-        if (strpos($sseMessage, ': heartbeat') === 0) {
-            return $sseMessage;
-        }
-
-        // If we have data, modify it to add WTM context
-        if ($data && $event) {
-            try {
-                $parsedData = json_decode($data, true);
-                if (json_last_error() === JSON_ERROR_NONE && is_array($parsedData)) {
-                    // Add WTM context
-                    $parsedData['wtm_session_id'] = $sessionId;
-                    $parsedData['wtm_client_id'] = $clientId;
-                    $parsedData['proxied_from'] = $this->baseUrl;
-
-                    // Rebuild the message
-                    $modifiedMessage = '';
-                    if ($id) {
-                        $modifiedMessage .= "id: {$id}\n";
-                    }
-                    $modifiedMessage .= "event: {$event}\n";
-                    $modifiedMessage .= "data: " . json_encode($parsedData) . "\n\n";
-
-                    return $modifiedMessage;
-                }
-            } catch (\Exception $e) {
-                Log::debug("SSE [WTM][{$sessionId}]: Could not parse SSE data as JSON, forwarding as-is");
-            }
-        }
-
-        // Return original message if we couldn't modify it
-        return $sseMessage;
     }
 
     /**
