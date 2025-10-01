@@ -10,9 +10,6 @@ use Carbon\Carbon;
 
 /**
  * Product Model
- *
- * Unified product model with comprehensive field mapping and relationships.
- * Supports all 23 product fields for complete e-commerce functionality.
  */
 class Product extends Model
 {

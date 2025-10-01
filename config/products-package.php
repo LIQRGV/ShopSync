@@ -23,6 +23,7 @@ return [
     |
     */
     'wtm_api_timeout' => env('PRODUCT_PACKAGE_WTM_API_TIMEOUT', 30), // seconds
+    'sse_stream_chunk_size' => env('PRODUCT_PACKAGE_SSE_STREAM_CHUNK_SIZE', 8), // bytes - buffer size for reading SSE streams
 
     /*
     |--------------------------------------------------------------------------
@@ -107,6 +108,7 @@ return [
     'log_queries' => env('PRODUCT_PACKAGE_LOG_QUERIES', false),
     'log_api_calls' => env('PRODUCT_PACKAGE_LOG_API_CALLS', false),
     'log_level' => env('PRODUCT_PACKAGE_LOG_LEVEL', 'info'),
+
 
     /*
     |--------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Liqrgv\ShopSync\Http\Controllers\ProductController;
+use Liqrgv\ShopSync\Http\Controllers\SseController;
 
 /*
 |--------------------------------------------------------------------------
@@ -15,6 +16,13 @@ use Liqrgv\ShopSync\Http\Controllers\ProductController;
 | Route order is important - specific routes must come before parameterized ones
 |
 */
+
+// Server-Sent Events endpoints
+Route::get('/sse/events', [SseController::class, 'events'])
+    ->name('sse.events');
+
+Route::get('/sse/status', [SseController::class, 'status'])
+    ->name('sse.status');
 
 // Package status endpoint (if enabled)
 if (config('products-package.features.status_endpoint', true)) {
