@@ -1,9 +1,9 @@
 <?php
 
-namespace Liqrgv\ShopSync\Console\Commands;
+namespace TheDiamondBox\ShopSync\Console\Commands;
 
 use Illuminate\Console\Command;
-use Liqrgv\ShopSync\Services\SseBroadcastListener;
+use TheDiamondBox\ShopSync\Services\SseBroadcastListener;
 use Illuminate\Support\Facades\Redis;
 
 class SseMonitor extends Command

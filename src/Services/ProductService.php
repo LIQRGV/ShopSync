@@ -1,17 +1,17 @@
 <?php
 
-namespace Liqrgv\ShopSync\Services;
+namespace TheDiamondBox\ShopSync\Services;
 
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Liqrgv\ShopSync\Models\Product;
-use Liqrgv\ShopSync\Models\Category;
-use Liqrgv\ShopSync\Models\Brand;
-use Liqrgv\ShopSync\Models\Attribute;
-use Liqrgv\ShopSync\Services\ProductFetchers\ProductFetcherFactory;
-use Liqrgv\ShopSync\Services\Contracts\ProductFetcherInterface;
-use Liqrgv\ShopSync\Transformers\ProductJsonApiTransformer;
-use Liqrgv\ShopSync\Helpers\JsonApiIncludeParser;
-use Liqrgv\ShopSync\Helpers\JsonApiErrorResponse;
+use TheDiamondBox\ShopSync\Models\Product;
+use TheDiamondBox\ShopSync\Models\Category;
+use TheDiamondBox\ShopSync\Models\Brand;
+use TheDiamondBox\ShopSync\Models\Attribute;
+use TheDiamondBox\ShopSync\Services\ProductFetchers\ProductFetcherFactory;
+use TheDiamondBox\ShopSync\Services\Contracts\ProductFetcherInterface;
+use TheDiamondBox\ShopSync\Transformers\ProductJsonApiTransformer;
+use TheDiamondBox\ShopSync\Helpers\JsonApiIncludeParser;
+use TheDiamondBox\ShopSync\Helpers\JsonApiErrorResponse;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;

@@ -1,15 +1,15 @@
 <?php
 
-namespace Liqrgv\ShopSync;
+namespace TheDiamondBox\ShopSync;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
-use Liqrgv\ShopSync\Services\ProductService;
-use Liqrgv\ShopSync\Services\Contracts\ProductFetcherInterface;
-use Liqrgv\ShopSync\Services\ProductFetchers\ProductFetcherFactory;
-use Liqrgv\ShopSync\Models\Product;
-use Liqrgv\ShopSync\Observers\ProductObserver;
+use TheDiamondBox\ShopSync\Services\ProductService;
+use TheDiamondBox\ShopSync\Services\Contracts\ProductFetcherInterface;
+use TheDiamondBox\ShopSync\Services\ProductFetchers\ProductFetcherFactory;
+use TheDiamondBox\ShopSync\Models\Product;
+use TheDiamondBox\ShopSync\Observers\ProductObserver;
 
 class ProductPackageServiceProvider extends ServiceProvider
 {
@@ -66,7 +66,7 @@ class ProductPackageServiceProvider extends ServiceProvider
     protected function bootMiddleware()
     {
         // Register package authentication middleware
-        $this->app['router']->aliasMiddleware('package.auth', \Liqrgv\ShopSync\Http\Middleware\PackageAuth::class);
+        $this->app['router']->aliasMiddleware('package.auth', \TheDiamondBox\ShopSync\Http\Middleware\PackageAuth::class);
     }
 
     /**

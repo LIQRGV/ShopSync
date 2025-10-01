@@ -1,10 +1,10 @@
 <?php
 
-namespace Liqrgv\ShopSync\Providers;
+namespace TheDiamondBox\ShopSync\Providers;
 
 use Illuminate\Support\ServiceProvider;
-use Liqrgv\ShopSync\Models\Product;
-use Liqrgv\ShopSync\Observers\ProductObserver;
+use TheDiamondBox\ShopSync\Models\Product;
+use TheDiamondBox\ShopSync\Observers\ProductObserver;
 
 /**
  * Product Event Service Provider

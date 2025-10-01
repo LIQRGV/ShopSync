@@ -1,6 +1,6 @@
 <?php
 
-namespace Liqrgv\ShopSync\Services;
+namespace TheDiamondBox\ShopSync\Services;
 
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;

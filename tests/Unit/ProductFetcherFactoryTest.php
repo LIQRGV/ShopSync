@@ -1,9 +1,9 @@
 <?php
 
-namespace Liqrgv\ShopSync\Tests\Unit;
+namespace TheDiamondBox\ShopSync\Tests\Unit;
 
-use Liqrgv\ShopSync\Exceptions\ClientNotFoundException;
-use Liqrgv\ShopSync\Services\ProductFetchers\ProductFetcherFactory;
+use TheDiamondBox\ShopSync\Exceptions\ClientNotFoundException;
+use TheDiamondBox\ShopSync\Services\ProductFetchers\ProductFetcherFactory;
 use PHPUnit\Framework\TestCase;
 use InvalidArgumentException;
 use Mockery;

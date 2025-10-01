@@ -1,6 +1,6 @@
 <?php
 
-namespace Liqrgv\ShopSync\Models;
+namespace TheDiamondBox\ShopSync\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\Pivot;

@@ -1,9 +1,9 @@
 <?php
 
-namespace Liqrgv\ShopSync\Tests;
+namespace TheDiamondBox\ShopSync\Tests;
 
 use Orchestra\Testbench\TestCase as BaseTestCase;
-use Liqrgv\ShopSync\ProductPackageServiceProvider;
+use TheDiamondBox\ShopSync\ProductPackageServiceProvider;
 
 abstract class TestCase extends BaseTestCase
 {

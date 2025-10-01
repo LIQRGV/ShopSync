@@ -1,8 +1,8 @@
 <?php
 
-namespace Liqrgv\ShopSync\Services\SseStreamers;
+namespace TheDiamondBox\ShopSync\Services\SseStreamers;
 
-use Liqrgv\ShopSync\Services\Contracts\SseStreamerInterface;
+use TheDiamondBox\ShopSync\Services\Contracts\SseStreamerInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;

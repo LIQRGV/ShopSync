@@ -1,12 +1,12 @@
 <?php
 
-namespace Liqrgv\ShopSync\Tests\Feature;
+namespace TheDiamondBox\ShopSync\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Schema;
-use Liqrgv\ShopSync\Tests\TestCase;
+use TheDiamondBox\ShopSync\Tests\TestCase;
 
 /**
  * Integration test for conditional migration behavior.

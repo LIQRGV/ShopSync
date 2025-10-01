@@ -3,8 +3,8 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use Liqrgv\ShopSync\Models\Client;
-use Liqrgv\ShopSync\Models\WtmModel;
+use TheDiamondBox\ShopSync\Models\Client;
+use TheDiamondBox\ShopSync\Models\WtmModel;
 use RuntimeException;
 
 /**
@@ -31,7 +31,7 @@ class WtmModelTest extends TestCase
     public function testWtmModelThrowsExceptionInWlMode()
     {
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage("Model 'Liqrgv\ShopSync\Models\Client' can only be used in WTM");
+        $this->expectExceptionMessage("Model 'TheDiamondBox\ShopSync\Models\Client' can only be used in WTM");
 
         // This should throw an exception since we're in WL mode
         $client = new Client();
@@ -43,7 +43,7 @@ class WtmModelTest extends TestCase
     public function testQueryMethodThrowsExceptionInWlMode()
     {
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage("Cannot query 'Liqrgv\ShopSync\Models\Client' in 'wl' mode");
+        $this->expectExceptionMessage("Cannot query 'TheDiamondBox\ShopSync\Models\Client' in 'wl' mode");
 
         // This should throw an exception since we're in WL mode
         Client::query();

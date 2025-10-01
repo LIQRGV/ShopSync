@@ -1,9 +1,9 @@
 <?php
 
-namespace Liqrgv\ShopSync\Services\ProductFetchers;
+namespace TheDiamondBox\ShopSync\Services\ProductFetchers;
 
-use Liqrgv\ShopSync\Services\Contracts\ProductFetcherInterface;
-use Liqrgv\ShopSync\Models\Product;
+use TheDiamondBox\ShopSync\Services\Contracts\ProductFetcherInterface;
+use TheDiamondBox\ShopSync\Models\Product;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Client\ConnectionException;
@@ -425,11 +425,11 @@ class ApiProductFetcher implements ProductFetcherInterface
 
         // Set relationships if they were included - convert arrays to proper model instances
         $relationshipModelMap = [
-            'category' => \Liqrgv\ShopSync\Models\Category::class,
-            'brand' => \Liqrgv\ShopSync\Models\Brand::class,
-            'location' => \Liqrgv\ShopSync\Models\Location::class,
-            'supplier' => \Liqrgv\ShopSync\Models\Supplier::class,
-            'attributes' => \Liqrgv\ShopSync\Models\Attribute::class,
+            'category' => \TheDiamondBox\ShopSync\Models\Category::class,
+            'brand' => \TheDiamondBox\ShopSync\Models\Brand::class,
+            'location' => \TheDiamondBox\ShopSync\Models\Location::class,
+            'supplier' => \TheDiamondBox\ShopSync\Models\Supplier::class,
+            'attributes' => \TheDiamondBox\ShopSync\Models\Attribute::class,
         ];
 
         foreach (['category', 'brand', 'location', 'supplier', 'attributes'] as $relation) {

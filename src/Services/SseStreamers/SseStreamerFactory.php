@@ -1,10 +1,10 @@
 <?php
 
-namespace Liqrgv\ShopSync\Services\SseStreamers;
+namespace TheDiamondBox\ShopSync\Services\SseStreamers;
 
-use Liqrgv\ShopSync\Exceptions\ClientNotFoundException;
-use Liqrgv\ShopSync\Models\Client;
-use Liqrgv\ShopSync\Services\Contracts\SseStreamerInterface;
+use TheDiamondBox\ShopSync\Exceptions\ClientNotFoundException;
+use TheDiamondBox\ShopSync\Models\Client;
+use TheDiamondBox\ShopSync\Services\Contracts\SseStreamerInterface;
 use InvalidArgumentException;
 use Illuminate\Support\Facades\Log;
 

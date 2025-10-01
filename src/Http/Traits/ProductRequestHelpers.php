@@ -1,8 +1,8 @@
 <?php
 
-namespace Liqrgv\ShopSync\Http\Traits;
+namespace TheDiamondBox\ShopSync\Http\Traits;
 
-use Liqrgv\ShopSync\Helpers\JsonApiIncludeParser;
+use TheDiamondBox\ShopSync\Helpers\JsonApiIncludeParser;
 
 /**
  * Product Request Helpers Trait

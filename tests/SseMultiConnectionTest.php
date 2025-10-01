@@ -7,7 +7,7 @@
  * to test that all connections receive the same broadcast messages.
  */
 
-namespace Liqrgv\ShopSync\Tests;
+namespace TheDiamondBox\ShopSync\Tests;
 
 class SseMultiConnectionTest
 {

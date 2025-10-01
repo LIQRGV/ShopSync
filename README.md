@@ -356,7 +356,7 @@ You can create your own custom fetcher by implementing the `ProductFetcherInterf
 
 namespace App\Services\ProductFetchers;
 
-use Liqrgv\ShopSync\Services\Contracts\ProductFetcherInterface;
+use TheDiamondBox\ShopSync\Services\Contracts\ProductFetcherInterface;
 
 class CustomProductFetcher implements ProductFetcherInterface
 {

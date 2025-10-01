@@ -1,6 +1,6 @@
 <?php
 
-namespace Liqrgv\ShopSync\Models;
+namespace TheDiamondBox\ShopSync\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use RuntimeException;
@@ -12,7 +12,7 @@ use RuntimeException;
  * the package is configured in 'wtm' mode. It throws an exception
  * if instantiated in 'wl' (WhiteLabel) mode.
  *
- * @package Liqrgv\ShopSync\Models
+ * @package TheDiamondBox\ShopSync\Models
  */
 abstract class WtmModel extends Model
 {

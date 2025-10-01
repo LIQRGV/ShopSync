@@ -1,6 +1,6 @@
 <?php
 
-namespace Liqrgv\ShopSync\Http\Requests;
+namespace TheDiamondBox\ShopSync\Http\Requests;
 
 use Illuminate\Support\Str;
 
@@ -122,7 +122,7 @@ class StoreProductRequest extends BaseProductRequest
 
         // For WL mode, check for uniqueness
         if (config('products-package.mode', 'wl') === 'wl') {
-            while (\Liqrgv\ShopSync\Models\Product::where('slug', $slug)->exists()) {
+            while (\TheDiamondBox\ShopSync\Models\Product::where('slug', $slug)->exists()) {
                 $slug = $baseSlug . '-' . $counter;
                 $counter++;
             }

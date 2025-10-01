@@ -1,6 +1,6 @@
 <?php
 
-namespace Liqrgv\ShopSync\Services\Contracts;
+namespace TheDiamondBox\ShopSync\Services\Contracts;
 
 use Illuminate\Http\Request;
 

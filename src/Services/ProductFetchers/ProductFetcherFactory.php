@@ -1,10 +1,10 @@
 <?php
 
-namespace Liqrgv\ShopSync\Services\ProductFetchers;
+namespace TheDiamondBox\ShopSync\Services\ProductFetchers;
 
-use Liqrgv\ShopSync\Exceptions\ClientNotFoundException;
-use Liqrgv\ShopSync\Models\Client;
-use Liqrgv\ShopSync\Services\Contracts\ProductFetcherInterface;
+use TheDiamondBox\ShopSync\Exceptions\ClientNotFoundException;
+use TheDiamondBox\ShopSync\Models\Client;
+use TheDiamondBox\ShopSync\Services\Contracts\ProductFetcherInterface;
 use InvalidArgumentException;
 use Illuminate\Support\Facades\Log;
 

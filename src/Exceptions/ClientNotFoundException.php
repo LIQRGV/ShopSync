@@ -1,6 +1,6 @@
 <?php
 
-namespace Liqrgv\ShopSync\Exceptions;
+namespace TheDiamondBox\ShopSync\Exceptions;
 
 use Exception;
 
@@ -12,7 +12,7 @@ use Exception;
  * It provides clear indication that the requested client ID does not exist
  * in the system, which is an unrecoverable error requiring immediate attention.
  *
- * @package Liqrgv\ShopSync\Exceptions
+ * @package TheDiamondBox\ShopSync\Exceptions
  */
 class ClientNotFoundException extends Exception
 {

@@ -1,8 +1,8 @@
 <?php
 
-namespace Liqrgv\ShopSync\Observers;
+namespace TheDiamondBox\ShopSync\Observers;
 
-use Liqrgv\ShopSync\Models\Product;
+use TheDiamondBox\ShopSync\Models\Product;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Log;
 

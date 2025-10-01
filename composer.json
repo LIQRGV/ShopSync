@@ -37,21 +37,21 @@
     },
     "autoload": {
         "psr-4": {
-            "Liqrgv\\ShopSync\\": "src/"
+            "TheDiamondBox\\ShopSync\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Liqrgv\\ShopSync\\Tests\\": "tests/"
+            "TheDiamondBox\\ShopSync\\Tests\\": "tests/"
         }
     },
     "extra": {
         "laravel": {
             "providers": [
-                "Liqrgv\\ShopSync\\ProductPackageServiceProvider"
+                "TheDiamondBox\\ShopSync\\ProductPackageServiceProvider"
             ],
             "aliases": {
-                "ProductService": "Liqrgv\\ShopSync\\Services\\ProductService"
+                "ProductService": "TheDiamondBox\\ShopSync\\Services\\ProductService"
             }
         }
     },

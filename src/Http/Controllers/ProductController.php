@@ -1,17 +1,17 @@
 <?php
 
-namespace Liqrgv\ShopSync\Http\Controllers;
+namespace TheDiamondBox\ShopSync\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
-use Liqrgv\ShopSync\Services\ProductService;
-use Liqrgv\ShopSync\Http\Requests\StoreProductRequest;
-use Liqrgv\ShopSync\Http\Requests\UpdateProductRequest;
-use Liqrgv\ShopSync\Http\Requests\SearchProductRequest;
-use Liqrgv\ShopSync\Http\Requests\GetProductRequest;
-use Liqrgv\ShopSync\Helpers\JsonApiErrorResponse;
+use TheDiamondBox\ShopSync\Services\ProductService;
+use TheDiamondBox\ShopSync\Http\Requests\StoreProductRequest;
+use TheDiamondBox\ShopSync\Http\Requests\UpdateProductRequest;
+use TheDiamondBox\ShopSync\Http\Requests\SearchProductRequest;
+use TheDiamondBox\ShopSync\Http\Requests\GetProductRequest;
+use TheDiamondBox\ShopSync\Helpers\JsonApiErrorResponse;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 use Illuminate\Database\Eloquent\ModelNotFoundException;

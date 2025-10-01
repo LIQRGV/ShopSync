@@ -1,8 +1,8 @@
 <?php
 
-namespace Liqrgv\ShopSync\Tests\Unit;
+namespace TheDiamondBox\ShopSync\Tests\Unit;
 
-use Liqrgv\ShopSync\Exceptions\ClientNotFoundException;
+use TheDiamondBox\ShopSync\Exceptions\ClientNotFoundException;
 use PHPUnit\Framework\TestCase;
 use InvalidArgumentException;
 
@@ -54,7 +54,7 @@ class ProductFetcherFactorySimpleTest extends TestCase
      */
     public function testGetAvailableModes()
     {
-        $reflection = new \ReflectionClass(\Liqrgv\ShopSync\Services\ProductFetchers\ProductFetcherFactory::class);
+        $reflection = new \ReflectionClass(\TheDiamondBox\ShopSync\Services\ProductFetchers\ProductFetcherFactory::class);
 
         // Verify the class exists and has the getAvailableModes method
         $this->assertTrue($reflection->hasMethod('getAvailableModes'));
@@ -69,7 +69,7 @@ class ProductFetcherFactorySimpleTest extends TestCase
      */
     public function testIsValidModeMethodExists()
     {
-        $reflection = new \ReflectionClass(\Liqrgv\ShopSync\Services\ProductFetchers\ProductFetcherFactory::class);
+        $reflection = new \ReflectionClass(\TheDiamondBox\ShopSync\Services\ProductFetchers\ProductFetcherFactory::class);
 
         // Verify the isValidMode method exists
         $this->assertTrue($reflection->hasMethod('isValidMode'));
@@ -91,7 +91,7 @@ class ProductFetcherFactorySimpleTest extends TestCase
      */
     public function testMakeMethodDocumentation()
     {
-        $reflection = new \ReflectionClass(\Liqrgv\ShopSync\Services\ProductFetchers\ProductFetcherFactory::class);
+        $reflection = new \ReflectionClass(\TheDiamondBox\ShopSync\Services\ProductFetchers\ProductFetcherFactory::class);
 
         $this->assertTrue($reflection->hasMethod('make'));
 

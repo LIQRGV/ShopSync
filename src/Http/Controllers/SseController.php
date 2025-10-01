@@ -1,11 +1,11 @@
 <?php
 
-namespace Liqrgv\ShopSync\Http\Controllers;
+namespace TheDiamondBox\ShopSync\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
-use Liqrgv\ShopSync\Services\SseService;
+use TheDiamondBox\ShopSync\Services\SseService;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SseController extends Controller

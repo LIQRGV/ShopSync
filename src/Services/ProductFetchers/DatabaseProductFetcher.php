@@ -1,9 +1,9 @@
 <?php
 
-namespace Liqrgv\ShopSync\Services\ProductFetchers;
+namespace TheDiamondBox\ShopSync\Services\ProductFetchers;
 
-use Liqrgv\ShopSync\Services\Contracts\ProductFetcherInterface;
-use Liqrgv\ShopSync\Models\Product;
+use TheDiamondBox\ShopSync\Services\Contracts\ProductFetcherInterface;
+use TheDiamondBox\ShopSync\Models\Product;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 

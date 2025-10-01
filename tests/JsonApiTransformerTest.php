@@ -14,14 +14,14 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use Liqrgv\ShopSync\Models\DiamondBoxProduct;
-use Liqrgv\ShopSync\Models\Category;
-use Liqrgv\ShopSync\Models\Brand;
-use Liqrgv\ShopSync\Models\Location;
-use Liqrgv\ShopSync\Models\Supplier;
-use Liqrgv\ShopSync\Transformers\ProductJsonApiTransformer;
-use Liqrgv\ShopSync\Helpers\JsonApiIncludeParser;
-use Liqrgv\ShopSync\Helpers\JsonApiErrorResponse;
+use TheDiamondBox\ShopSync\Models\DiamondBoxProduct;
+use TheDiamondBox\ShopSync\Models\Category;
+use TheDiamondBox\ShopSync\Models\Brand;
+use TheDiamondBox\ShopSync\Models\Location;
+use TheDiamondBox\ShopSync\Models\Supplier;
+use TheDiamondBox\ShopSync\Transformers\ProductJsonApiTransformer;
+use TheDiamondBox\ShopSync\Helpers\JsonApiIncludeParser;
+use TheDiamondBox\ShopSync\Helpers\JsonApiErrorResponse;
 
 echo "JSON API Transformer System Test\n";
 echo "================================\n\n";

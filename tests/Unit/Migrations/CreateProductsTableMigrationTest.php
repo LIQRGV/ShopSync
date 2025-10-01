@@ -1,13 +1,13 @@
 <?php
 
-namespace Liqrgv\ShopSync\Tests\Unit\Migrations;
+namespace TheDiamondBox\ShopSync\Tests\Unit\Migrations;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use Liqrgv\ShopSync\Tests\TestCase;
+use TheDiamondBox\ShopSync\Tests\TestCase;
 
 /**
  * Test suite for the products table migration conditional logic.

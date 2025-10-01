@@ -1,9 +1,9 @@
 <?php
 
-namespace Liqrgv\ShopSync\Services;
+namespace TheDiamondBox\ShopSync\Services;
 
-use Liqrgv\ShopSync\Services\SseStreamers\SseStreamerFactory;
-use Liqrgv\ShopSync\Services\Contracts\SseStreamerInterface;
+use TheDiamondBox\ShopSync\Services\SseStreamers\SseStreamerFactory;
+use TheDiamondBox\ShopSync\Services\Contracts\SseStreamerInterface;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Illuminate\Support\Facades\Log;

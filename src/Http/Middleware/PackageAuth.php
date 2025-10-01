@@ -1,6 +1,6 @@
 <?php
 
-namespace Liqrgv\ShopSync\Http\Middleware;
+namespace TheDiamondBox\ShopSync\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;

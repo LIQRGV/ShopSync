@@ -1,10 +1,10 @@
 <?php
 
-namespace Liqrgv\ShopSync\Console\Commands;
+namespace TheDiamondBox\ShopSync\Console\Commands;
 
 use Illuminate\Console\Command;
-use Liqrgv\ShopSync\Models\Product;
-use Liqrgv\ShopSync\Services\SseBroadcastListener;
+use TheDiamondBox\ShopSync\Models\Product;
+use TheDiamondBox\ShopSync\Services\SseBroadcastListener;
 
 class TestProductBroadcasting extends Command
 {

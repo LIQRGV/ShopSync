@@ -1,6 +1,6 @@
 <?php
 
-namespace Liqrgv\ShopSync\Transformers;
+namespace TheDiamondBox\ShopSync\Transformers;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Collection;

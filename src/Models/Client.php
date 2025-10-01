@@ -1,6 +1,6 @@
 <?php
 
-namespace Liqrgv\ShopSync\Models;
+namespace TheDiamondBox\ShopSync\Models;
 
 /**
  * Client Model - WTM (Watch the Market) Specific

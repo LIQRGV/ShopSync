@@ -1,9 +1,9 @@
 <?php
 
-namespace Liqrgv\ShopSync\Http\Requests;
+namespace TheDiamondBox\ShopSync\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Liqrgv\ShopSync\Http\Traits\ProductRequestHelpers;
+use TheDiamondBox\ShopSync\Http\Traits\ProductRequestHelpers;
 
 /**
  * Base Product Request

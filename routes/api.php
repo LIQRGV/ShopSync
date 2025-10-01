@@ -1,8 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Liqrgv\ShopSync\Http\Controllers\ProductController;
-use Liqrgv\ShopSync\Http\Controllers\SseController;
+use TheDiamondBox\ShopSync\Http\Controllers\ProductController;
+use TheDiamondBox\ShopSync\Http\Controllers\SseController;
 
 /*
 |--------------------------------------------------------------------------

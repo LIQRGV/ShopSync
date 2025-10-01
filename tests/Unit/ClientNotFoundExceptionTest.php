@@ -1,8 +1,8 @@
 <?php
 
-namespace Liqrgv\ShopSync\Tests\Unit;
+namespace TheDiamondBox\ShopSync\Tests\Unit;
 
-use Liqrgv\ShopSync\Exceptions\ClientNotFoundException;
+use TheDiamondBox\ShopSync\Exceptions\ClientNotFoundException;
 use PHPUnit\Framework\TestCase;
 use Exception;
 
