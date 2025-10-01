@@ -555,7 +555,7 @@ class ApiProductFetcher implements ProductFetcherInterface
                 file_get_contents($file->getRealPath()),
                 $file->getClientOriginalName()
             )
-            ->put("{$this->baseUrl}/products/{$id}/image");
+            ->post("{$this->baseUrl}/products/{$id}/image");
         }, null);
 
         return $response ? $this->convertToProduct($response['data'] ?? $response) : null;
