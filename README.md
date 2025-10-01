@@ -22,7 +22,7 @@ A Laravel API-only package for product management with flexible authentication a
 ### 1. Install via Composer
 
 ```bash
-composer require liqrgv/shopsync
+composer require thediamondbox/shopsync
 ```
 
 ### 2. Publish Configuration

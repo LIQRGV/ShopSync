@@ -126,7 +126,7 @@ class ProductPackageServiceProvider extends ServiceProvider
         return [
             'prefix' => config('products-package.route_prefix', 'api/v1'),
             'middleware' => $middleware,
-            'namespace' => 'Liqrgv\\ShopSync\\Http\\Controllers',
+            'namespace' => 'TheDiamondBox\\ShopSync\\Http\\Controllers',
         ];
     }
 
