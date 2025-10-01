@@ -45,8 +45,24 @@ class ApiProductFetcher implements ProductFetcherInterface
             'Accept' => 'application/json',
             'Content-Type' => 'application/json',
         ])
-        ->timeout($this->timeout)
-        ->baseUrl($this->baseUrl);
+            ->timeout($this->timeout)
+            ->baseUrl($this->baseUrl);
+    }
+
+    /**
+     * Create HTTP client for multipart requests (file uploads)
+     * Don't set Content-Type - let Laravel handle it automatically
+     * DON'T use baseUrl() for multipart - use full URL instead
+     */
+    protected function multipartClient()
+    {
+        return Http::withHeaders([
+            'Authorization' => 'Bearer ' . $this->apiKey,
+            'Accept' => 'application/json',
+            // DON'T set Content-Type for multipart - Laravel sets it automatically with boundary
+        ])
+            ->timeout($this->timeout);
+        // DON'T use ->baseUrl() here - it causes issues with attach()
     }
 
     /**
@@ -543,20 +559,59 @@ class ApiProductFetcher implements ProductFetcherInterface
      */
     public function uploadProductImage($id, $file)
     {
+        Log::info('ApiProductFetcher::uploadProductImage called', [
+            'id' => $id,
+            'file_name' => $file->getClientOriginalName(),
+            'file_size' => $file->getSize(),
+            'base_url' => $this->baseUrl,
+            'full_url' => $this->baseUrl . "/products/{$id}/image",
+            'api_key_length' => strlen($this->apiKey ?? '')
+        ]);
+
+        // First verify product exists with a GET request
+        $productCheck = $this->find($id);
+        if (!$productCheck) {
+            Log::warning('Product not found in WTM before upload', ['id' => $id]);
+            return null;
+        }
+
+        Log::info('Product found in WTM, proceeding with upload', [
+            'product_id' => $productCheck->id,
+            'product_name' => $productCheck->name ?? 'N/A'
+        ]);
+
         $response = $this->handleRequest(function () use ($id, $file) {
-            // Create multipart request to send file to WL
-            return Http::withHeaders([
-                'Authorization' => 'Bearer ' . $this->apiKey,
-                'Accept' => 'application/json',
-            ])
-            ->timeout($this->timeout)
-            ->attach(
+            // Use multipartClient() for file uploads (no Content-Type: application/json)
+            $client = $this->multipartClient();
+
+            // Build full URL (don't use baseUrl() with attach())
+            $fullUrl = $this->baseUrl . "/products/{$id}/image";
+
+            Log::info('About to send request', [
+                'full_url' => $fullUrl,
+                'file_name' => $file->getClientOriginalName()
+            ]);
+
+            $httpResponse = $client->attach(
                 'image',
                 file_get_contents($file->getRealPath()),
                 $file->getClientOriginalName()
             )
-            ->post("{$this->baseUrl}/products/{$id}/image");
+                ->post($fullUrl);
+
+            Log::info('HTTP Response details', [
+                'status' => $httpResponse->status(),
+                'successful' => $httpResponse->successful(),
+                'body' => $httpResponse->body()
+            ]);
+
+            return $httpResponse;
         }, null);
+
+        Log::info('ApiProductFetcher::uploadProductImage response', [
+            'response_is_null' => $response === null,
+            'response' => $response
+        ]);
 
         return $response ? $this->convertToProduct($response['data'] ?? $response) : null;
     }
