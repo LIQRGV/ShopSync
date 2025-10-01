@@ -98,4 +98,15 @@ interface ProductFetcherInterface
      * @return array Import results
      */
     public function importFromCsv($csvContent);
+
+    /**
+     * Upload product image
+     * WTM: proxy to WL
+     * WL: save directly to storage
+     *
+     * @param int|string $id
+     * @param \Illuminate\Http\UploadedFile $file
+     * @return mixed Updated product or null
+     */
+    public function uploadProductImage($id, $file);
 }
