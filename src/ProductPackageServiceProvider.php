@@ -113,8 +113,6 @@ class ProductPackageServiceProvider extends ServiceProvider
     {
         // Register Product Observer for SSE broadcasting
         Product::observe(ProductObserver::class);
-
-        Log::info("ShopSync: Registered ProductObserver for Product model");
     }
 
     /**

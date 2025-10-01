@@ -91,7 +91,7 @@ class ProductObserver
                 ['data' => json_encode($message)]
             );
 
-            Log::info("Product Observer: Pushed {$eventType} event to stream", [
+            Log::debug("Product Observer: Pushed {$eventType} event to stream", [
                 'product_id' => $product->id,
                 'product_name' => $product->name,
                 'event_type' => $eventType,
