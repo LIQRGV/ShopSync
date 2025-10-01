@@ -361,4 +361,106 @@ class DatabaseProductFetcher implements ProductFetcherInterface
 
         return $relationships;
     }
+
+    /**
+     * Upload product image (WL mode - save directly to storage)
+     *
+     * @param int|string $id
+     * @param \Illuminate\Http\UploadedFile $file
+     * @return mixed Updated product or null
+     */
+    public function uploadProductImage($id, $file)
+    {
+        $product = Product::findOrFail($id);
+
+        // Store the uploaded image
+        $imagePath = $this->storeProductImage($file);
+
+        if (!$imagePath) {
+            return null;
+        }
+
+        // Determine original_image path based on file extension
+        $checkExt = $file->getClientOriginalExtension();
+        if ($checkExt != 'webp') {
+            $originalImagePath = str_replace('uploads/images/', 'uploads/original_image/', $imagePath);
+            $originalImagePath = str_replace('.webp', '', $originalImagePath);
+        } else {
+            $originalImagePath = $imagePath;
+        }
+
+        // Update product
+        $product->update([
+            'image' => $imagePath,
+            'original_image' => $originalImagePath
+        ]);
+
+        return $product->fresh();
+    }
+
+    /**
+     * Store product image to filesystem (following main app pattern)
+     *
+     * @param \Illuminate\Http\UploadedFile $file
+     * @return string|null Path to processed image
+     */
+    protected function storeProductImage($file)
+    {
+        try {
+            $checkExt = $file->getClientOriginalExtension();
+            $name = md5(uniqid(rand(), true)) . '.' . $checkExt;
+
+            $originalImagePath = 'uploads/original_image';
+            $imagesPath = 'uploads/images';
+
+            // Ensure directories exist
+            $originalDir = public_path($originalImagePath);
+            $imagesDir = public_path($imagesPath);
+
+            if (!file_exists($originalDir)) {
+                mkdir($originalDir, 0777, true);
+            }
+
+            if (!file_exists($imagesDir)) {
+                mkdir($imagesDir, 0777, true);
+            }
+
+            // Move to original_image directory first
+            $file->move(public_path($originalImagePath), $name);
+
+            // Copy to images directory
+            $originalFullPath = public_path($originalImagePath . '/' . $name);
+            $imagesFullPath = public_path($imagesPath . '/' . $name);
+            copy($originalFullPath, $imagesFullPath);
+
+            $movePath = $imagesPath . '/' . $name;
+
+            // Convert to WebP if not already webp/svg
+            if ($checkExt != 'webp' && $checkExt != 'svg') {
+                $image = \Image::make($imagesFullPath);
+
+                $extension = 'webp';
+                $filename = $name . '.' . $extension;
+
+                $image = $image->encode($extension, 80);
+                $image->save(public_path($imagesPath) . '/' . $filename);
+
+                // Delete non-webp version from images folder
+                if (file_exists($imagesFullPath)) {
+                    unlink($imagesFullPath);
+                }
+
+                return $movePath . '.webp';
+            }
+
+            return $movePath;
+
+        } catch (\Exception $e) {
+            Log::error('Failed to store product image', [
+                'error' => $e->getMessage(),
+                'file' => $file->getClientOriginalName()
+            ]);
+            return null;
+        }
+    }
 }

@@ -636,7 +636,9 @@ class ProductService
     }
 
     /**
-     * Upload product image following main app pattern
+     * Upload product image
+     * WTM mode: proxy file to WL via API
+     * WL mode: save directly to storage
      *
      * @param mixed $id Product ID
      * @param \Illuminate\Http\UploadedFile $file Uploaded image file
@@ -644,36 +646,10 @@ class ProductService
      */
     public function uploadProductImage($id, $file)
     {
-        // Find product first to ensure it exists
-        $product = $this->productFetcher->find($id);
-
-        if (!$product) {
-            return null;
-        }
-
-        // Store the uploaded image following main app pattern
-        $imagePath = $this->storeProductImage($file);
-
-        if (!$imagePath) {
-            return null;
-        }
-
-        // Determine original_image path based on file extension
-        $checkExt = $file->getClientOriginalExtension();
-        if ($checkExt != 'webp') {
-            // For non-webp, original_image is in uploads/original_image
-            $originalImagePath = str_replace('uploads/images/', 'uploads/original_image/', $imagePath);
-            $originalImagePath = str_replace('.webp', '', $originalImagePath);
-        } else {
-            // For webp, no conversion needed
-            $originalImagePath = $imagePath;
-        }
-
-        // Update product with new image paths - update() already returns fresh product
-        $product = $this->productFetcher->update($id, [
-            'image' => $imagePath,
-            'original_image' => $originalImagePath
-        ]);
+        // Use fetcher to handle upload
+        // DatabaseProductFetcher: save directly to storage (WL mode)
+        // ApiProductFetcher: proxy to WL via multipart HTTP request (WTM mode)
+        $product = $this->productFetcher->uploadProductImage($id, $file);
 
         if (!$product) {
             return null;
@@ -681,76 +657,5 @@ class ProductService
 
         // Transform to JSON API format without includes (keep response simple)
         return $this->transformer->transformProduct($product, []);
-    }
-
-    /**
-     * Store product image following main app pattern (store_file)
-     * Pattern: upload original to uploads/original_image, copy & convert to webp in uploads/images
-     *
-     * @param \Illuminate\Http\UploadedFile $file
-     * @return string|null Path to processed image (webp in uploads/images)
-     */
-    protected function storeProductImage($file)
-    {
-        try {
-            $checkExt = $file->getClientOriginalExtension();
-
-            // Generate unique filename like main app
-            $name = md5(uniqid(rand(), true)) . '.' . $checkExt;
-
-            // Define paths following main app pattern
-            $originalImagePath = 'uploads/original_image';
-            $imagesPath = 'uploads/images';
-
-            // Ensure directories exist
-            $originalDir = public_path($originalImagePath);
-            $imagesDir = public_path($imagesPath);
-
-            if (!file_exists($originalDir)) {
-                mkdir($originalDir, 0777, true);
-            }
-
-            if (!file_exists($imagesDir)) {
-                mkdir($imagesDir, 0777, true);
-            }
-
-            // Move to original_image directory first
-            $file->move(public_path($originalImagePath), $name);
-
-            // Copy to images directory
-            $originalFullPath = public_path($originalImagePath . '/' . $name);
-            $imagesFullPath = public_path($imagesPath . '/' . $name);
-            copy($originalFullPath, $imagesFullPath);
-
-            $movePath = $imagesPath . '/' . $name;
-
-            // Convert to WebP if not already webp/svg (following main app pattern)
-            if ($checkExt != 'webp' && $checkExt != 'svg') {
-                $image = \Image::make($imagesFullPath);
-
-                $extension = 'webp';
-                $filename = $name . '.' . $extension;
-
-                $image = $image->encode($extension, 80); // 80 quality
-                $image->save(public_path($imagesPath) . '/' . $filename);
-
-                // Delete non-webp version from images folder
-                if (file_exists($imagesFullPath)) {
-                    unlink($imagesFullPath);
-                }
-
-                return $movePath . '.webp';
-            }
-
-            // Return path for webp/svg files
-            return $movePath;
-
-        } catch (\Exception $e) {
-            \Log::error('Failed to store product image', [
-                'error' => $e->getMessage(),
-                'file' => $file->getClientOriginalName()
-            ]);
-            return null;
-        }
     }
 }

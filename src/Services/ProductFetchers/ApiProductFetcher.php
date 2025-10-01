@@ -533,4 +533,31 @@ class ApiProductFetcher implements ProductFetcherInterface
 
         return collect($products);
     }
+
+    /**
+     * Upload product image (WTM mode - proxy to WL)
+     *
+     * @param int|string $id
+     * @param \Illuminate\Http\UploadedFile $file
+     * @return Product|null
+     */
+    public function uploadProductImage($id, $file)
+    {
+        $response = $this->handleRequest(function () use ($id, $file) {
+            // Create multipart request to send file to WL
+            return Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+                'Accept' => 'application/json',
+            ])
+            ->timeout($this->timeout)
+            ->attach(
+                'image',
+                file_get_contents($file->getRealPath()),
+                $file->getClientOriginalName()
+            )
+            ->put("{$this->baseUrl}/products/{$id}/image");
+        }, null);
+
+        return $response ? $this->convertToProduct($response['data'] ?? $response) : null;
+    }
 }
