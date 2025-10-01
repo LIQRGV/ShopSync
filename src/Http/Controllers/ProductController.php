@@ -11,6 +11,7 @@ use Liqrgv\ShopSync\Http\Requests\StoreProductRequest;
 use Liqrgv\ShopSync\Http\Requests\UpdateProductRequest;
 use Liqrgv\ShopSync\Http\Requests\SearchProductRequest;
 use Liqrgv\ShopSync\Http\Requests\GetProductRequest;
+use Liqrgv\ShopSync\Http\Requests\UploadProductImageRequest;
 use Liqrgv\ShopSync\Helpers\JsonApiErrorResponse;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
@@ -501,6 +502,46 @@ class ProductController extends Controller
 
             $error = JsonApiErrorResponse::internalError(
                 app()->environment('local') ? $e->getMessage() : 'Failed to get product status'
+            );
+            return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Upload product image
+     *
+     * @param UploadProductImageRequest $request
+     * @param mixed $id
+     * @return JsonResponse
+     */
+    public function uploadImage(UploadProductImageRequest $request, $id): JsonResponse
+    {
+        try {
+            // Get uploaded file
+            $file = $request->file('image');
+
+            // Upload image via service
+            $result = $this->productService->uploadProductImage($id, $file);
+
+            if (!$result) {
+                $error = JsonApiErrorResponse::notFound('product', $id);
+                return response()->json($error, Response::HTTP_NOT_FOUND);
+            }
+
+            return response()->json($result);
+
+        } catch (ModelNotFoundException $e) {
+            $error = JsonApiErrorResponse::notFound('product', $id);
+            return response()->json($error, Response::HTTP_NOT_FOUND);
+        } catch (\Exception $e) {
+            Log::error('Failed to upload product image', [
+                'error' => $e->getMessage(),
+                'id' => $id,
+                'file' => $request->hasFile('image') ? $request->file('image')->getClientOriginalName() : 'no file'
+            ]);
+
+            $error = JsonApiErrorResponse::internalError(
+                app()->environment('local') ? $e->getMessage() : 'Failed to upload product image'
             );
             return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
         }
