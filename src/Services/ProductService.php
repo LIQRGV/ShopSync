@@ -634,4 +634,28 @@ class ProductService
             ]
         ];
     }
+
+    /**
+     * Upload product image
+     * WTM mode: proxy file to WL via API
+     * WL mode: save directly to storage
+     *
+     * @param mixed $id Product ID
+     * @param \Illuminate\Http\UploadedFile $file Uploaded image file
+     * @return array|null
+     */
+    public function uploadProductImage($id, $file)
+    {
+        // Use fetcher to handle upload
+        // DatabaseProductFetcher: save directly to storage (WL mode)
+        // ApiProductFetcher: proxy to WL via multipart HTTP request (WTM mode)
+        $product = $this->productFetcher->uploadProductImage($id, $file);
+
+        if (!$product) {
+            return null;
+        }
+
+        // Transform to JSON API format without includes (keep response simple)
+        return $this->transformer->transformProduct($product, []);
+    }
 }

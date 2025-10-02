@@ -361,4 +361,69 @@ class DatabaseProductFetcher implements ProductFetcherInterface
 
         return $relationships;
     }
+
+    /**
+     * Upload product image (WL mode - save directly to storage)
+     *
+     * @param int|string $id
+     * @param \Illuminate\Http\UploadedFile $file
+     * @return mixed Updated product or null
+     */
+    public function uploadProductImage($id, $file)
+    {
+        // Try to find with query builder for debugging
+        $product = Product::findOrFail($id);
+
+        // Store the uploaded image (only to original_image directory)
+        $originalImagePath = $this->storeProductImage($file);
+
+        if (!$originalImagePath) {
+            return null;
+        }
+
+        $product->update([
+            'image' => $originalImagePath,
+            'original_image' => $originalImagePath
+        ]);
+
+        return $product->fresh();
+    }
+
+    /**
+     * Store product image to filesystem (following main app pattern)
+     *
+     * @param \Illuminate\Http\UploadedFile $file
+     * @return string|null Path to processed image
+     */
+    protected function storeProductImage($file): ?string
+    {
+        try {
+            $checkExt = $file->getClientOriginalExtension();
+            $name = md5(uniqid(rand(), true)) . '.' . $checkExt;
+
+            $originalImagePath = 'uploads/original_image';
+
+            // Ensure directory exists
+            $originalDir = public_path($originalImagePath);
+
+            if (!file_exists($originalDir)) {
+                mkdir($originalDir, 0777, true);
+            }
+
+            // Move to original_image directory only
+            $file->move(public_path($originalImagePath), $name);
+
+            $originalFullPath = public_path($originalImagePath . '/' . $name);
+
+            // Return path to original image
+            return $originalImagePath . '/' . $name;
+
+        } catch (\Exception $e) {
+            Log::error('Failed to store product image', [
+                'error' => $e->getMessage(),
+                'file' => $file->getClientOriginalName()
+            ]);
+            return null;
+        }
+    }
 }

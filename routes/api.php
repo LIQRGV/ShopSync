@@ -67,6 +67,12 @@ Route::patch('/products/{id}', [ProductController::class, 'update'])
     ->name('products.patch')
     ->where('id', '[0-9]+');
 
+// Upload product image endpoint - must come before delete route
+// Note: Using POST because browsers don't properly support multipart/form-data with PUT
+Route::post('/products/{id}/image', [ProductController::class, 'uploadImage'])
+    ->name('products.upload-image')
+    ->where('id', '[0-9]+');
+
 Route::delete('/products/{id}', [ProductController::class, 'destroy'])
     ->name('products.destroy')
     ->where('id', '[0-9]+');
