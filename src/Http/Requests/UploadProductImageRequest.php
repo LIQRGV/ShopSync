@@ -1,6 +1,6 @@
 <?php
 
-namespace Liqrgv\ShopSync\Http\Requests;
+namespace TheDiamondBox\ShopSync\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
