@@ -205,6 +205,25 @@ class DatabaseProductFetcher implements ProductFetcherInterface
             return ['imported' => 0, 'errors' => ['Invalid CSV format: No header row found']];
         }
 
+        // Validate header format
+        $expectedHeaders = [
+            'Product Name', 'SKU Prefix', 'SKU Value', 'SKU Custom Ref', 'Product Status',
+            'Sell Status', 'Purchase Date', 'Current Price', 'Sale Price', 'Trade Price',
+            'VAT Scheme', 'Description', 'Category', 'Brand', 'Supplier', 'SEO Title',
+            'SEO Keywords', 'SEO Description', 'URL Slug'
+        ];
+
+        $headerDiff = array_diff($expectedHeaders, $header);
+        if (!empty($headerDiff)) {
+            return [
+                'imported' => 0,
+                'errors' => [
+                    'Invalid CSV header format. Expected headers: ' . implode(', ', $expectedHeaders),
+                    'Missing headers: ' . implode(', ', $headerDiff)
+                ]
+            ];
+        }
+
         $imported = 0;
         $errors = [];
 
@@ -219,35 +238,39 @@ class DatabaseProductFetcher implements ProductFetcherInterface
                 try {
                     $data = array_combine($header, $row);
 
-                    if (!$data || !isset($data['Name']) || empty(trim($data['Name']))) {
+                    if (!$data || !isset($data['Product Name']) || empty(trim($data['Product Name']))) {
                         $errors[] = "Row " . ($index + 2) . ": Product name is required";
                         continue;
                     }
 
                     $productData = [
-                        'name' => trim($data['Name']),
+                        'name' => trim($data['Product Name']),
+                        'sku_prefix' => isset($data['SKU Prefix']) ? trim($data['SKU Prefix']) : null,
+                        'rol_number' => isset($data['SKU Value']) ? trim($data['SKU Value']) : null,
+                        'sku_custom_ref' => isset($data['SKU Custom Ref']) ? trim($data['SKU Custom Ref']) : null,
+                        'status' => isset($data['Product Status']) ? trim($data['Product Status']) : 'active',
+                        'sell_status' => isset($data['Sell Status']) ? trim($data['Sell Status']) : null,
+                        'purchase_date' => isset($data['Purchase Date']) ? trim($data['Purchase Date']) : null,
+                        'price' => isset($data['Current Price']) ? (float)$data['Current Price'] : 0,
+                        'sale_price' => isset($data['Sale Price']) && !empty(trim($data['Sale Price'])) ? (float)$data['Sale Price'] : null,
+                        'trade_price' => isset($data['Trade Price']) && !empty(trim($data['Trade Price'])) ? (float)$data['Trade Price'] : null,
+                        'vat_scheme' => isset($data['VAT Scheme']) ? trim($data['VAT Scheme']) : null,
                         'description' => isset($data['Description']) ? trim($data['Description']) : null,
-                        'price' => isset($data['Price']) ? (float)$data['Price'] : 0,
-                        'stock' => isset($data['Stock']) ? (int)$data['Stock'] : 0,
-                        'category' => isset($data['Category']) ? trim($data['Category']) : null,
-                        'is_active' => !isset($data['Active']) || trim($data['Active']) === 'Yes',
+                        'seo_keywords' => isset($data['SEO Keywords']) ? trim($data['SEO Keywords']) : null,
+                        'seo_description' => isset($data['SEO Description']) ? trim($data['SEO Description']) : null,
+                        'slug' => isset($data['URL Slug']) ? trim($data['URL Slug']) : null,
                     ];
 
-                    // Handle SKU separately for update or create logic
-                    $sku = isset($data['SKU']) ? trim($data['SKU']) : null;
-                    if (!empty($sku)) {
-                        $productData['sku'] = $sku;
-                    }
+                    // TODO: Handle Category, Brand, Supplier lookups/creation (they need IDs, not names)
+                    // category_id, brand_id, supplier_id would need to be resolved from names
 
-                    // Use updateOrCreate with SKU if provided, otherwise just create
-                    if (!empty($sku)) {
-                        Product::updateOrCreate(
-                            ['sku' => $sku],
-                            $productData
-                        );
-                    } else {
-                        Product::create($productData);
-                    }
+                    // Use updateOrCreate with sku_prefix + rol_number (SKU Value) if provided
+                    $uniqueKey = !empty($productData['sku_prefix']) && !empty($productData['rol_number'])
+                        ? ['sku_prefix' => $productData['sku_prefix'], 'rol_number' => $productData['rol_number']]
+                        : ['name' => $productData['name']];
+
+                    // updateOrCreate might hurt performance. Need to do filter data before insert later
+                    Product::updateOrCreate($uniqueKey, $productData);
 
                     $imported++;
                 } catch (\Exception $e) {
