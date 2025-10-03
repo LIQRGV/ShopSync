@@ -138,7 +138,6 @@ class DirectSseStreamer implements SseStreamerInterface
                 } else {
                     $failedWrites = 0; // Reset counter on successful write
                     $lastSent = $currentTime;
-                    Log::debug("SSE [WL][{$sessionId}]: Sent timestamp event #{$counter}");
                 }
             }
 
