@@ -23,7 +23,7 @@ class ProductFetcherFactory
     {
         switch (strtolower($mode)) {
             case 'wl':
-                return new DatabaseProductFetcher();
+                return app(DatabaseProductFetcher::class);
             case 'wtm':
                 if ($request === null) {
                     throw new InvalidArgumentException(

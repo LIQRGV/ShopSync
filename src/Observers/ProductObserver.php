@@ -60,6 +60,18 @@ class ProductObserver
         $this->pushToStream($product, [], 'restored');
     }
 
+
+    /**
+     * Handle the Product "imported" event.
+     *
+     * @return void
+     */
+    public function imported()
+    {
+        $dummyProduct = new Product(); // dummy just to make it not failing type check
+        $this->pushToStream($dummyProduct, [], 'imported');
+    }
+
     /**
      * Push product event directly to Redis stream
      *
@@ -70,19 +82,30 @@ class ProductObserver
      */
     private function pushToStream(Product $product, array $changes, string $eventType): void
     {
+
         try {
-            $message = [
-                'event' => 'product.updated',
-                'data' => [
-                    'product_id' => $product->id,
-                    'product' => $product->toArray(),
-                    'changes' => $changes,
-                    'update_type' => $eventType,
-                    'timestamp' => now()->toISOString(),
-                    'message' => "Product {$eventType}: {$product->name}"
-                ],
-                'timestamp' => now()->toISOString()
-            ];
+            if ($eventType === 'imported') {
+                $message = [
+                    'event' => 'product.' . $eventType,
+                    'data' => [
+                        'message' => "Products {$eventType}"
+                    ],
+                    'timestamp' => now()->toISOString()
+                ];
+            } else {
+                $message = [
+                    'event' => 'product.updated',
+                    'data' => [
+                        'product_id' => $product->id,
+                        'product' => $product->toArray(),
+                        'changes' => $changes,
+                        'update_type' => $eventType,
+                        'timestamp' => now()->toISOString(),
+                        'message' => "Product {$eventType}: {$product->name}"
+                    ],
+                    'timestamp' => now()->toISOString()
+                ];
+            }
 
             // Push directly to Redis stream
             $messageId = Redis::xadd(
@@ -100,13 +123,21 @@ class ProductObserver
             ]);
 
         } catch (\Exception $e) {
-            Log::error("Product Observer: Failed to push {$eventType} event to stream", [
-                'product_id' => $product->id,
-                'product_name' => $product->name,
-                'event_type' => $eventType,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            $errorContext = $eventType === 'imported'
+                ? ['event_type' => $eventType]
+                : [
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'event_type' => $eventType
+                ];
+
+            Log::error("Product Observer: Failed to push {$eventType} event to stream",
+                array_merge($errorContext, [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ])
+            );
+
         }
     }
 

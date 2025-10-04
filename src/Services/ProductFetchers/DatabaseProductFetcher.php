@@ -2,6 +2,7 @@
 
 namespace TheDiamondBox\ShopSync\Services\ProductFetchers;
 
+use TheDiamondBox\ShopSync\Observers\ProductObserver;
 use TheDiamondBox\ShopSync\Services\Contracts\ProductFetcherInterface;
 use TheDiamondBox\ShopSync\Models\Product;
 use Illuminate\Support\Facades\DB;
@@ -9,6 +10,17 @@ use Illuminate\Support\Facades\Log;
 
 class DatabaseProductFetcher implements ProductFetcherInterface
 {
+
+    /***
+     * @var ProductObserver
+     */
+    protected $observer;
+
+    public function __construct(ProductObserver $observer)
+    {
+        $this->observer = $observer;
+    }
+
     public function getAll(array $filters = [], array $includes = [])
     {
         return $this->buildQuery($filters, $includes)->get();
@@ -270,7 +282,9 @@ class DatabaseProductFetcher implements ProductFetcherInterface
                         : ['name' => $productData['name']];
 
                     // updateOrCreate might hurt performance. Need to do filter data before insert later
-                    Product::updateOrCreate($uniqueKey, $productData);
+                    Product::withoutEvents(function () use ($uniqueKey, $productData) {
+                        Product::updateOrCreate($uniqueKey, $productData);
+                    });
 
                     $imported++;
                 } catch (\Exception $e) {
@@ -284,6 +298,8 @@ class DatabaseProductFetcher implements ProductFetcherInterface
             Log::error('CSV import failed', ['error' => $e->getMessage()]);
             throw $e;
         }
+
+        $this->observer->imported();
 
         return [
             'imported' => $imported,
