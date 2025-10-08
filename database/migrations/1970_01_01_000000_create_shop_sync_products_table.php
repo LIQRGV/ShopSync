@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class CreateProductsTable extends Migration
+class CreateShopSyncProductsTable extends Migration
 {
     /**
      * Check if this migration should run based on the package mode configuration.
