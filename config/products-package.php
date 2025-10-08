@@ -11,7 +11,7 @@ return [
     | - 'wtm' (Watch the Market): API-based manipulation for admin panel/market monitoring
     |
     */
-    'mode' => env('PRODUCT_PACKAGE_MODE', 'wl'),
+    'mode' => env('SHOP_SYNC_PRODUCT_PACKAGE_MODE', 'wl'),
 
     /*
     |--------------------------------------------------------------------------
@@ -22,8 +22,8 @@ return [
     | These settings are only used when mode is set to 'wtm'.
     |
     */
-    'wtm_api_timeout' => env('PRODUCT_PACKAGE_WTM_API_TIMEOUT', 30), // seconds
-    'sse_stream_chunk_size' => env('PRODUCT_PACKAGE_SSE_STREAM_CHUNK_SIZE', 8), // bytes - buffer size for reading SSE streams
+    'wtm_api_timeout' => env('SHOP_SYNC_PRODUCT_PACKAGE_WTM_API_TIMEOUT', 30), // seconds
+    'sse_stream_chunk_size' => env('SHOP_SYNC_PRODUCT_PACKAGE_SSE_STREAM_CHUNK_SIZE', 8), // bytes - buffer size for reading SSE streams
 
     /*
     |--------------------------------------------------------------------------
@@ -33,9 +33,9 @@ return [
     | Configure routing for the package endpoints.
     |
     */
-    'route_prefix' => env('PRODUCT_PACKAGE_ROUTE_PREFIX', 'api/v1'),
+    'route_prefix' => env('SHOP_SYNC_PRODUCT_PACKAGE_ROUTE_PREFIX', 'api/v1'),
     'route_middleware' => ['api'],
-    'register_routes' => env('PRODUCT_PACKAGE_REGISTER_ROUTES', true),
+    'register_routes' => env('SHOP_SYNC_PRODUCT_PACKAGE_REGISTER_ROUTES', true),
 
     /*
     |--------------------------------------------------------------------------
@@ -45,9 +45,9 @@ return [
     | Configure authentication and authorization for package endpoints.
     |
     */
-    'auth_middleware' => env('PRODUCT_PACKAGE_AUTH_MIDDLEWARE'),
-    'enable_package_auth' => env('PRODUCT_PACKAGE_ENABLE_PACKAGE_AUTH', false),
-    'package_auth_key' => env('PRODUCT_PACKAGE_AUTH_KEY'),
+    'auth_middleware' => env('SHOP_SYNC_PRODUCT_PACKAGE_AUTH_MIDDLEWARE'),
+    'enable_package_auth' => env('SHOP_SYNC_PRODUCT_PACKAGE_ENABLE_PACKAGE_AUTH', false),
+    'package_auth_key' => env('SHOP_SYNC_PRODUCT_PACKAGE_AUTH_KEY'),
 
     /*
     |--------------------------------------------------------------------------
@@ -57,8 +57,8 @@ return [
     | Configure default pagination settings.
     |
     */
-    'per_page' => env('PRODUCT_PACKAGE_PER_PAGE', 25),
-    'max_per_page' => env('PRODUCT_PACKAGE_MAX_PER_PAGE', 100),
+    'per_page' => env('SHOP_SYNC_PRODUCT_PACKAGE_PER_PAGE', 25),
+    'max_per_page' => env('SHOP_SYNC_PRODUCT_PACKAGE_MAX_PER_PAGE', 100),
 
     /*
     |--------------------------------------------------------------------------
@@ -68,9 +68,9 @@ return [
     | Configure export and import functionality.
     |
     */
-    'export_chunk_size' => env('PRODUCT_PACKAGE_EXPORT_CHUNK_SIZE', 1000),
-    'import_chunk_size' => env('PRODUCT_PACKAGE_IMPORT_CHUNK_SIZE', 500),
-    'max_import_file_size' => env('PRODUCT_PACKAGE_MAX_IMPORT_FILE_SIZE', 10240), // KB
+    'export_chunk_size' => env('SHOP_SYNC_PRODUCT_PACKAGE_EXPORT_CHUNK_SIZE', 1000),
+    'import_chunk_size' => env('SHOP_SYNC_PRODUCT_PACKAGE_IMPORT_CHUNK_SIZE', 500),
+    'max_import_file_size' => env('SHOP_SYNC_PRODUCT_PACKAGE_MAX_IMPORT_FILE_SIZE', 10240), // KB
     'allowed_import_extensions' => ['csv', 'txt'],
 
     /*
@@ -81,9 +81,9 @@ return [
     | Configure search functionality.
     |
     */
-    'search_min_length' => env('PRODUCT_PACKAGE_SEARCH_MIN_LENGTH', 1),
-    'search_max_length' => env('PRODUCT_PACKAGE_SEARCH_MAX_LENGTH', 255),
-    'use_fulltext_search' => env('PRODUCT_PACKAGE_USE_FULLTEXT_SEARCH', null), // auto-detect if null
+    'search_min_length' => env('SHOP_SYNC_PRODUCT_PACKAGE_SEARCH_MIN_LENGTH', 1),
+    'search_max_length' => env('SHOP_SYNC_PRODUCT_PACKAGE_SEARCH_MAX_LENGTH', 255),
+    'use_fulltext_search' => env('SHOP_SYNC_PRODUCT_PACKAGE_USE_FULLTEXT_SEARCH', null), // auto-detect if null
 
     /*
     |--------------------------------------------------------------------------
@@ -93,9 +93,9 @@ return [
     | Configure caching for better performance.
     |
     */
-    'cache_enabled' => env('PRODUCT_PACKAGE_CACHE_ENABLED', false),
-    'cache_ttl' => env('PRODUCT_PACKAGE_CACHE_TTL', 3600), // seconds
-    'cache_prefix' => env('PRODUCT_PACKAGE_CACHE_PREFIX', 'products_package'),
+    'cache_enabled' => env('SHOP_SYNC_PRODUCT_PACKAGE_CACHE_ENABLED', false),
+    'cache_ttl' => env('SHOP_SYNC_PRODUCT_PACKAGE_CACHE_TTL', 3600), // seconds
+    'cache_prefix' => env('SHOP_SYNC_PRODUCT_PACKAGE_CACHE_PREFIX', 'products_package'),
 
     /*
     |--------------------------------------------------------------------------
@@ -105,9 +105,9 @@ return [
     | Configure logging for the package.
     |
     */
-    'log_queries' => env('PRODUCT_PACKAGE_LOG_QUERIES', false),
-    'log_api_calls' => env('PRODUCT_PACKAGE_LOG_API_CALLS', false),
-    'log_level' => env('PRODUCT_PACKAGE_LOG_LEVEL', 'info'),
+    'log_queries' => env('SHOP_SYNC_PRODUCT_PACKAGE_LOG_QUERIES', false),
+    'log_api_calls' => env('SHOP_SYNC_PRODUCT_PACKAGE_LOG_API_CALLS', false),
+    'log_level' => env('SHOP_SYNC_PRODUCT_PACKAGE_LOG_LEVEL', 'info'),
 
 
     /*
@@ -118,8 +118,9 @@ return [
     | Database-specific configuration.
     |
     */
-    'connection' => env('PRODUCT_PACKAGE_DB_CONNECTION'),
-    'table_prefix' => env('PRODUCT_PACKAGE_TABLE_PREFIX', ''),
+    'connection' => env('SHOP_SYNC_PRODUCT_PACKAGE_DB_CONNECTION'),
+    'table_prefix' => env('SHOP_SYNC_PRODUCT_PACKAGE_TABLE_PREFIX', ''),
+    'should_migrate' => env('SHOP_SYNC_PRODUCT_PACKAGE_SHOULD_MIGRATE', false),
 
     /*
     |--------------------------------------------------------------------------
@@ -170,13 +171,13 @@ return [
     |
     */
     'features' => [
-        'soft_deletes' => env('PRODUCT_PACKAGE_ENABLE_SOFT_DELETES', true),
-        'export' => env('PRODUCT_PACKAGE_ENABLE_EXPORT', true),
-        'import' => env('PRODUCT_PACKAGE_ENABLE_IMPORT', true),
-        'search' => env('PRODUCT_PACKAGE_ENABLE_SEARCH', true),
-        'metadata' => env('PRODUCT_PACKAGE_ENABLE_METADATA', true),
-        'categories' => env('PRODUCT_PACKAGE_ENABLE_CATEGORIES', true),
-        'status_endpoint' => env('PRODUCT_PACKAGE_ENABLE_STATUS_ENDPOINT', true),
+        'soft_deletes' => env('SHOP_SYNC_PRODUCT_PACKAGE_ENABLE_SOFT_DELETES', true),
+        'export' => env('SHOP_SYNC_PRODUCT_PACKAGE_ENABLE_EXPORT', true),
+        'import' => env('SHOP_SYNC_PRODUCT_PACKAGE_ENABLE_IMPORT', true),
+        'search' => env('SHOP_SYNC_PRODUCT_PACKAGE_ENABLE_SEARCH', true),
+        'metadata' => env('SHOP_SYNC_PRODUCT_PACKAGE_ENABLE_METADATA', true),
+        'categories' => env('SHOP_SYNC_PRODUCT_PACKAGE_ENABLE_CATEGORIES', true),
+        'status_endpoint' => env('SHOP_SYNC_PRODUCT_PACKAGE_ENABLE_STATUS_ENDPOINT', true),
     ],
 
     /*
@@ -188,9 +189,9 @@ return [
     |
     */
     'error_handling' => [
-        'expose_errors_in_dev' => env('PRODUCT_PACKAGE_EXPOSE_ERRORS_IN_DEV', true),
-        'log_stack_traces' => env('PRODUCT_PACKAGE_LOG_STACK_TRACES', true),
-        'return_error_codes' => env('PRODUCT_PACKAGE_RETURN_ERROR_CODES', false),
+        'expose_errors_in_dev' => env('SHOP_SYNC_PRODUCT_PACKAGE_EXPOSE_ERRORS_IN_DEV', true),
+        'log_stack_traces' => env('SHOP_SYNC_PRODUCT_PACKAGE_LOG_STACK_TRACES', true),
+        'return_error_codes' => env('SHOP_SYNC_PRODUCT_PACKAGE_RETURN_ERROR_CODES', false),
     ],
 
     /*
@@ -202,8 +203,8 @@ return [
     |
     */
     'performance' => [
-        'eager_load_relationships' => env('PRODUCT_PACKAGE_EAGER_LOAD', false),
-        'use_database_transactions' => env('PRODUCT_PACKAGE_USE_TRANSACTIONS', true),
-        'optimize_queries' => env('PRODUCT_PACKAGE_OPTIMIZE_QUERIES', true),
+        'eager_load_relationships' => env('SHOP_SYNC_PRODUCT_PACKAGE_EAGER_LOAD', false),
+        'use_database_transactions' => env('SHOP_SYNC_PRODUCT_PACKAGE_USE_TRANSACTIONS', true),
+        'optimize_queries' => env('SHOP_SYNC_PRODUCT_PACKAGE_OPTIMIZE_QUERIES', true),
     ],
 ];

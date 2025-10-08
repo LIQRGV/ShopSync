@@ -21,12 +21,13 @@ class CreateShopSyncProductsTable extends Migration
         try {
             // Get the package mode from configuration with fallback to 'wl' for backward compatibility
             $mode = config('products-package.mode', 'wl');
+            $shouldMigrate = config('products-package.should_migrate', false);
 
             // Log the current mode for debugging purposes
             Log::info('Products migration mode check', ['mode' => $mode]);
 
             // Only run migration in WhiteLabel mode
-            return $mode === 'wl' && !Schema::hasTable('products');
+            return $mode === 'wl' && $shouldMigrate;
         } catch (\Exception $e) {
             // If there's any issue reading config, log the error and default to WL mode
             // This ensures existing installations continue to work
