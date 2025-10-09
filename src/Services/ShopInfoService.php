@@ -4,6 +4,7 @@ namespace TheDiamondBox\ShopSync\Services;
 
 use TheDiamondBox\ShopSync\Services\ShopInfoFetchers\ShopInfoFetcherFactory;
 use TheDiamondBox\ShopSync\Services\Contracts\ShopInfoFetcherInterface;
+use TheDiamondBox\ShopSync\Transformers\ShopInfoJsonApiTransformer;
 use Illuminate\Http\Request;
 
 /**
@@ -14,107 +15,116 @@ use Illuminate\Http\Request;
 class ShopInfoService
 {
     protected $shopInfoFetcher;
-    protected $request;
+    protected $transformer;
 
-    public function __construct(Request $request = null)
+    public function __construct(ShopInfoJsonApiTransformer $transformer = null, Request $request = null)
     {
-        $this->request = $request;
-        // Delay fetcher creation until needed, or create in controller
-        // This prevents issues with Request not being available during service provider binding
+        $this->shopInfoFetcher = ShopInfoFetcherFactory::makeFromConfig($request);
+        $this->transformer = $transformer ?? new ShopInfoJsonApiTransformer();
     }
 
     /**
-     * Get or create the shop info fetcher
+     * Validate includes and return errors if any
      *
-     * @return ShopInfoFetcherInterface
+     * @param array $includes
+     * @return array
      */
-    protected function getFetcher()
+    public function validateIncludes(array $includes)
     {
-        if (!$this->shopInfoFetcher) {
-            $this->shopInfoFetcher = ShopInfoFetcherFactory::makeFromConfig($this->request);
-        }
-
-        return $this->shopInfoFetcher;
+        return $this->transformer->validateIncludes($includes);
     }
 
     /**
      * Get shop info
      *
+     * @param array $includes
      * @return array|null
      */
-    public function getShopInfo()
+    public function getShopInfo(array $includes = [])
     {
-        $shopInfo = $this->getFetcher()->get();
+        $shopInfo = $this->shopInfoFetcher->get();
 
         if (!$shopInfo) {
             return null;
         }
 
-        return $this->formatResponse($shopInfo);
+        // Load relationships if needed for response (WL mode only)
+        if (!empty($includes) && method_exists($shopInfo, 'load')) {
+            $with = $this->getRelationshipsWith($includes);
+            if (!empty($with)) {
+                $shopInfo->load($with);
+            }
+        }
+
+        // Transform to JSON API format
+        return $this->transformer->transformShopInfo($shopInfo, $includes);
     }
 
     /**
      * Update shop info (full replace)
      *
      * @param array $data
+     * @param array $includes
      * @return array|null
      */
-    public function updateShopInfo(array $data)
+    public function updateShopInfo(array $data, array $includes = [])
     {
-        $shopInfo = $this->getFetcher()->update($data);
+        $shopInfo = $this->shopInfoFetcher->update($data);
 
         if (!$shopInfo) {
             return null;
         }
 
-        return $this->formatResponse($shopInfo);
+        // Load relationships if needed for response (WL mode only)
+        if (!empty($includes) && method_exists($shopInfo, 'load')) {
+            $with = $this->getRelationshipsWith($includes);
+            if (!empty($with)) {
+                $shopInfo->load($with);
+            }
+        }
+
+        // Transform to JSON API format
+        return $this->transformer->transformShopInfo($shopInfo, $includes);
     }
 
     /**
      * Update shop info (partial - prevents empty override)
      *
      * @param array $data
+     * @param array $includes
      * @return array|null
      */
-    public function updateShopInfoPartial(array $data)
+    public function updateShopInfoPartial(array $data, array $includes = [])
     {
-        $shopInfo = $this->getFetcher()->updatePartial($data);
+        $shopInfo = $this->shopInfoFetcher->updatePartial($data);
 
         if (!$shopInfo) {
             return null;
         }
 
-        return $this->formatResponse($shopInfo);
+        // Load relationships if needed for response (WL mode only)
+        if (!empty($includes) && method_exists($shopInfo, 'load')) {
+            $with = $this->getRelationshipsWith($includes);
+            if (!empty($with)) {
+                $shopInfo->load($with);
+            }
+        }
+
+        // Transform to JSON API format
+        return $this->transformer->transformShopInfo($shopInfo, $includes);
     }
 
     /**
-     * Format response
+     * Get relationship loading array based on includes
      *
-     * @param mixed $shopInfo
+     * @param array $includes
      * @return array
      */
-    protected function formatResponse($shopInfo)
+    protected function getRelationshipsWith(array $includes)
     {
-        $attributes = $shopInfo->toArray();
+        $with = [];
+        if (in_array('openHours', $includes)) $with[] = 'openHours';
 
-        // Format open_hours if present
-        if ($shopInfo->relationLoaded('openHours')) {
-            $attributes['open_hours'] = $shopInfo->openHours->map(function ($openHour) {
-                return [
-                    'day' => $openHour->day,
-                    'is_open' => $openHour->is_open,
-                    'open_at' => $openHour->open_at ? (is_string($openHour->open_at) ? $openHour->open_at : $openHour->open_at->format('H:i:s')) : null,
-                    'close_at' => $openHour->close_at ? (is_string($openHour->close_at) ? $openHour->close_at : $openHour->close_at->format('H:i:s')) : null,
-                ];
-            })->values()->all();
-        }
-
-        return [
-            'data' => [
-                'type' => 'shop-info',
-                'id' => '1',
-                'attributes' => $attributes
-            ]
-        ];
+        return $with;
     }
 }

@@ -28,7 +28,7 @@ class StoreProductRequest extends BaseProductRequest
      */
     public function rules()
     {
-        return [
+        return array_merge(parent::rules(), [
             'name' => 'required|string|max:255',
             'sku_prefix' => 'nullable|string|max:50',
             'rol_number' => 'nullable|string|max:100',
@@ -53,7 +53,7 @@ class StoreProductRequest extends BaseProductRequest
             'brand_id' => 'nullable|integer|exists:brands,id',
             'location_id' => 'nullable|integer|exists:locations,id',
             'supplier_id' => 'nullable|integer|exists:suppliers,id',
-        ];
+        ]);
     }
 
     /**

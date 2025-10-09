@@ -2,6 +2,8 @@
 
 namespace TheDiamondBox\ShopSync\Services\ShopInfoFetchers;
 
+use TheDiamondBox\ShopSync\Models\OpenHours;
+use TheDiamondBox\ShopSync\Models\ShopInfo;
 use TheDiamondBox\ShopSync\Services\Contracts\ShopInfoFetcherInterface;
 
 /**
@@ -42,18 +44,15 @@ class DatabaseShopInfoFetcher implements ShopInfoFetcherInterface
     /**
      * Get shop info with open hours
      *
-     * @return \App\ShopInfo|\TheDiamondBox\ShopSync\Models\ShopInfo|null
+     * @return \TheDiamondBox\ShopSync\Models\ShopInfo|null
      */
     public function get()
     {
-        $modelClass = $this->getModelClass();
-        $openHoursClass = $this->getOpenHoursModelClass();
-
-        $shopInfo = $modelClass::first();
+        $shopInfo = ShopInfo::first();
 
         if ($shopInfo) {
             // Load open hours (shop_id is NULL for singleton shop_info)
-            $openHours = $openHoursClass::where(function ($query) {
+            $openHours = OpenHours::where(function ($query) {
                     $query->whereNull('shop_id')
                           ->orWhere('shop_id', 0);
                 })
@@ -75,19 +74,16 @@ class DatabaseShopInfoFetcher implements ShopInfoFetcherInterface
      */
     public function update(array $data)
     {
-        $modelClass = $this->getModelClass();
-        $openHoursClass = $this->getOpenHoursModelClass();
-
         // Extract open_hours from data
         $openHoursData = $data['open_hours'] ?? null;
         unset($data['open_hours']);
 
-        $shopInfo = $modelClass::first();
+        $shopInfo = ShopInfo::query()->first();
 
         if ($shopInfo) {
             $shopInfo->update($data);
         } else {
-            $shopInfo = $modelClass::create($data);
+            ShopInfo::create($data);
         }
 
         // Update open hours if provided
@@ -107,8 +103,6 @@ class DatabaseShopInfoFetcher implements ShopInfoFetcherInterface
      */
     protected function updateOpenHours(array $openHoursData)
     {
-        $openHoursClass = $this->getOpenHoursModelClass();
-
         foreach ($openHoursData as $dayData) {
             if (!isset($dayData['day'])) {
                 continue;
@@ -117,7 +111,7 @@ class DatabaseShopInfoFetcher implements ShopInfoFetcherInterface
             $day = strtolower($dayData['day']);
 
             // Properly group WHERE conditions to avoid matching wrong records
-            $openHour = $openHoursClass::where(function ($query) {
+            $openHour = OpenHours::where(function ($query) {
                     $query->whereNull('shop_id')
                           ->orWhere('shop_id', 0);
                 })
@@ -129,13 +123,12 @@ class DatabaseShopInfoFetcher implements ShopInfoFetcherInterface
                 'is_open' => $dayData['is_open'] ?? false,
                 'open_at' => $dayData['open_at'] ?? null,
                 'close_at' => $dayData['close_at'] ?? null,
-                'shop_id' => null,
             ];
 
             if ($openHour) {
                 $openHour->update($updateData);
             } else {
-                $openHoursClass::create($updateData);
+                OpenHours::create($updateData);
             }
         }
     }

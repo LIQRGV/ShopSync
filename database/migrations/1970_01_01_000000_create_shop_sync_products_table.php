@@ -12,7 +12,7 @@ class CreateShopSyncProductsTable extends Migration
      * Check if this migration should run based on the package mode configuration.
      *
      * WL Mode (WhiteLabel): Should run migrations normally - creates products table and indexes
-     * WTM Mode (Watcher of the Market): Should NEVER run migrations - skip all database operations
+     * WTM Mode (Watch the Market): Should NEVER run migrations - skip all database operations
      *
      * @return bool True if migration should run, false if it should be skipped
      */
@@ -50,7 +50,7 @@ class CreateShopSyncProductsTable extends Migration
     {
         // Check if migration should run based on package mode configuration
         if (!$this->shouldRunMigration()) {
-            Log::info('Products table migration skipped - Package is in WTM (Watcher of the Market) mode. No database operations will be performed.');
+            Log::info('Products table migration skipped - Package is in WTM (Watch of the Market) mode or should_migrate is false. No database operations will be performed.');
             return;
         }
 
@@ -103,7 +103,7 @@ class CreateShopSyncProductsTable extends Migration
     {
         // Check if migration should run based on package mode configuration
         if (!$this->shouldRunMigration()) {
-            Log::info('Products table rollback skipped - Package is in WTM (Watcher of the Market) mode. No database operations will be performed.');
+            Log::info('Products table rollback skipped - Package is in WTM (Watch the Market) mode or should_migrate is false. No database operations will be performed.');
             return;
         }
 
