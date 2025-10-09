@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use TheDiamondBox\ShopSync\Http\Controllers\ProductController;
 use TheDiamondBox\ShopSync\Http\Controllers\SseController;
+use TheDiamondBox\ShopSync\Http\Controllers\ShopInfoController;
 
 /*
 |--------------------------------------------------------------------------
@@ -23,6 +24,16 @@ Route::get('/sse/events', [SseController::class, 'events'])
 
 Route::get('/sse/status', [SseController::class, 'status'])
     ->name('sse.status');
+
+// Shop Info endpoints (WL mode, proxied by WTM)
+Route::get('/shop-info', [ShopInfoController::class, 'show'])
+    ->name('shop-info.show');
+
+Route::put('/shop-info', [ShopInfoController::class, 'update'])
+    ->name('shop-info.update');
+
+Route::patch('/shop-info', [ShopInfoController::class, 'updatePartial'])
+    ->name('shop-info.update-partial');
 
 // Package status endpoint (if enabled)
 if (config('products-package.features.status_endpoint', true)) {
