@@ -1,26 +1,26 @@
 <?php
 
-namespace TheDiamondBox\ShopSync\Services\ShopInfoFetchers;
+namespace TheDiamondBox\ShopSync\Services\OpenHoursFetchers;
 
 use TheDiamondBox\ShopSync\Exceptions\ClientNotFoundException;
 use TheDiamondBox\ShopSync\Models\Client;
-use TheDiamondBox\ShopSync\Services\Contracts\ShopInfoFetcherInterface;
+use TheDiamondBox\ShopSync\Services\Contracts\OpenHoursFetcherInterface;
 use InvalidArgumentException;
 use Illuminate\Support\Facades\Log;
 
 /**
- * ShopInfoFetcherFactory
+ * OpenHoursFetcherFactory
  *
  * Factory to create appropriate fetcher based on mode (WL/WTM)
  */
-class ShopInfoFetcherFactory
+class OpenHoursFetcherFactory
 {
     /**
-     * Create a shop info fetcher instance based on mode
+     * Create an open hours fetcher instance based on mode
      *
      * @param string $mode 'wl' or 'wtm'
      * @param mixed $request Request object (required for WTM mode)
-     * @return ShopInfoFetcherInterface
+     * @return OpenHoursFetcherInterface
      * @throws InvalidArgumentException
      * @throws ClientNotFoundException
      */
@@ -28,7 +28,7 @@ class ShopInfoFetcherFactory
     {
         switch (strtolower($mode)) {
             case 'wl':
-                return app(DatabaseShopInfoFetcher::class);
+                return app(DatabaseOpenHoursFetcher::class);
 
             case 'wtm':
                 if ($request === null) {
@@ -57,7 +57,7 @@ class ShopInfoFetcherFactory
                     throw ClientNotFoundException::forClientId($clientID);
                 }
 
-                return new ApiShopInfoFetcher($client);
+                return new ApiOpenHoursFetcher($client);
 
             default:
                 throw new InvalidArgumentException(
@@ -70,21 +70,21 @@ class ShopInfoFetcherFactory
      * Create fetcher from config
      *
      * @param mixed $request Request object (required for WTM mode)
-     * @return ShopInfoFetcherInterface|null
+     * @return OpenHoursFetcherInterface|null
      * @throws ClientNotFoundException
      */
     public static function makeFromConfig($request = null)
     {
         $mode = config('products-package.mode', 'wl');
 
-        Log::info('Creating ShopInfoFetcher', ['mode' => $mode]);
+        Log::info('Creating OpenHoursFetcher', ['mode' => $mode]);
 
         try {
             return static::make($mode, $request);
         } catch (InvalidArgumentException $e) {
             // Check if it's a mode validation error
             if (strpos($e->getMessage(), 'Invalid mode:') === 0) {
-                Log::error('Invalid ShopInfoFetcher mode, falling back to WL', [
+                Log::error('Invalid OpenHoursFetcher mode, falling back to WL', [
                     'invalid_mode' => $mode,
                     'error' => $e->getMessage()
                 ]);
@@ -93,14 +93,14 @@ class ShopInfoFetcherFactory
             }
 
             // Re-throw request/client-id errors
-            Log::error('ShopInfoFetcher creation failed', [
+            Log::error('OpenHoursFetcher creation failed', [
                 'mode' => $mode,
                 'error' => $e->getMessage()
             ]);
 
             throw $e;
         } catch (ClientNotFoundException $e) {
-            Log::error('Client not found for ShopInfo', [
+            Log::error('Client not found for OpenHours', [
                 'mode' => $mode,
                 'client_id' => $e->getClientId(),
                 'error' => $e->getMessage()

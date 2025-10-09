@@ -95,11 +95,25 @@ class ShopInfoService
      */
     protected function formatResponse($shopInfo)
     {
+        $attributes = $shopInfo->toArray();
+
+        // Format open_hours if present
+        if ($shopInfo->relationLoaded('openHours')) {
+            $attributes['open_hours'] = $shopInfo->openHours->map(function ($openHour) {
+                return [
+                    'day' => $openHour->day,
+                    'is_open' => $openHour->is_open,
+                    'open_at' => $openHour->open_at ? (is_string($openHour->open_at) ? $openHour->open_at : $openHour->open_at->format('H:i:s')) : null,
+                    'close_at' => $openHour->close_at ? (is_string($openHour->close_at) ? $openHour->close_at : $openHour->close_at->format('H:i:s')) : null,
+                ];
+            })->values()->all();
+        }
+
         return [
             'data' => [
                 'type' => 'shop-info',
                 'id' => '1',
-                'attributes' => $shopInfo->toArray()
+                'attributes' => $attributes
             ]
         ];
     }

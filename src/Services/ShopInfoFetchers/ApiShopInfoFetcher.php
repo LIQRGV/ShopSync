@@ -84,9 +84,34 @@ class ApiShopInfoFetcher implements ShopInfoFetcherInterface
             $data = $data['data']['attributes'];
         }
 
+        // Extract open_hours if present
+        $openHoursData = $data['open_hours'] ?? null;
+        unset($data['open_hours']);
+
         $shopInfo = new ShopInfo();
         $shopInfo->exists = true;
         $shopInfo->fill($data);
+
+        // Convert open_hours to collection of models
+        if ($openHoursData && is_array($openHoursData)) {
+            $openHoursClass = class_exists('App\Models\OpenHours')
+                ? 'App\Models\OpenHours'
+                : (class_exists('App\OpenHours')
+                    ? 'App\OpenHours'
+                    : 'TheDiamondBox\ShopSync\Models\OpenHours');
+
+            $openHours = collect($openHoursData)->map(function ($item) use ($openHoursClass) {
+                $openHour = new $openHoursClass();
+                $openHour->exists = true;
+                $openHour->fill($item);
+                if (isset($item['id'])) {
+                    $openHour->id = $item['id'];
+                }
+                return $openHour;
+            });
+
+            $shopInfo->setRelation('openHours', $openHours);
+        }
 
         return $shopInfo;
     }

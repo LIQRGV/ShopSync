@@ -185,4 +185,21 @@ class ShopInfo extends Model
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
+
+    /**
+     * Get open hours relationship
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function openHours()
+    {
+        $openHoursModel = class_exists('App\Models\OpenHours')
+            ? 'App\Models\OpenHours'
+            : (class_exists('App\OpenHours')
+                ? 'App\OpenHours'
+                : 'TheDiamondBox\ShopSync\Models\OpenHours');
+
+        return $this->hasMany($openHoursModel, 'shop_id')
+            ->orderByRaw("FIELD(day, 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')");
+    }
 }
