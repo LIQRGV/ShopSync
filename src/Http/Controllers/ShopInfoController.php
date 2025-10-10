@@ -23,13 +23,6 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class ShopInfoController extends Controller
 {
-    protected $shopInfoService;
-
-    public function __construct(Request $request)
-    {
-        $this->shopInfoService = new ShopInfoService(null, $request);
-    }
-
     /**
      * Get shop info with JSON API support
      *
@@ -41,15 +34,18 @@ class ShopInfoController extends Controller
     public function show(GetShopInfoRequest $request): JsonResponse
     {
         try {
+            // Create service with current request for proper client-id handling in WTM mode
+            $service = new ShopInfoService(null, $request);
+
             $includes = $request->getIncludes();
 
             // Validate includes
-            $includeErrors = $this->shopInfoService->validateIncludes($includes);
+            $includeErrors = $service->validateIncludes($includes);
             if (!empty($includeErrors)) {
                 return response()->json(JsonApiErrorResponse::multiple($includeErrors), 400);
             }
 
-            $shopInfo = $this->shopInfoService->getShopInfo($includes);
+            $shopInfo = $service->getShopInfo($includes);
 
             if (!$shopInfo) {
                 $error = JsonApiErrorResponse::notFound('shop-info', '1');
@@ -82,16 +78,19 @@ class ShopInfoController extends Controller
     public function update(UpdateShopInfoRequest $request): JsonResponse
     {
         try {
+            // Create service with current request for proper client-id handling in WTM mode
+            $service = new ShopInfoService(null, $request);
+
             $includes = $request->getIncludes();
 
             // Validate includes
-            $includeErrors = $this->shopInfoService->validateIncludes($includes);
+            $includeErrors = $service->validateIncludes($includes);
             if (!empty($includeErrors)) {
                 return response()->json(JsonApiErrorResponse::multiple($includeErrors), 400);
             }
 
             $data = $request->validated();
-            $shopInfo = $this->shopInfoService->updateShopInfo($data, $includes);
+            $shopInfo = $service->updateShopInfo($data, $includes);
 
             if (!$shopInfo) {
                 $error = JsonApiErrorResponse::internalError('Failed to update shop info');
@@ -129,16 +128,19 @@ class ShopInfoController extends Controller
     public function updatePartial(PatchShopInfoRequest $request): JsonResponse
     {
         try {
+            // Create service with current request for proper client-id handling in WTM mode
+            $service = new ShopInfoService(null, $request);
+
             $includes = $request->getIncludes();
 
             // Validate includes
-            $includeErrors = $this->shopInfoService->validateIncludes($includes);
+            $includeErrors = $service->validateIncludes($includes);
             if (!empty($includeErrors)) {
                 return response()->json(JsonApiErrorResponse::multiple($includeErrors), 400);
             }
 
             $data = $request->validated();
-            $shopInfo = $this->shopInfoService->updateShopInfoPartial($data, $includes);
+            $shopInfo = $service->updateShopInfoPartial($data, $includes);
 
             if (!$shopInfo) {
                 $error = JsonApiErrorResponse::internalError('Failed to update shop info');

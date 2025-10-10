@@ -7,11 +7,6 @@ use TheDiamondBox\ShopSync\Models\ShopInfo;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-/**
- * ApiShopInfoFetcher - WTM Mode
- *
- * Proxy all shop info operations to WL via API
- */
 class ApiShopInfoFetcher implements ShopInfoFetcherInterface
 {
     protected $baseUrl;
@@ -21,7 +16,7 @@ class ApiShopInfoFetcher implements ShopInfoFetcherInterface
     public function __construct($client)
     {
         if (!$client) {
-            return;
+            throw new \InvalidArgumentException('Client is required for ApiShopInfoFetcher');
         }
 
         $this->baseUrl = $client->getActiveUrl() . '/' . config('products-package.route_prefix', 'api/v1');
@@ -29,9 +24,6 @@ class ApiShopInfoFetcher implements ShopInfoFetcherInterface
         $this->timeout = config('products-package.wtm_api_timeout', 30);
     }
 
-    /**
-     * Create HTTP client with auth headers
-     */
     protected function client()
     {
         return Http::withHeaders([
@@ -43,9 +35,6 @@ class ApiShopInfoFetcher implements ShopInfoFetcherInterface
             ->baseUrl($this->baseUrl);
     }
 
-    /**
-     * Handle API request with error handling
-     */
     protected function handleRequest(callable $callback, $defaultValue = null)
     {
         try {
@@ -57,7 +46,7 @@ class ApiShopInfoFetcher implements ShopInfoFetcherInterface
 
             Log::warning('WTM ShopInfo API error', [
                 'status' => $response->status(),
-                'body' => $response->body()
+                'message' => 'Failed to fetch shop info from WL server'
             ]);
 
             return $defaultValue;
@@ -70,21 +59,16 @@ class ApiShopInfoFetcher implements ShopInfoFetcherInterface
         }
     }
 
-    /**
-     * Convert API response to ShopInfo model
-     */
     protected function convertToShopInfo($data)
     {
         if (empty($data) || !is_array($data)) {
             return null;
         }
 
-        // Handle JSON API format
         if (isset($data['data']['attributes'])) {
             $data = $data['data']['attributes'];
         }
 
-        // Extract open_hours if present
         $openHoursData = $data['open_hours'] ?? null;
         unset($data['open_hours']);
 
@@ -92,7 +76,6 @@ class ApiShopInfoFetcher implements ShopInfoFetcherInterface
         $shopInfo->exists = true;
         $shopInfo->fill($data);
 
-        // Convert open_hours to collection of models
         if ($openHoursData && is_array($openHoursData)) {
             $openHoursClass = class_exists('App\Models\OpenHours')
                 ? 'App\Models\OpenHours'
@@ -116,11 +99,6 @@ class ApiShopInfoFetcher implements ShopInfoFetcherInterface
         return $shopInfo;
     }
 
-    /**
-     * Get shop info from WL
-     *
-     * @return ShopInfo|null
-     */
     public function get()
     {
         $response = $this->handleRequest(function () {
@@ -130,12 +108,6 @@ class ApiShopInfoFetcher implements ShopInfoFetcherInterface
         return $response ? $this->convertToShopInfo($response) : null;
     }
 
-    /**
-     * Update shop info on WL (full replace)
-     *
-     * @param array $data
-     * @return ShopInfo|null
-     */
     public function update(array $data)
     {
         $response = $this->handleRequest(function () use ($data) {
@@ -145,12 +117,6 @@ class ApiShopInfoFetcher implements ShopInfoFetcherInterface
         return $response ? $this->convertToShopInfo($response) : null;
     }
 
-    /**
-     * Update shop info on WL (partial - only non-empty values)
-     *
-     * @param array $data
-     * @return ShopInfo|null
-     */
     public function updatePartial(array $data)
     {
         $response = $this->handleRequest(function () use ($data) {

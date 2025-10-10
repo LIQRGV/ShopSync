@@ -4,87 +4,54 @@ namespace TheDiamondBox\ShopSync\Http\Requests;
 
 use TheDiamondBox\ShopSync\Helpers\JsonApiIncludeParser;
 
-/**
- * Base ShopInfo Request
- *
- * Provides common functionality for all shop-info-related requests
- * Supports JSON API format for requests
- */
 abstract class BaseShopInfoRequest extends JsonApiRequest
 {
-    /**
-     * Expected resource type for shop-info requests
-     *
-     * @return string
-     */
     protected function expectedResourceType()
     {
         return 'shop-info';
     }
 
-    /**
-     * Relationship mappings for shop info
-     * Maps JSON API relationship names to how they should be stored
-     *
-     * @return array
-     */
     protected function relationshipMappings()
     {
-        // openHours is special - we'll handle it manually in prepareForValidation
         return [];
     }
 
-    /**
-     * Get parsed include parameters from the request
-     *
-     * @return array
-     */
     public function getIncludes()
     {
         return JsonApiIncludeParser::parseFromRequest($this);
     }
 
-    /**
-     * Override prepareForValidation to handle openHours relationship specially
-     */
     protected function prepareForValidation()
     {
         parent::prepareForValidation();
 
-        // Handle openHours relationship if present
+        if ($this->has('open_hours')) {
+            return;
+        }
+
         if ($this->isJsonApiFormat() && isset($this->jsonApiRelationships['openHours'])) {
             $openHoursData = $this->jsonApiRelationships['openHours'];
 
-            // Convert from JSON API relationship format to flat array
             if (is_array($openHoursData)) {
+                if (isset($openHoursData['data']) && is_array($openHoursData['data'])) {
+                    $openHoursData = $openHoursData['data'];
+                }
+
                 $converted = [];
 
                 foreach ($openHoursData as $item) {
-                    // Each item could be: { "type": "open-hours", "id": "1" }
-                    // or include attributes in a separate included section
-                    // For now, we expect attributes to be embedded or provided separately
-
-                    // If the item has attributes (inline), use them
                     if (isset($item['attributes'])) {
                         $converted[] = $item['attributes'];
-                    }
-                    // Otherwise, just store the reference (id will be in 'id' key)
-                    else {
+                    } else {
                         $converted[] = $item;
                     }
                 }
 
-                // Merge open_hours into the request for validation
                 $this->merge(['open_hours' => $converted]);
             }
         }
     }
 
-    /**
-     * Common validation rules for all shop-info fields
-     *
-     * @return array
-     */
     protected function commonRules()
     {
         return [
