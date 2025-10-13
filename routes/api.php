@@ -35,6 +35,10 @@ Route::put('/shop-info', [ShopInfoController::class, 'update'])
 Route::patch('/shop-info', [ShopInfoController::class, 'updatePartial'])
     ->name('shop-info.update-partial');
 
+// Upload shop info image endpoint
+Route::post('/shop-info/images', [ShopInfoController::class, 'uploadImage'])
+    ->name('shop-info.upload-image');
+
 // Package status endpoint (if enabled)
 if (config('products-package.features.status_endpoint', true)) {
     Route::get('/products/status', [ProductController::class, 'status'])

@@ -54,4 +54,15 @@ class ShopInfoService
 
         return $this->transformer->transformShopInfo($shopInfo, $includes);
     }
+
+    public function uploadShopInfoImage(string $field, $file, array $includes = [])
+    {
+        $shopInfo = $this->shopInfoFetcher->uploadImage($field, $file);
+
+        if (!$shopInfo) {
+            return null;
+        }
+
+        return $this->transformer->transformShopInfo($shopInfo, $includes);
+    }
 }

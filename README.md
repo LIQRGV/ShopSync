@@ -140,6 +140,7 @@ All endpoints are API-only and return JSON responses. The package does not inclu
 | GET | `/shop-info` | Get shop/business information |
 | PUT | `/shop-info` | Update shop info (full replace) |
 | PATCH | `/shop-info` | Update shop info (partial - prevents empty override) |
+| POST | `/shop-info/images` | Upload shop info images (logo, favicon, banners, etc.) |
 
 **Note**: Shop info is a singleton resource (single record). The PATCH endpoint prevents empty data from overriding existing values, solving the two-way sync issue.
 
@@ -415,6 +416,66 @@ The ShopInfo model includes 90+ fields organized by category:
 - **Integrations**: Google Analytics, Trustpilot, Captcha, Smartsupp
 - **Payment Gateways**: Stripe, TakePayment, DNA Payment
 - **Product Settings**: sku_prefix_watches, sku_prefix_jewellery, catalogue_mode
+
+#### Shop Info Image Upload
+
+Upload images for shop branding and pages (logo, favicon, banners, etc.):
+
+**Supported Image Fields:**
+- `logo` - Primary shop logo (with `original_logo` for processing)
+- `favicon` - Website favicon (with `original_favicon`)
+- `banner_1` - Homepage banner 1
+- `banner_2` - Homepage banner 2
+- `sell_watch_image` - Sell watch page image
+- `valuations_additional_logo` - Additional logo for valuation PDFs
+
+**Image Requirements:**
+- Formats: JPEG, JPG, PNG, GIF, WebP, SVG
+- Max size: 7MB
+- Automatic processing for logo/favicon:
+  - WebP → JPEG conversion for `original_*` fields
+  - SVG → PNG conversion (if tools available)
+  - Dual storage: `uploads/shop_images` and `uploads/original_shop_images`
+
+**Usage Example:**
+```bash
+# WL Mode - Direct upload
+curl -X POST https://your-app.com/api/v1/shop-info/images \
+  -H "Authorization: Bearer your-api-key" \
+  -F "field=logo" \
+  -F "image=@/path/to/logo.png"
+
+# WTM Mode - Proxied to WL
+curl -X POST https://marketplace.com/api/v1/shop-info/images \
+  -H "Authorization: Bearer marketplace-token" \
+  -H "client-id: 123" \
+  -F "field=banner_1" \
+  -F "image=@/path/to/banner.jpg"
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "type": "shop-info",
+    "id": "1",
+    "attributes": {
+      "name": "My Store",
+      "logo": "uploads/shop_images/1234567890_logo.png",
+      "original_logo": "uploads/original_shop_images/1234567890_logo.png",
+      ...
+    }
+  }
+}
+```
+
+**Features:**
+- ✅ WL Mode: Direct filesystem storage with automatic format conversion
+- ✅ WTM Mode: Automatic proxy to WL server
+- ✅ Supports both primary and original_* fields for logo/favicon
+- ✅ SVG to PNG conversion (requires ImageMagick or rsvg-convert)
+- ✅ WebP to JPEG conversion for compatibility
+- ✅ JSON API response format
 
 ### Enhanced Product Model
 

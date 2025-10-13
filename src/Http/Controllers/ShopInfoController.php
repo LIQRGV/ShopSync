@@ -6,6 +6,7 @@ use TheDiamondBox\ShopSync\Services\ShopInfoService;
 use TheDiamondBox\ShopSync\Http\Requests\GetShopInfoRequest;
 use TheDiamondBox\ShopSync\Http\Requests\UpdateShopInfoRequest;
 use TheDiamondBox\ShopSync\Http\Requests\PatchShopInfoRequest;
+use TheDiamondBox\ShopSync\Http\Requests\UploadShopInfoImageRequest;
 use TheDiamondBox\ShopSync\Helpers\JsonApiErrorResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -161,6 +162,51 @@ class ShopInfoController extends Controller
 
             $error = JsonApiErrorResponse::internalError(
                 app()->environment('local') ? $e->getMessage() : 'Failed to update shop info'
+            );
+            return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    public function uploadImage(UploadShopInfoImageRequest $request): JsonResponse
+    {
+        try {
+            $service = new ShopInfoService(null, $request);
+            $field = $request->getImageField();
+            $file = $request->getImageFile();
+
+            Log::info('ShopInfo image upload request', [
+                'field' => $field,
+                'file_name' => $file->getClientOriginalName(),
+                'file_size' => $file->getSize(),
+                'mime_type' => $file->getMimeType(),
+            ]);
+
+            $shopInfo = $service->uploadShopInfoImage($field, $file);
+
+            if (!$shopInfo) {
+                $error = JsonApiErrorResponse::internalError('Failed to upload shop info image');
+                return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+
+            Log::info('ShopInfo image uploaded successfully', [
+                'field' => $field,
+                'file_name' => $file->getClientOriginalName(),
+            ]);
+
+            return response()->json($shopInfo);
+
+        } catch (ValidationException $e) {
+            $error = JsonApiErrorResponse::fromLaravelValidation($e->validator);
+            return response()->json($error, Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (\Exception $e) {
+            Log::error('Failed to upload shop info image', [
+                'error' => $e->getMessage(),
+                'field' => $request->input('field'),
+                'file' => $request->hasFile('image') ? $request->file('image')->getClientOriginalName() : 'no file',
+            ]);
+
+            $error = JsonApiErrorResponse::internalError(
+                app()->environment('local') ? $e->getMessage() : 'Failed to upload shop info image'
             );
             return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
         }

@@ -64,11 +64,11 @@ abstract class BaseShopInfoRequest extends JsonApiRequest
             'about_us' => 'nullable|string',
 
             // Social Media
-            'facebook' => 'nullable|url|max:255',
-            'tiktok' => 'nullable|url|max:255',
-            'youtube' => 'nullable|url|max:255',
-            'instagram' => 'nullable|url|max:255',
-            'whatsapp_link' => 'nullable|url|max:255',
+            'facebook' => 'nullable|max:255',
+            'tiktok' => 'nullable|max:255',
+            'youtube' => 'nullable|max:255',
+            'instagram' => 'nullable|max:255',
+            'whatsapp_link' => 'nullable|max:255',
 
             // Primary Address
             'address_line_1' => 'nullable|string|max:255',

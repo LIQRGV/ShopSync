@@ -125,4 +125,56 @@ class ApiShopInfoFetcher implements ShopInfoFetcherInterface
 
         return $response ? $this->convertToShopInfo($response) : null;
     }
+
+    public function uploadImage(string $field, $file)
+    {
+        Log::info('ApiShopInfoFetcher::uploadImage called', [
+            'field' => $field,
+            'file_name' => $file->getClientOriginalName(),
+            'file_size' => $file->getSize(),
+            'full_url' => $this->baseUrl . "/shop-info/images",
+        ]);
+
+        try {
+            $fullUrl = $this->baseUrl . "/shop-info/images";
+
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+                'Accept' => 'application/json',
+            ])
+                ->timeout($this->timeout)
+                ->attach(
+                    'image',
+                    file_get_contents($file->getRealPath()),
+                    $file->getClientOriginalName()
+                )
+                ->post($fullUrl, [
+                    'field' => $field,
+                ]);
+
+            Log::info('ApiShopInfoFetcher::uploadImage response', [
+                'status' => $response->status(),
+                'success' => $response->successful(),
+            ]);
+
+            if (!$response->successful()) {
+                Log::error('Failed to upload shop info image to WL', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+
+                throw new \Exception('Failed to upload image to WL: ' . $response->body());
+            }
+
+            $data = $response->json();
+            return $this->convertToShopInfo($data);
+        } catch (\Exception $e) {
+            Log::error('ApiShopInfoFetcher::uploadImage exception', [
+                'error' => $e->getMessage(),
+                'field' => $field,
+            ]);
+
+            throw $e;
+        }
+    }
 }

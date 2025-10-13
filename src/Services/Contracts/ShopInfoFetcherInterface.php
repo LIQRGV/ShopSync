@@ -32,4 +32,13 @@ interface ShopInfoFetcherInterface
      * @return mixed
      */
     public function updatePartial(array $data);
+
+    /**
+     * Upload shop info image
+     *
+     * @param string $field Image field name (logo, favicon, banner_1, etc)
+     * @param \Illuminate\Http\UploadedFile $file Uploaded image file
+     * @return mixed Updated shop info
+     */
+    public function uploadImage(string $field, $file);
 }
