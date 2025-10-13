@@ -6,6 +6,7 @@ use TheDiamondBox\ShopSync\Models\ShopInfo;
 use TheDiamondBox\ShopSync\Services\Contracts\ShopInfoFetcherInterface;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Image;
 
 class DatabaseShopInfoFetcher implements ShopInfoFetcherInterface
 {
@@ -140,20 +141,26 @@ class DatabaseShopInfoFetcher implements ShopInfoFetcherInterface
         }
 
         $updateData = [$field => $imagePath];
+
         if (in_array($field, ['logo', 'favicon'])) {
             $originalField = 'original_' . $field;
-            $fileExt = $file->getClientOriginalExtension();
+            $resultExt = pathinfo($imagePath, PATHINFO_EXTENSION);
+            $inputExt = $file->getClientOriginalExtension();
 
-            if ($fileExt != 'webp') {
-                $updateData[$originalField] = $this->getOriginalImagePath($imagePath);
-            } else {
-                $updateData[$originalField] = $this->convertWebpToJpeg($imagePath);
-            }
-            if ($fileExt == 'svg') {
+            if ($resultExt == 'webp') {
+                if ($inputExt == 'webp') {
+                    $updateData[$originalField] = $this->convertWebpToPng($imagePath);
+                } else {
+                    $updateData[$originalField] = $this->getOriginalImagePath($imagePath);
+                }
+            } else if ($resultExt == 'svg') {
                 $this->convertSvgToPng($imagePath);
+                $updateData[$originalField] = $this->getOriginalImagePath($imagePath);
                 if (isset($updateData[$originalField])) {
                     $this->convertSvgToPng($updateData[$originalField]);
                 }
+            } else {
+                $updateData[$originalField] = $this->getOriginalImagePath($imagePath);
             }
         }
 
@@ -189,12 +196,49 @@ class DatabaseShopInfoFetcher implements ShopInfoFetcherInterface
             $name = $timestamp . '_' . Str::slug($originalName) . '.' . $extension;
 
             $file->move($shopDir, $name);
-            if (in_array($field, ['logo', 'favicon'])) {
-                $sourcePath = $shopDir . '/' . $name;
-                $destPath = $originalDir . '/' . $name;
+            $uploadedPath = $shopDir . '/' . $name;
 
-                if (file_exists($sourcePath)) {
-                    copy($sourcePath, $destPath);
+            if (in_array($field, ['logo', 'favicon']) && !in_array($extension, ['webp', 'svg'])) {
+                $originalCopy = $originalDir . '/' . $name;
+                if (file_exists($uploadedPath)) {
+                    copy($uploadedPath, $originalCopy);
+                }
+            }
+
+            if (!in_array($extension, ['webp', 'svg'])) {
+                $webpName = $name . '.webp';
+                $webpPath = $shopDir . '/' . $webpName;
+
+                try {
+                    $image = Image::make($uploadedPath);
+                    $image->encode('webp');
+                    $image->save($webpPath);
+
+                    if (file_exists($uploadedPath)) {
+                        unlink($uploadedPath);
+                    }
+
+                    $name = $webpName;
+                    $uploadedPath = $webpPath;
+
+                    Log::info('Converted image to WebP', [
+                        'original' => $extension,
+                        'converted' => $webpName,
+                    ]);
+                } catch (\Exception $e) {
+                    Log::warning('WebP conversion failed, using original format', [
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            } else if ($extension == 'svg' && in_array($field, ['logo', 'favicon'])) {
+                $destPath = $originalDir . '/' . $name;
+                if (file_exists($uploadedPath)) {
+                    copy($uploadedPath, $destPath);
+                }
+            } else if ($extension == 'webp' && in_array($field, ['logo', 'favicon'])) {
+                $destPath = $originalDir . '/' . $name;
+                if (file_exists($uploadedPath)) {
+                    copy($uploadedPath, $destPath);
                 }
             }
 
@@ -214,37 +258,32 @@ class DatabaseShopInfoFetcher implements ShopInfoFetcherInterface
         return str_replace('uploads/shop_images', 'uploads/original_shop_images', $imagePath);
     }
 
-    protected function convertWebpToJpeg(string $imagePath): string
+    protected function convertWebpToPng(string $imagePath): string
     {
-        $jpegPath = str_replace('.webp', '.jpg', $imagePath);
-        $jpegPath = str_replace('uploads/shop_images', 'uploads/original_shop_images', $jpegPath);
+        $pngPath = str_replace('.webp', '.png', $imagePath);
+        $pngPath = str_replace('uploads/shop_images', 'uploads/original_shop_images', $pngPath);
 
         $sourcePath = public_path($imagePath);
-        $destPath = public_path($jpegPath);
+        $destPath = public_path($pngPath);
 
         try {
-            if (function_exists('imagecreatefromwebp')) {
-                $image = imagecreatefromwebp($sourcePath);
-                imagejpeg($image, $destPath, 90);
-                imagedestroy($image);
+            $image = Image::make($sourcePath);
+            $image->encode('png');
+            $image->save($destPath);
 
-                Log::info('Converted WebP to JPEG', [
-                    'source' => $imagePath,
-                    'destination' => $jpegPath,
-                ]);
-            } else {
-                copy($sourcePath, $destPath);
-                Log::warning('WebP conversion not available, copying as-is');
-            }
+            Log::info('Converted WebP to PNG for original', [
+                'source' => $imagePath,
+                'destination' => $pngPath,
+            ]);
         } catch (\Exception $e) {
-            Log::error('Failed to convert WebP to JPEG', [
+            Log::error('Failed to convert WebP to PNG', [
                 'source' => $imagePath,
                 'error' => $e->getMessage(),
             ]);
             return $imagePath;
         }
 
-        return $jpegPath;
+        return $pngPath;
     }
 
     protected function convertSvgToPng(string $imagePath): void
