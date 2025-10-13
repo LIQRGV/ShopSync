@@ -151,7 +151,8 @@ class DatabaseShopInfoFetcher implements ShopInfoFetcherInterface
                 if ($inputExt == 'webp') {
                     $updateData[$originalField] = $this->convertWebpToPng($imagePath);
                 } else {
-                    $updateData[$originalField] = $this->getOriginalImagePath($imagePath);
+                    $originalImagePath = str_replace('.webp', '', $imagePath);
+                    $updateData[$originalField] = $this->getOriginalImagePath($originalImagePath);
                 }
             } else if ($resultExt == 'svg') {
                 $this->convertSvgToPng($imagePath);
