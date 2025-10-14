@@ -6,8 +6,11 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Log;
 use TheDiamondBox\ShopSync\Services\ProductService;
+use TheDiamondBox\ShopSync\Services\ShopInfoService;
 use TheDiamondBox\ShopSync\Services\Contracts\ProductFetcherInterface;
+use TheDiamondBox\ShopSync\Services\Contracts\ShopInfoFetcherInterface;
 use TheDiamondBox\ShopSync\Services\ProductFetchers\ProductFetcherFactory;
+use TheDiamondBox\ShopSync\Services\ShopInfoFetchers\ShopInfoFetcherFactory;
 use TheDiamondBox\ShopSync\Models\Product;
 use TheDiamondBox\ShopSync\Observers\ProductObserver;
 
@@ -27,6 +30,11 @@ class ProductPackageServiceProvider extends ServiceProvider
         // Bind the ProductFetcherInterface
         $this->app->bind(ProductFetcherInterface::class, function ($app) {
             return ProductFetcherFactory::makeFromConfig();
+        });
+
+        // Bind the ShopInfoFetcherInterface
+        $this->app->bind(ShopInfoFetcherInterface::class, function ($app) {
+            return ShopInfoFetcherFactory::makeFromConfig();
         });
     }
 
@@ -168,6 +176,8 @@ class ProductPackageServiceProvider extends ServiceProvider
         return [
             ProductService::class,
             ProductFetcherInterface::class,
+            ShopInfoService::class,
+            ShopInfoFetcherInterface::class,
         ];
     }
 }

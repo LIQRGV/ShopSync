@@ -133,6 +133,17 @@ All endpoints are API-only and return JSON responses. The package does not inclu
 | POST | `/products/{id}/restore` | Restore soft-deleted product |
 | DELETE | `/products/{id}/force` | Permanently delete product |
 
+#### Shop Info Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/shop-info` | Get shop/business information |
+| PUT | `/shop-info` | Update shop info (full replace) |
+| PATCH | `/shop-info` | Update shop info (partial - prevents empty override) |
+| POST | `/shop-info/images` | Upload shop info images (logo, favicon, banners, etc.) |
+
+**Note**: Shop info is a singleton resource (single record). The PATCH endpoint prevents empty data from overriding existing values, solving the two-way sync issue.
+
 ### Query Parameters
 
 | Parameter | Type | Description |
@@ -225,13 +236,36 @@ All API responses follow a consistent JSON format:
 }
 ```
 
+#### Shop Info Response
+```json
+{
+  "data": {
+    "type": "shop-info",
+    "id": "1",
+    "attributes": {
+      "name": "My Store",
+      "email": "info@mystore.com",
+      "phone_number": "+1234567890",
+      "address_line_1": "123 Main St",
+      "city": "New York",
+      "country": "USA",
+      "logo": "uploads/logo.png",
+      "seo_title": "My Store - Best Products",
+      "stripe_payment": true,
+      ...
+    }
+  }
+}
+```
+
 ## Package Structure
 
 ```
 src/
 ├── Http/
 │   ├── Controllers/
-│   │   └── ProductController.php
+│   │   ├── ProductController.php
+│   │   └── ShopInfoController.php
 │   ├── Middleware/
 │   │   └── PackageAuth.php
 │   └── Requests/
@@ -241,14 +275,21 @@ src/
 │       └── SearchProductRequest.php
 ├── Services/
 │   ├── Contracts/
-│   │   └── ProductFetcherInterface.php
+│   │   ├── ProductFetcherInterface.php
+│   │   └── ShopInfoFetcherInterface.php
 │   ├── ProductFetchers/
 │   │   ├── DatabaseProductFetcher.php
 │   │   ├── ApiProductFetcher.php
 │   │   └── ProductFetcherFactory.php
-│   └── ProductService.php
+│   ├── ShopInfoFetchers/
+│   │   ├── DatabaseShopInfoFetcher.php
+│   │   ├── ApiShopInfoFetcher.php
+│   │   └── ShopInfoFetcherFactory.php
+│   ├── ProductService.php
+│   └── ShopInfoService.php
 ├── Models/
 │   ├── Product.php
+│   ├── ShopInfo.php
 │   ├── Category.php
 │   ├── Brand.php
 │   ├── Location.php
@@ -317,6 +358,124 @@ curl -u "username:your-secret-key" \
 ```
 
 ## Advanced Features
+
+### Shop Info Management
+
+The package includes comprehensive shop/business information management with dual-mode support:
+
+#### WL Mode (WhiteLabel)
+- Direct database access to `shop_info` table
+- Singleton pattern (single record)
+- Full CRUD operations
+
+#### WTM Mode (Watch the Market)
+- All shop info requests are proxied to WL via API
+- Client authentication using `client-id` header
+- Marketplace only stores auth-related client information
+
+#### Preventing Empty Override Issue
+The `PATCH /shop-info` endpoint solves the two-way sync problem by only updating non-empty values:
+
+```php
+// WL Mode - DatabaseShopInfoFetcher
+$shopInfo->updatePartial([
+    'name' => 'New Store Name',
+    'email' => '',  // Empty - will be ignored
+    'phone' => null // Null - will be ignored
+]);
+// Result: Only 'name' is updated, 'email' and 'phone' remain unchanged
+```
+
+```javascript
+// WTM Mode - Proxy to WL
+const response = await fetch('/api/v1/shop-info', {
+  method: 'PATCH',
+  headers: {
+    'Authorization': 'Bearer token',
+    'client-id': '123',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    name: 'New Store Name',
+    email: '', // Empty - will be filtered out
+  })
+});
+```
+
+#### Shop Info Fields
+The ShopInfo model includes 90+ fields organized by category:
+- **Business Info**: name, legal_name, email, phone, website, about_us, vat_no, company_no
+- **Address**: address_line_1, address_line_2, city, country, postal_code, gmap_address
+- **Registered Office**: registered_office_address_line_1, city, country, postal_code
+- **Financial**: bank_name, account_name, account_number, sort_code, bic, iban
+- **Social Media**: facebook, instagram, tiktok, youtube, whatsapp_link
+- **Media**: logo, original_logo, favicon, banner_1, banner_2, various images
+- **SEO**: seo_title, seo_description, seo_keywords, seo_author
+- **Twitter Card**: twitter_title, twitter_card, twitter_description, twitter_image
+- **Open Graph**: og_title, og_type, og_url, og_image, og_site_name, og_description
+- **Integrations**: Google Analytics, Trustpilot, Captcha, Smartsupp
+- **Payment Gateways**: Stripe, TakePayment, DNA Payment
+- **Product Settings**: sku_prefix_watches, sku_prefix_jewellery, catalogue_mode
+
+#### Shop Info Image Upload
+
+Upload images for shop branding and pages (logo, favicon, banners, etc.):
+
+**Supported Image Fields:**
+- `logo` - Primary shop logo (with `original_logo` for processing)
+- `favicon` - Website favicon (with `original_favicon`)
+- `banner_1` - Homepage banner 1
+- `banner_2` - Homepage banner 2
+- `sell_watch_image` - Sell watch page image
+- `valuations_additional_logo` - Additional logo for valuation PDFs
+
+**Image Requirements:**
+- Formats: JPEG, JPG, PNG, GIF, WebP, SVG
+- Max size: 7MB
+- Automatic processing for logo/favicon:
+  - WebP → JPEG conversion for `original_*` fields
+  - SVG → PNG conversion (if tools available)
+  - Dual storage: `uploads/shop_images` and `uploads/original_shop_images`
+
+**Usage Example:**
+```bash
+# WL Mode - Direct upload
+curl -X POST https://your-app.com/api/v1/shop-info/images \
+  -H "Authorization: Bearer your-api-key" \
+  -F "field=logo" \
+  -F "image=@/path/to/logo.png"
+
+# WTM Mode - Proxied to WL
+curl -X POST https://marketplace.com/api/v1/shop-info/images \
+  -H "Authorization: Bearer marketplace-token" \
+  -H "client-id: 123" \
+  -F "field=banner_1" \
+  -F "image=@/path/to/banner.jpg"
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "type": "shop-info",
+    "id": "1",
+    "attributes": {
+      "name": "My Store",
+      "logo": "uploads/shop_images/1234567890_logo.png",
+      "original_logo": "uploads/original_shop_images/1234567890_logo.png",
+      ...
+    }
+  }
+}
+```
+
+**Features:**
+- ✅ WL Mode: Direct filesystem storage with automatic format conversion
+- ✅ WTM Mode: Automatic proxy to WL server
+- ✅ Supports both primary and original_* fields for logo/favicon
+- ✅ SVG to PNG conversion (requires ImageMagick or rsvg-convert)
+- ✅ WebP to JPEG conversion for compatibility
+- ✅ JSON API response format
 
 ### Enhanced Product Model
 
