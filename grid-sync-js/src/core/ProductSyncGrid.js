@@ -318,7 +318,7 @@ export class ProductSyncGrid {
         if (!this.currentMeta) return;
 
         const totalRecords = this.currentMeta.pagination.total;
-        const displayedRows = this.gridApi?.getDisplayedRowCount() || 0;
+        const displayedRows = this.gridApi ? this.gridApi.getDisplayedRowCount() : 0;
 
         const totalElement = document.getElementById('totalRecords') ||
                             document.getElementById('shop-total-records');
@@ -451,6 +451,22 @@ export class ProductSyncGrid {
      * Setup event listeners for UI controls
      */
     setupEventListeners() {
+        // Download Template button
+        const downloadTemplateButton = document.getElementById('downloadTemplate');
+        if (downloadTemplateButton) {
+            downloadTemplateButton.addEventListener('click', () => {
+                this.downloadCsvTemplate();
+            });
+        }
+
+        // Import CSV button
+        const importCsvButton = document.getElementById('importCsv');
+        if (importCsvButton) {
+            importCsvButton.addEventListener('click', () => {
+                this.openCsvFilePicker();
+            });
+        }
+
         // Export button
         const exportButton = document.getElementById('exportGrid') ||
                            document.getElementById('exportShopGrid');
@@ -499,7 +515,7 @@ export class ProductSyncGrid {
 
             // Ctrl+C: Copy selected range
             if (event.ctrlKey && event.key === ProductGridConstants.KEYBOARD.COPY &&
-                this.selectionHandler?.hasSelection()) {
+                this.selectionHandler && this.selectionHandler.hasSelection()) {
                 event.preventDefault();
                 if (this.clipboardManager) {
                     this.clipboardManager.copyRangeToClipboard(
@@ -736,7 +752,7 @@ export class ProductSyncGrid {
                 });
 
                 if (rowNode) {
-                    const imageUrl = result.data.attributes?.image || result.data.image;
+                    const imageUrl = (result.data.attributes && result.data.attributes.image) || result.data.image;
                     this.dataAdapter.setValue(rowNode.data, 'image', imageUrl);
                     this.gridApi.refreshCells({ rowNodes: [rowNode] });
                 }
@@ -841,7 +857,7 @@ export class ProductSyncGrid {
         // Refresh grid to show new product
         this.loadProducts();
 
-        const productName = data.attributes?.name || data.name || 'Product';
+        const productName = (data.attributes && data.attributes.name) || data.name || 'Product';
         this.showNotification('success', `${productName} created via real-time sync`);
     }
 
@@ -886,7 +902,7 @@ export class ProductSyncGrid {
 
         this.loadProducts();
 
-        const count = data.products?.length || 0;
+        const count = (data.products && data.products.length) || 0;
         this.showNotification('info', `Bulk update: ${count} products updated via real-time sync`);
     }
 
@@ -895,7 +911,7 @@ export class ProductSyncGrid {
      */
     handleSSEServerError(data) {
         console.error('[SSE] Server error:', data);
-        this.showNotification('error', `Server error: ${data.message || 'Unknown error'}`);
+        this.showNotification('error', `Server error: ${(data && data.message) || 'Unknown error'}`);
     }
 
     /**
@@ -916,7 +932,7 @@ export class ProductSyncGrid {
                 this.showNotification('error', 'Real-time sync connection failed');
                 break;
             case 'error':
-                this.showNotification('error', `Real-time sync error: ${data?.message || 'Unknown error'}`);
+                this.showNotification('error', `Real-time sync error: ${(data && data.message) || 'Unknown error'}`);
                 break;
         }
     }
@@ -1001,6 +1017,114 @@ export class ProductSyncGrid {
      */
     refresh() {
         this.loadProducts();
+    }
+
+    /**
+     * Download CSV template with predefined headers
+     */
+    downloadCsvTemplate() {
+        const headers = [
+            'Product Name',
+            'SKU Prefix',
+            'SKU Value',
+            'SKU Custom Ref',
+            'Product Status',
+            'Sell Status',
+            'Purchase Date',
+            'Current Price',
+            'Sale Price',
+            'Trade Price',
+            'VAT Scheme',
+            'Description',
+            'Category',
+            'Brand',
+            'Supplier',
+            'SEO Title',
+            'SEO Keywords',
+            'SEO Description',
+            'URL Slug'
+        ];
+
+        // Create CSV content
+        const csvContent = headers.join(',') + '\n';
+
+        // Create blob and download
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'product_import_template.csv');
+        link.style.visibility = 'hidden';
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        this.showNotification('success', 'CSV template downloaded successfully');
+    }
+
+    /**
+     * Open CSV file picker for import
+     */
+    openCsvFilePicker() {
+        // Create hidden file input
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.csv';
+        fileInput.style.display = 'none';
+
+        // Handle file selection
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                this.handleCsvImport(file);
+            }
+            // Remove input after use
+            fileInput.remove();
+        };
+
+        // Handle cancel (when user closes file picker without selecting)
+        fileInput.oncancel = () => {
+            fileInput.remove();
+        };
+
+        // Trigger file picker
+        document.body.appendChild(fileInput);
+        fileInput.click();
+    }
+
+    /**
+     * Handle CSV import
+     */
+    async handleCsvImport(file) {
+        // Validate file type
+        if (!file.name.endsWith('.csv')) {
+            this.showNotification('error', 'Please select a valid CSV file');
+            return;
+        }
+
+        try {
+            // Show uploading notification
+            this.showNotification('info', 'Importing CSV file...');
+
+            // Create form data
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Upload to API endpoint using apiClient
+            const result = await this.apiClient.importProducts(formData);
+
+            // Show success message
+            this.showNotification('success', result.message || 'CSV imported successfully!');
+
+            // Refresh the grid to show imported data
+            this.refresh();
+
+        } catch (error) {
+            console.error('CSV import error:', error);
+            this.showNotification('error', `Import failed: ${error.message}`);
+        }
     }
 
     /**

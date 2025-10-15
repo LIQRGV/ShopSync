@@ -38,14 +38,17 @@ class DatabaseProductFetcher implements ProductFetcherInterface
 
     public function update($id, array $data)
     {
-        $product = Product::findOrFail($id);
+        // Use withoutGlobalScopes() to bypass any global scopes that might interfere
+        $product = Product::withoutGlobalScopes()->findOrFail($id);
         $product->update($data);
         return $product->fresh();
     }
 
     public function delete($id)
     {
-        Product::findOrFail($id)->delete();
+        // Use withoutGlobalScopes() to bypass any global scopes that might interfere
+        // (e.g., App\Product has global scopes that add extra query conditions)
+        return Product::withoutGlobalScopes()->findOrFail($id)->delete();
     }
 
     public function restore($id)
@@ -410,8 +413,8 @@ class DatabaseProductFetcher implements ProductFetcherInterface
      */
     public function uploadProductImage($id, $file)
     {
-        // Try to find with query builder for debugging
-        $product = Product::findOrFail($id);
+        // Use withoutGlobalScopes() to bypass any global scopes that might interfere
+        $product = Product::withoutGlobalScopes()->findOrFail($id);
 
         // Store the uploaded image (only to original_image directory)
         $originalImagePath = $this->storeProductImage($file);

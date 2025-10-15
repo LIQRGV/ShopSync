@@ -28,7 +28,7 @@
   "author": "TheDiamondBox",
   "license": "MIT",
   "peerDependencies": {
-    "ag-grid-community": ">=30.0.0"
+    "ag-grid-community": ">=28.0.0"
   },
   "publishConfig": {
     "@thediamondbox:registry": "https://registry.npmjs.org",

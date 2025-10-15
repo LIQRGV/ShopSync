@@ -122,7 +122,16 @@ export class ProductGridApiClient {
             const processedValue = this.processFieldValue(fieldName, value);
 
             // Transform field name and value for API based on data mode
-            const updateData = this.dataAdapter.transformForApi(fieldName, processedValue);
+            const fieldData = this.dataAdapter.transformForApi(fieldName, processedValue);
+
+            // Wrap in JSON:API format (required by backend)
+            const updateData = {
+                data: {
+                    type: 'products',
+                    id: String(productId),
+                    attributes: fieldData
+                }
+            };
 
             const response = await fetch(`${this.baseUrl}/${productId}`, {
                 method: ProductGridConstants.API_CONFIG.METHODS.PUT,
@@ -218,6 +227,7 @@ export class ProductGridApiClient {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
+            // API now returns 200 OK with JSON body
             return await response.json();
         } catch (error) {
             throw new Error(`Failed to delete product: ${error.message}`);

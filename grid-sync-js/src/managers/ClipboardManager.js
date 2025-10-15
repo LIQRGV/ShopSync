@@ -85,11 +85,39 @@ export class ClipboardManager {
                 clipboardData += rowData.join(ProductGridConstants.CLIPBOARD.DELIMITERS.TAB);
             });
 
-            await navigator.clipboard.writeText(clipboardData);
-            this.showNotification('success', 'Selected cells copied to clipboard');
+            // Try modern Clipboard API first
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(clipboardData);
+                this.showNotification('success', 'Selected cells copied to clipboard');
+            } else {
+                // Fallback to older method for browsers without Clipboard API
+                const textArea = document.createElement('textarea');
+                textArea.value = clipboardData;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+
+                try {
+                    const successful = document.execCommand('copy');
+                    document.body.removeChild(textArea);
+
+                    if (successful) {
+                        this.showNotification('success', 'Selected cells copied to clipboard');
+                    } else {
+                        throw new Error('Copy command failed');
+                    }
+                } catch (fallbackError) {
+                    document.body.removeChild(textArea);
+                    throw fallbackError;
+                }
+            }
 
         } catch (error) {
-            this.showNotification('error', 'Failed to copy to clipboard');
+            console.error('Copy to clipboard error:', error);
+            this.showNotification('error', `Failed to copy to clipboard: ${error.message || 'Unknown error'}`);
         }
     }
 

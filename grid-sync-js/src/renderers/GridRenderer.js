@@ -335,7 +335,9 @@ export class GridRenderer {
      */
     imageCellRenderer(params) {
         const imageUrl = this.dataAdapter.getValue(params.data, 'image');
-        const baseUrl = window.ShopProductGridConfig?.clientBaseUrl || window.ProductGridConfig?.baseUrl || this.baseUrl;
+        const baseUrl = (window.ShopProductGridConfig && window.ShopProductGridConfig.clientBaseUrl) ||
+                       (window.ProductGridConfig && window.ProductGridConfig.baseUrl) ||
+                       this.baseUrl;
 
         if (imageUrl && imageUrl !== 'null') {
             // Check if imageUrl is already a full URL
@@ -364,7 +366,9 @@ export class GridRenderer {
     nameCellRenderer(params) {
         const productId = params.data.id;
         const name = this.dataAdapter.getValue(params.data, 'name') || 'Unnamed Product';
-        const baseUrl = window.ShopProductGridConfig?.baseUrl || window.ProductGridConfig?.baseUrl || this.baseUrl;
+        const baseUrl = (window.ShopProductGridConfig && window.ShopProductGridConfig.baseUrl) ||
+                       (window.ProductGridConfig && window.ProductGridConfig.baseUrl) ||
+                       this.baseUrl;
         return `<a href="${baseUrl}/admin/products/${productId}" target="_blank" class="text-decoration-none" title="${name}" style="color: #727cf5;">${name}</a>`;
     }
 

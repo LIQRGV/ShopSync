@@ -444,10 +444,3 @@ export class SelectionHandler {
         // Remove event listeners if needed
     }
 }
-
-// Export for ES6 modules if needed
-if (typeof module !== "undefined" && module.exports) {
-    module.exports = { SelectionHandler };
-}
-    module.exports = SelectionHandler;
-}

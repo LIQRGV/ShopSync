@@ -57,8 +57,9 @@ export class GridDataAdapter {
         const mode = this.mode === 'auto' ? this.detectDataMode(data) : this.mode;
 
         if (mode === 'nested') {
-            // Handle nested structure
-            return this.getNestedValue(data, fieldPath);
+            // Handle nested structure - add attributes prefix if not present
+            const fullPath = fieldPath.startsWith('attributes.') ? fieldPath : 'attributes.' + fieldPath;
+            return this.getNestedValue(data, fullPath);
         } else {
             // Handle flat structure - remove 'attributes.' prefix if present
             const cleanPath = fieldPath.replace(/^attributes\./, '');
@@ -78,7 +79,9 @@ export class GridDataAdapter {
         const mode = this.mode === 'auto' ? this.detectDataMode(data) : this.mode;
 
         if (mode === 'nested') {
-            this.setNestedValue(data, fieldPath, value);
+            // Handle nested structure - add attributes prefix if not present
+            const fullPath = fieldPath.startsWith('attributes.') ? fieldPath : 'attributes.' + fieldPath;
+            this.setNestedValue(data, fullPath, value);
         } else {
             // Handle flat structure - remove 'attributes.' prefix if present
             const cleanPath = fieldPath.replace(/^attributes\./, '');
@@ -159,7 +162,7 @@ export class GridDataAdapter {
         } else {
             // Keep nested structure, ensure ID is at root level
             return dataArray.map(item => {
-                if (item.id === undefined && item.attributes?.id) {
+                if (item.id === undefined && item.attributes && item.attributes.id) {
                     return { id: item.attributes.id, ...item };
                 }
                 return item;
