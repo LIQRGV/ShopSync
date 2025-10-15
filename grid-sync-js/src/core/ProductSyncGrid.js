@@ -1,0 +1,1033 @@
+/**
+ * ProductSyncGrid - Unified AG Grid orchestrator for product synchronization
+ * Supports both nested and flat data structures via GridDataAdapter
+ *
+ * @module ProductSyncGrid
+ */
+import { GridDataAdapter } from './GridDataAdapter.js';
+import { ProductGridApiClient } from '../api/ProductGridApiClient.js';
+import { GridRenderer } from '../renderers/GridRenderer.js';
+import { ClipboardManager } from '../managers/ClipboardManager.js';
+import { SelectionHandler } from '../managers/SelectionHandler.js';
+import { ProductSSEClient } from '../realtime/SSEClient.js';
+import { ProductGridConstants } from '../constants/ProductGridConstants.js';
+
+export class ProductSyncGrid {
+    /**
+     * @param {Object} config - Configuration object
+     * @param {string} config.apiEndpoint - API endpoint URL
+     * @param {string} [config.dataMode='auto'] - Data structure mode: 'nested', 'flat', or 'auto'
+     * @param {string} [config.gridElementId='#productGrid'] - Grid container selector
+     * @param {string} [config.clientId] - Client ID for multi-tenant filtering
+     * @param {string} [config.clientBaseUrl=''] - Base URL for client assets
+     * @param {boolean} [config.enableSSE=true] - Enable Server-Sent Events
+     * @param {string} [config.sseEndpoint='/api/v1/sse/events'] - SSE endpoint URL
+     */
+    constructor(config) {
+        // Configuration
+        this.config = {
+            dataMode: 'auto',
+            gridElementId: '#productGrid',
+            enableSSE: true,
+            sseEndpoint: '/api/v1/sse/events',
+            clientId: null,
+            clientBaseUrl: '',
+            ...config
+        };
+
+        // Grid APIs
+        this.gridApi = null;
+        this.columnApi = null;
+
+        // State
+        this.selectedRows = [];
+        this.currentData = null;
+        this.currentMeta = null;
+        this.initialColumnState = null;
+        this.isInitialized = false;
+
+        // Click tracking for enhanced editing UX
+        this.lastClickedCell = null;
+        this.lastClickTime = 0;
+        this.CLICK_EDIT_MIN_DELAY = 300; // Minimum delay to avoid fast double-click conflicts (ms)
+        this.CLICK_EDIT_MAX_DELAY = 3000; // Maximum delay for delayed edit trigger (ms)
+
+        // Components
+        this.dataAdapter = null;
+        this.apiClient = null;
+        this.clipboardManager = null;
+        this.selectionHandler = null;
+        this.gridRenderer = null;
+        this.sseClient = null;
+        this.sseConnectionStatus = null;
+
+        // Initialize
+        this.initializeComponents();
+    }
+
+    /**
+     * Initialize all modular components
+     */
+    initializeComponents() {
+        // Initialize data adapter first
+        this.dataAdapter = new GridDataAdapter(this.config.dataMode);
+
+        // Initialize API client with data adapter
+        this.apiClient = new ProductGridApiClient({
+            baseUrl: this.config.apiEndpoint,
+            clientId: this.config.clientId,
+            clientBaseUrl: this.config.clientBaseUrl,
+            dataAdapter: this.dataAdapter,
+            dataMode: this.config.dataMode
+        });
+
+        // Initialize grid renderer with data adapter
+        this.gridRenderer = new GridRenderer({
+            baseUrl: this.config.clientBaseUrl || this.config.apiEndpoint,
+            dataAdapter: this.dataAdapter,
+            currentData: null
+        });
+
+        // Initialize SSE if enabled
+        if (this.config.enableSSE) {
+            this.initializeSSE();
+        }
+    }
+
+    /**
+     * Initialize AG Grid with configuration
+     */
+    initializeGrid() {
+        if (this.isInitialized) {
+            // Grid already initialized, just refresh data
+            this.loadProducts();
+            return;
+        }
+
+        const gridOptions = {
+            columnDefs: this.gridRenderer.getColumnDefs(),
+            defaultColDef: this.gridRenderer.getDefaultColDef(),
+            ...ProductGridConstants.AG_GRID_OPTIONS,
+            paginationPageSize: ProductGridConstants.GRID_CONFIG.PAGINATION_SIZE,
+
+            onGridReady: (params) => {
+                this.gridApi = params.api;
+                this.columnApi = params.columnApi;
+
+                // Initialize remaining components that need grid APIs
+                this.clipboardManager = new ClipboardManager(this.gridApi, this.columnApi);
+                this.clipboardManager.setNotificationCallback((type, message) =>
+                    this.showNotification(type, message)
+                );
+
+                this.selectionHandler = new SelectionHandler(this.gridApi, this.columnApi);
+                this.selectionHandler.setNotificationCallback((type, message) =>
+                    this.showNotification(type, message)
+                );
+
+                // Setup UI event listeners and keyboard shortcuts
+                this.setupEventListeners();
+                this.setupKeyboardShortcuts();
+
+                // Load initial data
+                this.loadProducts();
+
+                // Setup post-initialization tasks
+                setTimeout(() => {
+                    this.initialColumnState = this.columnApi.getColumnState();
+                    this.enforceColumnOrder();
+                }, 500);
+
+                this.isInitialized = true;
+            },
+
+            onSelectionChanged: () => {
+                this.selectedRows = this.gridApi.getSelectedRows();
+                this.updateSelectionInfo();
+            },
+
+            onFilterChanged: () => {
+                this.updateStats();
+            },
+
+            onCellValueChanged: (event) => {
+                this.handleCellEdit(event);
+            },
+
+            onCellClicked: (event) => {
+                // Handle image cell clicks
+                if (event.colDef.colId === 'image') {
+                    const productId = event.data.id;
+                    const imageUrl = this.dataAdapter.getValue(event.data, 'image');
+                    this.openImagePicker(productId, imageUrl);
+                    return;
+                }
+
+                if (this.selectionHandler) {
+                    this.selectionHandler.handleCellClick(event);
+                }
+
+                // Enhanced editing UX: Handle delayed edit clicks
+                this.handleEnhancedCellClick(event);
+            },
+
+            onCellMouseDown: (event) => {
+                if (this.selectionHandler) {
+                    this.selectionHandler.handleCellMouseDown(event);
+                }
+            },
+
+            onCellMouseOver: (event) => {
+                if (this.selectionHandler) {
+                    this.selectionHandler.handleCellMouseOver(event);
+                }
+            },
+
+            getRowId: (params) => params.data.id
+        };
+
+        // Create AG Grid instance
+        const gridElement = document.querySelector(this.config.gridElementId);
+        if (gridElement && typeof agGrid !== 'undefined') {
+            new agGrid.Grid(gridElement, gridOptions);
+        } else {
+            console.error(`Grid element "${this.config.gridElementId}" not found or AG Grid not loaded`);
+        }
+    }
+
+    /**
+     * Load products from API
+     */
+    async loadProducts(page = 1) {
+        try {
+            const response = await this.apiClient.loadProducts(page, ProductGridConstants.GRID_CONFIG.PAGINATION_SIZE);
+
+            this.currentData = response;
+            this.currentMeta = response.meta;
+
+            // Update renderer with new data (for relationships lookup in nested mode)
+            this.gridRenderer.updateCurrentData(response);
+
+            // Transform data for grid display using data adapter
+            const gridData = this.apiClient.transformApiData(response);
+
+            // Set row data
+            if (this.gridApi) {
+                this.gridApi.setRowData(gridData);
+                this.updateStats();
+                this.updatePaginationInfo(page);
+            }
+
+        } catch (error) {
+            this.showNotification('error', error.message);
+        }
+    }
+
+    /**
+     * Handle cell edit operations
+     */
+    async handleCellEdit(event) {
+        const { data, colDef, newValue, oldValue } = event;
+
+        if (newValue === oldValue) {
+            return;
+        }
+
+        try {
+            const productId = data.id;
+
+            // Extract field name from colDef.field, handling both nested and flat paths
+            let fieldName = colDef.field;
+            if (fieldName.startsWith('attributes.')) {
+                fieldName = fieldName.replace('attributes.', '');
+            }
+
+            const result = await this.apiClient.updateProduct(productId, fieldName, newValue);
+
+            // Update local data with server response
+            if (result.data) {
+                // Use dataAdapter to update the field
+                const updatedFields = result.data.attributes || result.data;
+                Object.keys(updatedFields).forEach(key => {
+                    this.dataAdapter.setValue(data, key, updatedFields[key]);
+                });
+            }
+
+            // Refresh the cell
+            this.gridApi.refreshCells({ rowNodes: [event.node] });
+
+        } catch (error) {
+            // Revert the change
+            this.dataAdapter.setValue(data, fieldName, oldValue);
+
+            this.gridApi.refreshCells({ rowNodes: [event.node] });
+            this.showNotification('error', error.message);
+        }
+    }
+
+    /**
+     * Handle enhanced cell click for improved editing UX
+     * Allows editing through: 1) fast double-click, 2) click to select then click again
+     */
+    handleEnhancedCellClick(event) {
+        // Only process clicks on editable cells
+        if (!event.colDef.editable) {
+            return;
+        }
+
+        const cellKey = `${event.rowIndex}-${event.column.colId}`;
+        const currentTime = Date.now();
+        const isDropdownField = typeof event.colDef.cellEditor === 'function' ||
+                                event.colDef.cellEditor === 'agSelectCellEditor';
+
+        // Check if this is a delayed second click on the same cell
+        if (this.lastClickedCell === cellKey &&
+            (currentTime - this.lastClickTime) > this.CLICK_EDIT_MIN_DELAY &&
+            (currentTime - this.lastClickTime) < this.CLICK_EDIT_MAX_DELAY) {
+
+            // For dropdown fields, add a small delay to ensure proper event handling
+            if (isDropdownField) {
+                setTimeout(() => {
+                    this.gridApi.startEditingCell({
+                        rowIndex: event.rowIndex,
+                        colKey: event.column.colId
+                    });
+                }, 50);
+            } else {
+                // Start editing the cell programmatically
+                this.gridApi.startEditingCell({
+                    rowIndex: event.rowIndex,
+                    colKey: event.column.colId
+                });
+            }
+
+            // Reset tracking to prevent accidental re-triggers
+            this.lastClickedCell = null;
+            this.lastClickTime = 0;
+        } else {
+            // Update tracking for potential future edit trigger
+            this.lastClickedCell = cellKey;
+            this.lastClickTime = currentTime;
+        }
+    }
+
+    /**
+     * Update grid statistics
+     */
+    updateStats() {
+        if (!this.currentMeta) return;
+
+        const totalRecords = this.currentMeta.pagination.total;
+        const displayedRows = this.gridApi?.getDisplayedRowCount() || 0;
+
+        const totalElement = document.getElementById('totalRecords') ||
+                            document.getElementById('shop-total-records');
+        const filteredElement = document.getElementById('filteredRecords') ||
+                               document.getElementById('shop-filtered-records');
+
+        if (totalElement) {
+            totalElement.textContent = `${totalRecords} total products`;
+        }
+
+        if (filteredElement && displayedRows !== this.currentMeta.pagination.count) {
+            filteredElement.textContent = `${displayedRows} filtered`;
+        } else if (filteredElement) {
+            filteredElement.textContent = '';
+        }
+    }
+
+    /**
+     * Update pagination information
+     */
+    updatePaginationInfo(currentPage) {
+        if (!this.currentMeta) return;
+
+        const pagination = this.currentMeta.pagination;
+        const currentPageElement = document.getElementById('currentPage') ||
+                                   document.getElementById('shop-current-page');
+
+        if (currentPageElement) {
+            currentPageElement.textContent = `Page ${currentPage} of ${pagination.total_pages}`;
+        }
+
+        this.createPaginationControls(currentPage, pagination.total_pages);
+    }
+
+    /**
+     * Create pagination controls
+     */
+    createPaginationControls(currentPage, totalPages) {
+        // Determine pagination ID based on grid element
+        const paginationId = this.config.gridElementId.includes('shop') ?
+                           'shopCustomPagination' : 'customPagination';
+
+        // Remove existing pagination
+        const existingPagination = document.getElementById(paginationId);
+        if (existingPagination) {
+            existingPagination.remove();
+        }
+
+        if (totalPages <= 1) return;
+
+        // Create new pagination
+        const paginationDiv = document.createElement('div');
+        paginationDiv.id = paginationId;
+        paginationDiv.className = 'mt-3 d-flex justify-content-center';
+
+        let paginationHTML = '<nav><ul class="pagination pagination-sm">';
+
+        // Previous button
+        if (currentPage > 1) {
+            paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="window.productGrid.loadProducts(${currentPage - 1}); return false;">Previous</a></li>`;
+        }
+
+        // Page numbers
+        const startPage = Math.max(1, currentPage - 2);
+        const endPage = Math.min(totalPages, currentPage + 2);
+
+        for (let i = startPage; i <= endPage; i++) {
+            const activeClass = i === currentPage ? 'active' : '';
+            paginationHTML += `<li class="page-item ${activeClass}"><a class="page-link" href="#" onclick="window.productGrid.loadProducts(${i}); return false;">${i}</a></li>`;
+        }
+
+        // Next button
+        if (currentPage < totalPages) {
+            paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="window.productGrid.loadProducts(${currentPage + 1}); return false;">Next</a></li>`;
+        }
+
+        paginationHTML += '</ul></nav>';
+        paginationDiv.innerHTML = paginationHTML;
+
+        // Append after grid container
+        const gridContainer = document.querySelector('.ag-grid-container');
+        if (gridContainer) {
+            gridContainer.appendChild(paginationDiv);
+        }
+    }
+
+    /**
+     * Update selection information display
+     */
+    updateSelectionInfo() {
+        const count = this.selectedRows.length;
+        const selectedElement = document.getElementById('selectedRecords') ||
+                               document.getElementById('shop-selected-records');
+
+        if (selectedElement) {
+            selectedElement.textContent = `${count} selected`;
+        }
+    }
+
+    /**
+     * Enforce column order (prevents accidental column reordering)
+     */
+    enforceColumnOrder() {
+        if (!this.columnApi || !this.initialColumnState) {
+            return;
+        }
+
+        const allColumns = this.columnApi.getAllGridColumns();
+        const initialPositions = {};
+
+        this.initialColumnState.forEach((col, index) => {
+            initialPositions[col.colId] = index;
+        });
+
+        const sortedColumns = allColumns.sort((a, b) => {
+            const aPos = initialPositions[a.getColId()] || 999;
+            const bPos = initialPositions[b.getColId()] || 999;
+            return aPos - bPos;
+        });
+
+        sortedColumns.forEach((col, index) => {
+            const currentIndex = this.columnApi.getAllGridColumns().indexOf(col);
+            if (currentIndex !== index) {
+                this.columnApi.moveColumn(col, index);
+            }
+        });
+    }
+
+    /**
+     * Setup event listeners for UI controls
+     */
+    setupEventListeners() {
+        // Export button
+        const exportButton = document.getElementById('exportGrid') ||
+                           document.getElementById('exportShopGrid');
+        if (exportButton) {
+            exportButton.addEventListener('click', () => {
+                if (this.clipboardManager) {
+                    this.clipboardManager.exportToCsv();
+                }
+            });
+        }
+
+        // Copy range button
+        const copyButton = document.getElementById('copyRange') ||
+                          document.getElementById('copyShopRange');
+        if (copyButton) {
+            copyButton.addEventListener('click', () => {
+                if (this.clipboardManager && this.selectionHandler) {
+                    this.clipboardManager.copyRangeToClipboard(
+                        this.selectionHandler.getSelectedCells()
+                    );
+                }
+            });
+        }
+
+        // Clear range button
+        const clearButton = document.getElementById('clearRange') ||
+                           document.getElementById('clearShopRange');
+        if (clearButton) {
+            clearButton.addEventListener('click', () => {
+                if (this.selectionHandler) {
+                    this.selectionHandler.clearSelectedRanges();
+                }
+            });
+        }
+    }
+
+    /**
+     * Setup keyboard shortcuts
+     */
+    setupKeyboardShortcuts() {
+        document.addEventListener('keydown', (event) => {
+            const gridContainer = document.querySelector(this.config.gridElementId);
+            if (!gridContainer || !gridContainer.contains(document.activeElement)) {
+                return;
+            }
+
+            // Ctrl+C: Copy selected range
+            if (event.ctrlKey && event.key === ProductGridConstants.KEYBOARD.COPY &&
+                this.selectionHandler?.hasSelection()) {
+                event.preventDefault();
+                if (this.clipboardManager) {
+                    this.clipboardManager.copyRangeToClipboard(
+                        this.selectionHandler.getSelectedCells()
+                    );
+                }
+                return;
+            }
+
+            // Ctrl+V: Paste from clipboard
+            if (event.ctrlKey && event.key === ProductGridConstants.KEYBOARD.PASTE) {
+                event.preventDefault();
+                this.handleClipboardPaste();
+                return;
+            }
+        });
+    }
+
+    /**
+     * Handle clipboard paste
+     */
+    async handleClipboardPaste() {
+        if (!this.clipboardManager || !this.selectionHandler) {
+            return;
+        }
+
+        try {
+            const parsedData = await this.clipboardManager.handleClipboardPaste();
+            if (!parsedData) return;
+
+            const startPosition = this.clipboardManager.getPasteStartPosition(
+                this.selectionHandler.getSelectedCells()
+            );
+            if (!startPosition) {
+                this.showNotification('error', 'Please select a cell to start pasting from');
+                return;
+            }
+
+            const validation = this.clipboardManager.validatePasteOperation(
+                parsedData, startPosition
+            );
+            if (!validation.valid) {
+                this.showNotification('error', validation.error);
+                return;
+            }
+
+            const { updateOperations, affectedCells } =
+                this.clipboardManager.preparePasteOperations(parsedData, startPosition);
+
+            if (updateOperations.length === 0) {
+                this.showNotification('error', 'No editable cells found in paste range');
+                return;
+            }
+
+            // Execute updates using API client
+            const result = await this.apiClient.bulkUpdateProducts(updateOperations);
+
+            // Update row data locally before refreshing
+            updateOperations.forEach(op => {
+                // Extract field name and update using dataAdapter
+                let fieldName = op.gridFieldName;
+                if (fieldName.startsWith('attributes.')) {
+                    fieldName = fieldName.replace('attributes.', '');
+                }
+                this.dataAdapter.setValue(op.rowNode.data, fieldName, op.newValue);
+            });
+
+            // Refresh affected cells
+            this.gridApi.refreshCells({
+                rowNodes: updateOperations.map(op => op.rowNode),
+                force: true
+            });
+
+            // Show summary
+            if (result.errorCount === 0) {
+                this.showNotification('success',
+                    `Successfully updated ${result.successCount} cells`);
+            } else {
+                this.showNotification('error',
+                    `Updated ${result.successCount} cells, ${result.errorCount} failed`);
+            }
+
+        } catch (error) {
+            this.showNotification('error', `Paste operation failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Show notification toast
+     */
+    showNotification(type, message) {
+        const toast = document.createElement('div');
+        const config = ProductGridConstants.TOAST_CONFIG;
+
+        // Limit notifications to maximum of 3
+        const existingToasts = document.querySelectorAll('.product-grid-toast');
+        if (existingToasts.length >= 3) {
+            const oldestToast = existingToasts[0];
+            if (oldestToast.updateInterval) {
+                clearInterval(oldestToast.updateInterval);
+            }
+            oldestToast.remove();
+            this.repositionNotifications();
+        }
+
+        const baseClasses = config.CLASSES[type.toUpperCase()] || config.CLASSES.INFO;
+        toast.className = `${baseClasses} product-grid-toast`;
+
+        const currentToasts = document.querySelectorAll('.product-grid-toast');
+        let topPosition = 20;
+        currentToasts.forEach(existingToast => {
+            topPosition += existingToast.offsetHeight + 10;
+        });
+
+        toast.style.cssText = `top: ${topPosition}px; right: 20px; z-index: 9999; min-width: 300px; transition: top 0.3s ease;`;
+
+        const typeText = type.charAt(0).toUpperCase() + type.slice(1);
+        toast.innerHTML = `
+            <strong>${typeText}:</strong> ${message}
+            <br>
+            <small class="text-muted toast-timestamp" style="font-size: 0.85em;">just now</small>
+            <button type="button" class="close ml-2" data-dismiss-toast>
+                <span>&times;</span>
+            </button>
+        `;
+
+        toast.createdAt = Date.now();
+
+        const closeButton = toast.querySelector('[data-dismiss-toast]');
+        closeButton.addEventListener('click', () => {
+            if (toast.updateInterval) {
+                clearInterval(toast.updateInterval);
+            }
+            toast.remove();
+            this.repositionNotifications();
+        });
+
+        document.body.appendChild(toast);
+
+        const timestampElement = toast.querySelector('.toast-timestamp');
+        toast.updateInterval = setInterval(() => {
+            const elapsed = Date.now() - toast.createdAt;
+            timestampElement.textContent = this.formatElapsedTime(elapsed);
+        }, 10000);
+    }
+
+    /**
+     * Format elapsed time
+     */
+    formatElapsedTime(milliseconds) {
+        const seconds = Math.floor(milliseconds / 1000);
+
+        if (seconds < 10) {
+            return 'just now';
+        } else if (seconds < 60) {
+            return `${seconds} seconds ago`;
+        } else if (seconds < 3600) {
+            const minutes = Math.floor(seconds / 60);
+            return minutes === 1 ? '1 minute ago' : `${minutes} minutes ago`;
+        } else {
+            const hours = Math.floor(seconds / 3600);
+            return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+        }
+    }
+
+    /**
+     * Reposition notifications
+     */
+    repositionNotifications() {
+        const activeToasts = document.querySelectorAll('.product-grid-toast');
+        let currentTop = 20;
+
+        activeToasts.forEach(toast => {
+            toast.style.top = `${currentTop}px`;
+            currentTop += toast.offsetHeight + 10;
+        });
+    }
+
+    /**
+     * Open image picker for product
+     */
+    openImagePicker(productId, currentImageUrl) {
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/jpeg,image/png,image/jpg,image/gif,image/webp';
+        fileInput.style.display = 'none';
+
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                this.handleImageUpload(productId, file, currentImageUrl);
+            }
+            fileInput.remove();
+        };
+
+        fileInput.oncancel = () => {
+            fileInput.remove();
+        };
+
+        document.body.appendChild(fileInput);
+        fileInput.click();
+    }
+
+    /**
+     * Handle image upload for product
+     */
+    async handleImageUpload(productId, file, currentImageUrl) {
+        const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/gif', 'image/webp'];
+        if (!validTypes.includes(file.type)) {
+            this.showNotification('error', 'Please select a valid image file (JPEG, PNG, GIF, or WebP)');
+            return;
+        }
+
+        const maxSize = 5 * 1024 * 1024;
+        if (file.size > maxSize) {
+            this.showNotification('error', 'File size must be less than 5MB');
+            return;
+        }
+
+        try {
+            this.showNotification('info', 'Uploading image...');
+
+            const formData = new FormData();
+            formData.append('image', file);
+
+            const result = await this.apiClient.uploadProductImage(productId, formData);
+
+            if (result.data) {
+                let rowNode = null;
+                this.gridApi.forEachNode((node) => {
+                    if (node.data && node.data.id === productId) {
+                        rowNode = node;
+                    }
+                });
+
+                if (rowNode) {
+                    const imageUrl = result.data.attributes?.image || result.data.image;
+                    this.dataAdapter.setValue(rowNode.data, 'image', imageUrl);
+                    this.gridApi.refreshCells({ rowNodes: [rowNode] });
+                }
+            }
+
+            this.showNotification('success', 'Image uploaded successfully!');
+
+        } catch (error) {
+            console.error('Image upload error:', error);
+            this.showNotification('error', `Upload failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Initialize SSE client for real-time updates
+     */
+    initializeSSE() {
+        if (!window.EventSource) {
+            console.warn('[SSE] EventSource is not supported in this browser');
+            return;
+        }
+
+        if (typeof ProductSSEClient === 'undefined') {
+            console.warn('[SSE] ProductSSEClient not loaded, SSE features disabled');
+            return;
+        }
+
+        try {
+            this.sseClient = new ProductSSEClient(
+                this.config.sseEndpoint,
+                this.config.clientId
+            );
+
+            this.setupSSEEventHandlers();
+            this.sseClient.connect();
+            this.createSSEStatusIndicator();
+
+        } catch (error) {
+            console.error('[SSE] Failed to initialize SSE client:', error);
+        }
+    }
+
+    /**
+     * Setup SSE event handlers
+     */
+    setupSSEEventHandlers() {
+        if (!this.sseClient) return;
+
+        this.sseClient.on('product.updated', (data) => this.handleSSEProductUpdate(data));
+        this.sseClient.on('product.created', (data) => this.handleSSEProductCreated(data));
+        this.sseClient.on('product.deleted', (data) => this.handleSSEProductDeleted(data));
+        this.sseClient.on('product.imported', (data) => this.handleSSEProductImported(data));
+        this.sseClient.on('products.bulk.updated', (data) => this.handleSSEBulkUpdate(data));
+        this.sseClient.on('server.error', (data) => this.handleSSEServerError(data));
+        this.sseClient.onConnectionStateChange((state, data) =>
+            this.handleSSEConnectionChange(state, data)
+        );
+    }
+
+    /**
+     * Handle SSE product update event
+     */
+    handleSSEProductUpdate(data) {
+        if (!this.gridApi) return;
+
+        const productId = data.product_id || data.id;
+        let rowNode = null;
+
+        this.gridApi.forEachNode((node) => {
+            if (node.data && node.data.id === productId) {
+                rowNode = node;
+            }
+        });
+
+        if (rowNode) {
+            const productData = data.product || data.attributes || data;
+
+            // Update fields using dataAdapter
+            Object.keys(productData).forEach(key => {
+                this.dataAdapter.setValue(rowNode.data, key, productData[key]);
+            });
+
+            rowNode.setData(rowNode.data);
+
+            this.gridApi.flashCells({
+                rowNodes: [rowNode],
+                flashDelay: 300,
+                fadeDelay: 1000
+            });
+
+            const productName = this.dataAdapter.getValue(rowNode.data, 'name') || 'Product';
+            this.showNotification('info', `${productName} updated via real-time sync`);
+        }
+    }
+
+    /**
+     * Handle SSE product created event
+     */
+    handleSSEProductCreated(data) {
+        if (!this.gridApi) return;
+
+        // Refresh grid to show new product
+        this.loadProducts();
+
+        const productName = data.attributes?.name || data.name || 'Product';
+        this.showNotification('success', `${productName} created via real-time sync`);
+    }
+
+    /**
+     * Handle SSE product deleted event
+     */
+    handleSSEProductDeleted(data) {
+        if (!this.gridApi) return;
+
+        let rowToRemove = null;
+        this.gridApi.forEachNode((node) => {
+            if (node.data && node.data.id === data.id) {
+                rowToRemove = node.data;
+            }
+        });
+
+        if (rowToRemove) {
+            this.gridApi.applyTransaction({ remove: [rowToRemove] });
+
+            const productName = this.dataAdapter.getValue(rowToRemove, 'name') || 'Product';
+            this.showNotification('info', `${productName} deleted via real-time sync`);
+        }
+    }
+
+    /**
+     * Handle SSE product imported event
+     */
+    handleSSEProductImported(data) {
+        if (!this.gridApi) return;
+
+        this.loadProducts();
+
+        const message = data.message || 'Products imported successfully';
+        this.showNotification('success', message);
+    }
+
+    /**
+     * Handle SSE bulk update event
+     */
+    handleSSEBulkUpdate(data) {
+        if (!this.gridApi) return;
+
+        this.loadProducts();
+
+        const count = data.products?.length || 0;
+        this.showNotification('info', `Bulk update: ${count} products updated via real-time sync`);
+    }
+
+    /**
+     * Handle SSE server error
+     */
+    handleSSEServerError(data) {
+        console.error('[SSE] Server error:', data);
+        this.showNotification('error', `Server error: ${data.message || 'Unknown error'}`);
+    }
+
+    /**
+     * Handle SSE connection state change
+     */
+    handleSSEConnectionChange(state, data) {
+        console.log(`[SSE] Connection state: ${state}`, data);
+        this.updateSSEStatusIndicator(state);
+
+        switch (state) {
+            case 'connected':
+                // Connection established - silent
+                break;
+            case 'disconnected':
+                // Connection lost - silent
+                break;
+            case 'failed':
+                this.showNotification('error', 'Real-time sync connection failed');
+                break;
+            case 'error':
+                this.showNotification('error', `Real-time sync error: ${data?.message || 'Unknown error'}`);
+                break;
+        }
+    }
+
+    /**
+     * Create SSE status indicator
+     */
+    createSSEStatusIndicator() {
+        let statusContainer = document.querySelector('.sse-status-indicator');
+
+        if (!statusContainer) {
+            statusContainer = document.createElement('div');
+            statusContainer.className = 'sse-status-indicator';
+            statusContainer.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                left: 20px;
+                z-index: 1000;
+                padding: 8px 12px;
+                border-radius: 4px;
+                font-size: 12px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                background: rgba(255, 255, 255, 0.95);
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                transition: all 0.3s ease;
+            `;
+
+            const statusIcon = document.createElement('span');
+            statusIcon.className = 'sse-status-icon';
+            statusIcon.style.cssText = `
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: #6c757d;
+            `;
+
+            const statusText = document.createElement('span');
+            statusText.className = 'sse-status-text';
+            statusText.textContent = 'Initializing...';
+
+            statusContainer.appendChild(statusIcon);
+            statusContainer.appendChild(statusText);
+
+            document.body.appendChild(statusContainer);
+        }
+
+        this.sseConnectionStatus = statusContainer;
+    }
+
+    /**
+     * Update SSE status indicator
+     */
+    updateSSEStatusIndicator(state) {
+        if (!this.sseConnectionStatus) return;
+
+        const statusIcon = this.sseConnectionStatus.querySelector('.sse-status-icon');
+        const statusText = this.sseConnectionStatus.querySelector('.sse-status-text');
+
+        const stateConfig = {
+            connected: { bg: '#28a745', text: 'Real-time sync active', containerBg: 'rgba(40, 167, 69, 0.1)' },
+            disconnected: { bg: '#dc3545', text: 'Real-time sync disconnected', containerBg: 'rgba(220, 53, 69, 0.1)' },
+            reconnecting: { bg: '#ffc107', text: 'Reconnecting...', containerBg: 'rgba(255, 193, 7, 0.1)' },
+            failed: { bg: '#dc3545', text: 'Connection failed', containerBg: 'rgba(220, 53, 69, 0.1)' },
+            error: { bg: '#dc3545', text: 'Connection error', containerBg: 'rgba(220, 53, 69, 0.1)' }
+        };
+
+        const config = stateConfig[state] || {
+            bg: '#6c757d',
+            text: 'Unknown status',
+            containerBg: 'rgba(108, 117, 125, 0.1)'
+        };
+
+        statusIcon.style.background = config.bg;
+        statusText.textContent = config.text;
+        this.sseConnectionStatus.style.background = config.containerBg;
+    }
+
+    /**
+     * Refresh grid data
+     */
+    refresh() {
+        this.loadProducts();
+    }
+
+    /**
+     * Cleanup method
+     */
+    destroy() {
+        if (this.sseClient) {
+            this.sseClient.destroy();
+            this.sseClient = null;
+        }
+
+        if (this.sseConnectionStatus) {
+            this.sseConnectionStatus.remove();
+            this.sseConnectionStatus = null;
+        }
+
+        if (this.selectionHandler) {
+            this.selectionHandler.destroy();
+        }
+
+        if (this.gridApi) {
+            this.gridApi.destroy();
+        }
+    }
+}
+
+// CommonJS compatibility
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { ProductSyncGrid };
+}

@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Development files
+.git/
+.github/
+.vscode/
+.idea/
+
+# Test files
+__tests__/
+*.test.js
+*.spec.js
+test/
+tests/
+coverage/
+
+# Documentation (except README)
+docs/
+*.md
+!README.md
+
+# Build artifacts
+dist/
+build/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# IDE
+*.swp
+*.swo
+*~
