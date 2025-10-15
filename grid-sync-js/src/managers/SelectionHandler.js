@@ -4,9 +4,10 @@ import { ProductGridConstants } from '../constants/ProductGridConstants.js';
  * Handles custom cell selection, range selection, and selection rendering
  */
 export class SelectionHandler {
-    constructor(gridApi, columnApi) {
+    constructor(gridApi, columnApi, gridElementSelector = '#productGrid') {
         this.gridApi = gridApi;
         this.columnApi = columnApi;
+        this.gridElementSelector = gridElementSelector;
         this.customSelectedCells = new Set();
         this.isSelecting = false;
         this.selectionStart = null;
@@ -88,7 +89,7 @@ export class SelectionHandler {
         this.customSelectedCells.add(cellKey);
 
         // Add selecting class to grid and prevent text selection globally
-        const gridElement = document.querySelector('#productGrid');
+        const gridElement = document.querySelector(this.gridElementSelector);
         if (gridElement) {
             gridElement.classList.add('selecting');
             this.disableTextSelection();
@@ -120,7 +121,7 @@ export class SelectionHandler {
             this.isSelecting = false;
 
             // Remove selecting class from grid and restore text selection
-            const gridElement = document.querySelector('#productGrid');
+            const gridElement = document.querySelector(this.gridElementSelector);
             if (gridElement) {
                 gridElement.classList.remove('selecting');
                 this.enableTextSelection();
@@ -211,9 +212,14 @@ export class SelectionHandler {
      */
     updateSelectionInfo() {
         const cellCount = this.customSelectedCells.size;
-        const rangeElement = document.getElementById('rangeSelection');
-        const copyButton = document.getElementById('copyRange');
-        const clearButton = document.getElementById('clearRange');
+
+        // Support both IDs for different implementations
+        const rangeElement = document.getElementById('rangeSelection') ||
+                            document.getElementById('shop-range-selection');
+        const copyButton = document.getElementById('copyRange') ||
+                          document.getElementById('copyShopRange');
+        const clearButton = document.getElementById('clearRange') ||
+                           document.getElementById('clearShopRange');
 
         if (rangeElement) {
             if (cellCount === 0) {
@@ -307,7 +313,7 @@ export class SelectionHandler {
         // Setup keyboard shortcuts
         document.addEventListener('keydown', (event) => {
             // Only handle shortcuts when grid is focused
-            const gridContainer = document.querySelector('#productGrid');
+            const gridContainer = document.querySelector(this.gridElementSelector);
             if (!gridContainer || !gridContainer.contains(document.activeElement)) {
                 return;
             }
@@ -337,7 +343,7 @@ export class SelectionHandler {
     setupCustomRangeSelection() {
         // Event delegation will be set up when grid is ready
         setTimeout(() => {
-            const gridElement = document.querySelector('#productGrid');
+            const gridElement = document.querySelector(this.gridElementSelector);
             if (gridElement) {
                 // Prevent text selection
                 gridElement.addEventListener('selectstart', (e) => {

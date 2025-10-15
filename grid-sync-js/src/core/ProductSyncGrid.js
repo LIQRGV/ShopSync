@@ -120,7 +120,7 @@ export class ProductSyncGrid {
                     this.showNotification(type, message)
                 );
 
-                this.selectionHandler = new SelectionHandler(this.gridApi, this.columnApi);
+                this.selectionHandler = new SelectionHandler(this.gridApi, this.columnApi, this.config.gridElementId);
                 this.selectionHandler.setNotificationCallback((type, message) =>
                     this.showNotification(type, message)
                 );
@@ -357,9 +357,11 @@ export class ProductSyncGrid {
      * Create pagination controls
      */
     createPaginationControls(currentPage, totalPages) {
-        // Determine pagination ID based on grid element
+        // Determine pagination ID and grid instance name based on grid element
         const paginationId = this.config.gridElementId.includes('shop') ?
                            'shopCustomPagination' : 'customPagination';
+        const gridInstanceName = this.config.gridElementId.includes('shop') ?
+                                'shopProductGrid' : 'productGrid';
 
         // Remove existing pagination
         const existingPagination = document.getElementById(paginationId);
@@ -378,7 +380,7 @@ export class ProductSyncGrid {
 
         // Previous button
         if (currentPage > 1) {
-            paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="window.productGrid.loadProducts(${currentPage - 1}); return false;">Previous</a></li>`;
+            paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="window.${gridInstanceName}.loadProducts(${currentPage - 1}); return false;">Previous</a></li>`;
         }
 
         // Page numbers
@@ -387,12 +389,12 @@ export class ProductSyncGrid {
 
         for (let i = startPage; i <= endPage; i++) {
             const activeClass = i === currentPage ? 'active' : '';
-            paginationHTML += `<li class="page-item ${activeClass}"><a class="page-link" href="#" onclick="window.productGrid.loadProducts(${i}); return false;">${i}</a></li>`;
+            paginationHTML += `<li class="page-item ${activeClass}"><a class="page-link" href="#" onclick="window.${gridInstanceName}.loadProducts(${i}); return false;">${i}</a></li>`;
         }
 
         // Next button
         if (currentPage < totalPages) {
-            paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="window.productGrid.loadProducts(${currentPage + 1}); return false;">Next</a></li>`;
+            paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="window.${gridInstanceName}.loadProducts(${currentPage + 1}); return false;">Next</a></li>`;
         }
 
         paginationHTML += '</ul></nav>';
@@ -923,10 +925,10 @@ export class ProductSyncGrid {
 
         switch (state) {
             case 'connected':
-                // Connection established - silent
+                this.showNotification('success', 'Real-time sync connected');
                 break;
             case 'disconnected':
-                // Connection lost - silent
+                this.showNotification('warning', 'Real-time sync disconnected');
                 break;
             case 'failed':
                 this.showNotification('error', 'Real-time sync connection failed');

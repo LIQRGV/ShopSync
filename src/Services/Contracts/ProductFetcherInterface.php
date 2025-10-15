@@ -44,7 +44,7 @@ interface ProductFetcherInterface
      * Delete a product (soft delete)
      *
      * @param int|string $id
-     * @return void
+     * @return bool True if successful, false otherwise
      */
     public function delete($id);
 
@@ -60,7 +60,7 @@ interface ProductFetcherInterface
      * Permanently delete a product
      *
      * @param int|string $id
-     * @return void
+     * @return bool True if successful, false otherwise
      */
     public function forceDelete($id);
 

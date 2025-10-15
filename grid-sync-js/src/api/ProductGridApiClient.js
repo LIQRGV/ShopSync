@@ -124,7 +124,9 @@ export class ProductGridApiClient {
             // Transform field name and value for API based on data mode
             const fieldData = this.dataAdapter.transformForApi(fieldName, processedValue);
 
-            // Wrap in JSON:API format (required by backend)
+            // Both modes use JSON:API format for updates
+            // marketplace-api uses STRICT JSON:API format
+            // thediamondbox also uses JSON:API format
             const updateData = {
                 data: {
                     type: 'products',
