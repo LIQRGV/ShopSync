@@ -251,9 +251,12 @@ class ApiProductFetcher implements ProductFetcherInterface
 
     public function delete($id)
     {
-        $this->handleRequest(function () use ($id) {
+        $response = $this->handleRequest(function () use ($id) {
             return $this->client()->delete("/products/{$id}");
-        });
+        }, null);
+
+        // Return true if response is successful (not null)
+        return $response !== null;
     }
 
     /**
@@ -273,9 +276,12 @@ class ApiProductFetcher implements ProductFetcherInterface
 
     public function forceDelete($id)
     {
-        $this->handleRequest(function () use ($id) {
+        $response = $this->handleRequest(function () use ($id) {
             return $this->client()->delete("/products/{$id}/force");
-        });
+        }, null);
+
+        // Return true if response is successful (not null)
+        return $response !== null;
     }
 
     /**
