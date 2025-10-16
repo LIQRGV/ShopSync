@@ -14,23 +14,30 @@
 
 ## 📦 Installation
 
-> ⚠️ **Note**: This package is currently in development and not yet published to NPM.
+> ⚠️ **Note**: This package is currently in development branch and not yet published to NPM.
 
-### Development Installation (Local Path)
+### Install from GitHub (Development Branch)
 
 ```bash
 # In your Laravel project directory (thediamondbox or marketplace-api)
-npm install file:../module-shopsync/grid-sync-js
+npm install git+ssh://git@github.com:The-Diamond-Box/stock-sync.git#feature/unified-grid-sync-package
 
 # Build assets with Laravel Mix
 npm run dev
 ```
 
-**Note**: Adjust the relative path `../module-shopsync/grid-sync-js` based on your folder structure. For example:
-- If both projects are in same parent folder: `../module-shopsync/grid-sync-js`
-- If in different locations, use absolute path: `file:/path/to/module-shopsync/grid-sync-js`
+**Or using package.json:**
+```json
+{
+  "dependencies": {
+    "@thediamondbox/grid-sync": "git+ssh://git@github.com:The-Diamond-Box/stock-sync.git#feature/unified-grid-sync-package"
+  }
+}
+```
 
 ### Production Installation (After NPM Publish)
+
+Once merged to master and published:
 
 ```bash
 npm install @thediamondbox/grid-sync ag-grid-community
@@ -346,24 +353,10 @@ This package is currently under development and testing. Key points:
 
 ### Installation During Development
 
-**Method 1: Local Path (Recommended)**
+Install directly from GitHub repository:
+
 ```bash
-# In your project directory
-npm install file:../module-shopsync/grid-sync-js
-```
-
-**Method 2: From Git Repository**
-```bash
-# Clone the repository
-git clone -b feature/unified-grid-sync-package https://github.com/The-Diamond-Box/stock-sync.git
-cd stock-sync/grid-sync-js
-
-# Build tarball
-npm pack
-
-# Install in your project
-cd /path/to/your/project
-npm install /path/to/stock-sync/grid-sync-js/thediamondbox-grid-sync-1.0.0.tgz
+npm install git+ssh://git@github.com:The-Diamond-Box/stock-sync.git#feature/unified-grid-sync-package
 ```
 
 **⚠️ Production Use**: Wait for the package to be merged to `master` and published to NPM before using in production environments.

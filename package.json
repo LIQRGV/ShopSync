@@ -1,0 +1,34 @@
+{
+  "name": "@thediamondbox/grid-sync",
+  "version": "1.0.0",
+  "description": "Unified AG Grid implementation for product synchronization - Root package wrapper",
+  "main": "grid-sync-js/src/index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"No tests yet\"",
+    "postinstall": "echo '✅ @thediamondbox/grid-sync installed successfully'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com:The-Diamond-Box/stock-sync.git"
+  },
+  "keywords": [
+    "ag-grid",
+    "product-sync",
+    "laravel",
+    "real-time",
+    "sse"
+  ],
+  "author": "TheDiamondBox",
+  "license": "MIT",
+  "peerDependencies": {
+    "ag-grid-community": ">=28.0.0"
+  },
+  "files": [
+    "grid-sync-js/src/",
+    "grid-sync-js/README.md"
+  ],
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
