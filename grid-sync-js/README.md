@@ -14,7 +14,41 @@
 
 ## 📦 Installation
 
+> ⚠️ **Note**: This package is currently in development branch and not yet published to NPM.
+
+### Option 1: Install from GitHub (Development Branch)
+
 ```bash
+# Clone repository and install from subdirectory
+git clone -b feature/unified-grid-sync-package --depth 1 \
+  git@github.com:The-Diamond-Box/stock-sync.git /tmp/grid-sync
+cd /tmp/grid-sync/grid-sync-js
+npm pack
+npm install /tmp/grid-sync/grid-sync-js/thediamondbox-grid-sync-1.0.0.tgz
+
+# Or use the install script
+curl -O https://raw.githubusercontent.com/The-Diamond-Box/stock-sync/feature/unified-grid-sync-package/install-from-github.sh
+chmod +x install-from-github.sh
+./install-from-github.sh
+npm install ./thediamondbox-grid-sync-1.0.0.tgz
+```
+
+### Option 2: Install from Local Path (Development)
+
+```bash
+# In your project's package.json
+{
+  "dependencies": {
+    "@thediamondbox/grid-sync": "file:../module-shopsync/grid-sync-js",
+    "ag-grid-community": "^28.0.0"
+  }
+}
+```
+
+### Option 3: Install from NPM (Production - Coming Soon)
+
+```bash
+# Will be available after merge to main branch
 npm install @thediamondbox/grid-sync ag-grid-community
 ```
 
@@ -301,5 +335,44 @@ The package is now ready for publishing to NPM. All features have been unified:
 - ✅ SelectionHandler - Cell selection management
 - ✅ ProductSSEClient - Real-time updates via SSE
 - ✅ ProductGridConstants - Shared configuration
+
+## 🚧 Development Status
+
+**Current Branch**: `feature/unified-grid-sync-package`
+
+This package is currently under development and testing. Key points:
+
+- ✅ **Security Review**: Completed and verified safe
+  - CSRF protection maintained
+  - Client isolation for multi-tenancy
+  - Input sanitization implemented
+  - JSON:API format standardization
+  - No XSS or SQL injection vulnerabilities
+
+- 🔄 **Testing Phase**: In progress
+  - Integration testing with thediamondbox project
+  - Integration testing with marketplace-api project
+  - Real-world use case validation
+
+- 📋 **Next Steps**:
+  1. Complete integration testing in both projects
+  2. Fix any edge cases discovered during testing
+  3. Merge to `master` branch
+  4. Publish to NPM registry as stable v1.0.0
+
+### Installation During Development
+
+Use the feature branch for installation:
+
+```bash
+# Install from development branch
+git clone -b feature/unified-grid-sync-package --depth 1 \
+  git@github.com:The-Diamond-Box/stock-sync.git /tmp/grid-sync
+cd /tmp/grid-sync/grid-sync-js
+npm pack
+# Then install the generated .tgz file in your project
+```
+
+**⚠️ Production Use**: Wait for the package to be merged to `master` and published to NPM before using in production environments.
 
 
