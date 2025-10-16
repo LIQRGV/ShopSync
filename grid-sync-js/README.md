@@ -14,41 +14,25 @@
 
 ## 📦 Installation
 
-> ⚠️ **Note**: This package is currently in development branch and not yet published to NPM.
+> ⚠️ **Note**: This package is currently in development and not yet published to NPM.
 
-### Option 1: Install from GitHub (Development Branch)
+### Development Installation (Local Path)
 
 ```bash
-# Clone repository and install from subdirectory
-git clone -b feature/unified-grid-sync-package --depth 1 \
-  git@github.com:The-Diamond-Box/stock-sync.git /tmp/grid-sync
-cd /tmp/grid-sync/grid-sync-js
-npm pack
-npm install /tmp/grid-sync/grid-sync-js/thediamondbox-grid-sync-1.0.0.tgz
+# In your Laravel project directory (thediamondbox or marketplace-api)
+npm install file:../module-shopsync/grid-sync-js
 
-# Or use the install script
-curl -O https://raw.githubusercontent.com/The-Diamond-Box/stock-sync/feature/unified-grid-sync-package/install-from-github.sh
-chmod +x install-from-github.sh
-./install-from-github.sh
-npm install ./thediamondbox-grid-sync-1.0.0.tgz
+# Build assets with Laravel Mix
+npm run dev
 ```
 
-### Option 2: Install from Local Path (Development)
+**Note**: Adjust the relative path `../module-shopsync/grid-sync-js` based on your folder structure. For example:
+- If both projects are in same parent folder: `../module-shopsync/grid-sync-js`
+- If in different locations, use absolute path: `file:/path/to/module-shopsync/grid-sync-js`
+
+### Production Installation (After NPM Publish)
 
 ```bash
-# In your project's package.json
-{
-  "dependencies": {
-    "@thediamondbox/grid-sync": "file:../module-shopsync/grid-sync-js",
-    "ag-grid-community": "^28.0.0"
-  }
-}
-```
-
-### Option 3: Install from NPM (Production - Coming Soon)
-
-```bash
-# Will be available after merge to main branch
 npm install @thediamondbox/grid-sync ag-grid-community
 ```
 
@@ -362,15 +346,24 @@ This package is currently under development and testing. Key points:
 
 ### Installation During Development
 
-Use the feature branch for installation:
-
+**Method 1: Local Path (Recommended)**
 ```bash
-# Install from development branch
-git clone -b feature/unified-grid-sync-package --depth 1 \
-  git@github.com:The-Diamond-Box/stock-sync.git /tmp/grid-sync
-cd /tmp/grid-sync/grid-sync-js
+# In your project directory
+npm install file:../module-shopsync/grid-sync-js
+```
+
+**Method 2: From Git Repository**
+```bash
+# Clone the repository
+git clone -b feature/unified-grid-sync-package https://github.com/The-Diamond-Box/stock-sync.git
+cd stock-sync/grid-sync-js
+
+# Build tarball
 npm pack
-# Then install the generated .tgz file in your project
+
+# Install in your project
+cd /path/to/your/project
+npm install /path/to/stock-sync/grid-sync-js/thediamondbox-grid-sync-1.0.0.tgz
 ```
 
 **⚠️ Production Use**: Wait for the package to be merged to `master` and published to NPM before using in production environments.
