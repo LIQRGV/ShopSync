@@ -16,13 +16,35 @@
 
 > ⚠️ **Note**: This package is currently in development branch and not yet published to NPM.
 
+### Automatic Installation (Recommended)
+
+The package automatically syncs files to `public/vendor/grid-sync/` during npm install:
+
+```bash
+# In your Laravel project directory (thediamondbox or marketplace-api)
+cd /path/to/marketplace-api  # or thediamondbox
+
+# Install package - files are auto-synced to public/vendor
+npm install file:../module-shopsync
+
+# Build assets with Laravel Mix
+npm run dev
+```
+
+**What happens automatically:**
+1. Package installed to `node_modules/@thediamondbox/grid-sync/`
+2. Postinstall script detects Laravel project (checks for `public/` directory)
+3. Creates `public/vendor/` directory if needed
+4. Copies `grid-sync-js/src/` to `public/vendor/grid-sync/`
+5. Shows reminder to add to `.gitignore`
+
 ### Install from GitHub (Development Branch)
 
 ```bash
 # In your Laravel project directory (thediamondbox or marketplace-api)
 npm install git+ssh://git@github.com:The-Diamond-Box/stock-sync.git#feature/unified-grid-sync-package
 
-# Build assets with Laravel Mix
+# Files are automatically synced during installation
 npm run dev
 ```
 
@@ -41,6 +63,34 @@ Once merged to master and published:
 
 ```bash
 npm install @thediamondbox/grid-sync ag-grid-community
+```
+
+### Manual Sync (Optional)
+
+If automatic sync fails or you need to manually sync after source changes:
+
+```bash
+# Add to package.json scripts
+"sync-grid": "mkdir -p public/vendor && rm -rf public/vendor/grid-sync && cp -r node_modules/@thediamondbox/grid-sync/grid-sync-js/src public/vendor/grid-sync"
+
+# Run manual sync
+npm run sync-grid
+```
+
+### Important Notes
+
+1. **Automatic Sync**: Files are automatically synced to `public/vendor/grid-sync/` during `npm install`
+2. **Auto-sync triggers**:
+   - Initial package installation
+   - Package updates (`npm install` or `npm update`)
+3. **Manual sync needed** when:
+   - Modifying source files in `module-shopsync/` during development
+   - Automatic sync fails
+4. **Gitignore**: Add `public/vendor/grid-sync` to `.gitignore` as these are auto-generated files
+
+```bash
+# .gitignore
+/public/vendor/grid-sync
 ```
 
 ## 🚀 Quick Start

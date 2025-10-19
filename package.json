@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "echo \"No tests yet\"",
-    "postinstall": "echo '✅ @thediamondbox/grid-sync installed successfully'"
+    "postinstall": "node postinstall.cjs"
   },
   "repository": {
     "type": "git",
@@ -26,7 +26,8 @@
   },
   "files": [
     "grid-sync-js/src/",
-    "grid-sync-js/README.md"
+    "grid-sync-js/README.md",
+    "postinstall.cjs"
   ],
   "engines": {
     "node": ">=14.0.0"
