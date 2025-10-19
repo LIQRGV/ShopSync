@@ -307,7 +307,7 @@ export class GridRenderer {
                 }
             ] : []),
 
-            // Attributes Column (only for nested/WTM mode - shows first enabled attribute)
+            // Attributes Column (only for nested/WTM mode - shows first enabled attribute with hover tooltip for all)
             ...(this.dataAdapter.mode === 'nested' ? [{
                 headerName: 'Attributes',
                 field: 'first_enabled_attribute',
@@ -353,6 +353,37 @@ export class GridRenderer {
                 // valueFormatter ensures the value is properly copied to clipboard
                 valueFormatter: (params) => {
                     return params.value || '';
+                },
+                // tooltipValueGetter to show ALL attributes on hover
+                tooltipValueGetter: (params) => {
+                    if (params.data && params.data.relationships && params.data.relationships.attributes) {
+                        const attributeIds = params.data.relationships.attributes.data.map(a => a.id);
+
+                        if (attributeIds.length === 0) {
+                            return 'No attributes';
+                        }
+
+                        // Get currentData from context
+                        const currentData = params.context?.gridInstance?.currentData || this.currentData;
+
+                        if (currentData && currentData.included) {
+                            // Find ALL attributes in included data
+                            const attrs = currentData.included.filter(inc =>
+                                inc.type === 'attributes' &&
+                                attributeIds.includes(inc.id)
+                            );
+
+                            if (attrs.length > 0) {
+                                // Format all attributes as multi-line tooltip
+                                return attrs.map(attr => {
+                                    const value = attr.attributes?.pivot?.value || '';
+                                    const name = attr.attributes?.name || '';
+                                    return `${name}: ${value}`;
+                                }).join('\n');
+                            }
+                        }
+                    }
+                    return 'No attributes';
                 }
             }] : []),
 
