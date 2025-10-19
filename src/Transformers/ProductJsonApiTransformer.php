@@ -160,6 +160,18 @@ class ProductJsonApiTransformer extends JsonApiTransformer
     protected function getRelatedModelAttributes(Model $model): array
     {
         $className = class_basename($model);
+
+        // For Attribute models, make visible all fields including enabled_on_dropship
+        if ($className === 'Attribute') {
+            $model->makeVisible(['enabled_on_dropship']);
+        }
+
+        // Store pivot data before toArray() as it might be lost
+        $pivotData = null;
+        if (isset($model->pivot)) {
+            $pivotData = $model->pivot->toArray();
+        }
+
         $attributes = $model->toArray();
 
         // Remove primary key and timestamps for cleaner output
@@ -215,6 +227,14 @@ class ProductJsonApiTransformer extends JsonApiTransformer
                 if (method_exists($model, 'getFormattedOptionsAttribute')) {
                     $attributes['formatted_options'] = $model->formatted_options;
                 }
+                // Explicitly include enabled_on_dropship field directly from model
+                $attributes['enabled_on_dropship'] = $model->getAttribute('enabled_on_dropship') ?? false;
+                // Include pivot data if available (for product attributes relationship)
+                if ($pivotData !== null) {
+                    $attributes['pivot'] = $pivotData;
+                } elseif (isset($attributes['pivot'])) {
+                    $attributes['pivot'] = $attributes['pivot'];
+                }
                 break;
 
             case 'ProductAttribute':
@@ -231,10 +251,13 @@ class ProductJsonApiTransformer extends JsonApiTransformer
                 break;
         }
 
-        // Remove relationship data that got loaded
+        // Remove relationship data that got loaded, but preserve pivot
         $relationships = $model->getRelations();
         foreach ($relationships as $key => $relationship) {
-            unset($attributes[$key]);
+            // Don't remove pivot - it contains the attribute value for the product
+            if ($key !== 'pivot') {
+                unset($attributes[$key]);
+            }
         }
 
         return $attributes;
@@ -243,9 +266,15 @@ class ProductJsonApiTransformer extends JsonApiTransformer
     /**
      * Override addToIncluded to use custom attribute handling for related models
      */
-    protected function addToIncluded(Model $model, string $type): void
+    protected function addToIncluded(Model $model, string $type, $parentId = null): void
     {
+        // For models with pivot (like attributes in a many-to-many relationship),
+        // create a unique key that includes the parent ID to allow duplicate attribute IDs
+        // with different pivot data for different products
         $key = $type . ':' . $model->getKey();
+        if ($parentId !== null && isset($model->pivot)) {
+            $key = $type . ':' . $model->getKey() . ':' . $parentId;
+        }
 
         if (!isset($this->included[$key])) {
             $this->currentDepth++;

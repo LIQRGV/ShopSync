@@ -417,7 +417,12 @@ class ApiProductFetcher implements ProductFetcherInterface
                                 $relatedItems = [];
                                 foreach ($relationData['data'] as $item) {
                                     if (isset($item['type']) && isset($item['id'])) {
-                                        $key = $item['type'] . ':' . $item['id'];
+                                        // First try with product_id for items with pivot (like attributes)
+                                        $key = $item['type'] . ':' . $item['id'] . ':' . $data['id'];
+                                        if (!isset($includedMap[$key])) {
+                                            // Fall back to key without product_id
+                                            $key = $item['type'] . ':' . $item['id'];
+                                        }
                                         if (isset($includedMap[$key])) {
                                             $relatedItem = $includedMap[$key]['attributes'] ?? [];
                                             $relatedItem['id'] = $includedMap[$key]['id'];
@@ -465,14 +470,27 @@ class ApiProductFetcher implements ProductFetcherInterface
 
                     if ($relation === 'attributes') {
                         // Has-many relationship - create collection of models
-                        $models = collect($relationData)->map(function ($item) use ($modelClass) {
+                        $models = collect($relationData)->map(function ($item) use ($modelClass, $product) {
                             if (is_array($item)) {
                                 $model = new $modelClass();
+
+                                // Extract and store pivot data before filling model
+                                $pivotData = $item['pivot'] ?? null;
+
                                 $model->fill($item);
                                 if (isset($item['id'])) {
                                     $model->setAttribute($model->getKeyName(), $item['id']);
                                 }
                                 $model->exists = true;
+
+                                // Set pivot relationship if pivot data exists
+                                if ($pivotData && is_array($pivotData)) {
+                                    $pivotModel = new \Illuminate\Database\Eloquent\Relations\Pivot();
+                                    $pivotModel->forceFill($pivotData);
+                                    $pivotModel->exists = true;
+                                    $model->setRelation('pivot', $pivotModel);
+                                }
+
                                 return $model;
                             }
                             return null;
@@ -535,11 +553,16 @@ class ApiProductFetcher implements ProductFetcherInterface
         }
 
         // Build a map of included resources for easier access
+        // For items with pivot (like attributes), use product_id in key to prevent overwrite
         $includedMap = [];
         if (!empty($includedData) && is_array($includedData)) {
             foreach ($includedData as $included) {
                 if (isset($included['type']) && isset($included['id'])) {
                     $key = $included['type'] . ':' . $included['id'];
+                    // If this has pivot data, include product_id in key to make it unique
+                    if (isset($included['attributes']['pivot']['product_id'])) {
+                        $key .= ':' . $included['attributes']['pivot']['product_id'];
+                    }
                     $includedMap[$key] = $included;
                 }
             }

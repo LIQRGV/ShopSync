@@ -28,6 +28,7 @@ class Attribute extends Model
         'sort_order',
         'validation_rules',
         'default_value',
+        'enabled_on_dropship',
     ];
 
     protected $casts = [
@@ -38,6 +39,7 @@ class Attribute extends Model
         'is_active' => 'boolean',
         'sort_order' => 'integer',
         'validation_rules' => 'array',
+        'enabled_on_dropship' => 'boolean',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'deleted_at' => 'datetime',
@@ -116,6 +118,14 @@ class Attribute extends Model
     public function scopeOfType($query, $type)
     {
         return $query->where('type', $type);
+    }
+
+    /**
+     * Scope to filter attributes enabled for dropship
+     */
+    public function scopeEnabledOnDropship($query)
+    {
+        return $query->where('enabled_on_dropship', true);
     }
 
     /**

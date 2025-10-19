@@ -1130,6 +1130,47 @@ export class ProductSyncGrid {
     }
 
     /**
+     * Delete a product
+     * @param {number} productId - Product ID to delete
+     */
+    async deleteProduct(productId) {
+        if (!confirm('Are you sure you want to delete this product?')) {
+            return;
+        }
+
+        try {
+            // Call the delete API
+            await this.apiClient.deleteProduct(productId);
+
+            // Find and remove from grid
+            let rowToRemove = null;
+            this.gridApi.forEachNode((node) => {
+                if (node.data && node.data.id === productId) {
+                    rowToRemove = node.data;
+                }
+            });
+
+            if (rowToRemove) {
+                const transaction = {
+                    remove: [rowToRemove]
+                };
+                this.gridApi.applyTransaction(transaction);
+
+                // Get product name for notification
+                const productName = this.dataAdapter.getValue(rowToRemove, 'name') || 'Product';
+                this.showNotification('success', `${productName} deleted successfully`);
+
+                // Update stats
+                this.updateStats();
+            }
+
+        } catch (error) {
+            console.error('Delete error:', error);
+            this.showNotification('error', error.message);
+        }
+    }
+
+    /**
      * Cleanup method
      */
     destroy() {
