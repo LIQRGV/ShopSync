@@ -335,6 +335,66 @@ export class ProductGridApiClient {
     }
 
     /**
+     * Fetch enabled attributes for dynamic columns
+     * @returns {Promise<Array>} Array of enabled attributes
+     */
+    async fetchEnabledAttributes() {
+        try {
+            // For WTM mode (nested), fetch productAttributes to get enabled attributes
+            const url = `${this.baseUrl}?per_page=1&include=productAttributes`;
+
+            const response = await fetch(url, {
+                method: ProductGridConstants.API_CONFIG.METHODS.GET,
+                headers: this.getHeaders()
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // Extract unique attributes from included productAttributes
+            if (data.included && data.included.length > 0) {
+                const attributes = new Map();
+
+                // Find all product_attributes in included
+                const productAttributes = data.included.filter(inc => inc.type === 'product_attributes');
+
+                // Extract unique attributes from productAttributes relationships
+                productAttributes.forEach(prodAttr => {
+                    if (prodAttr.relationships && prodAttr.relationships.attribute && prodAttr.relationships.attribute.data) {
+                        const attrId = prodAttr.relationships.attribute.data.id;
+
+                        // Find the actual attribute in included
+                        const attr = data.included.find(inc =>
+                            inc.type === 'attributes' && inc.id === attrId
+                        );
+
+                        if (attr && !attributes.has(attrId)) {
+                            attributes.set(attrId, {
+                                id: attr.id,
+                                name: attr.attributes.name,
+                                code: attr.attributes.code || `attr_${attr.id}`,
+                                type: attr.attributes.type || 'text',
+                                sort_order: attr.attributes.sort_order || 0
+                            });
+                        }
+                    }
+                });
+
+                const result = Array.from(attributes.values()).sort((a, b) => a.sort_order - b.sort_order);
+                return result;
+            }
+
+            return [];
+        } catch (error) {
+            console.error('[fetchEnabledAttributes] Error:', error);
+            return [];
+        }
+    }
+
+    /**
      * Export products
      * @param {string} format - Export format (csv, xlsx, etc.)
      * @param {Object} filters - Export filters

@@ -454,10 +454,24 @@ class DatabaseProductFetcher implements ProductFetcherInterface
                     $relationships[] = 'supplier';
                     break;
                 case 'attributes':
-                    $relationships[] = 'attributes';
+                    // Only load attributes that are enabled_on_dropship
+                    $relationships['attributes'] = function ($query) {
+                        $query->where('enabled_on_dropship', true)
+                              ->orderBy('sortby')
+                              ->orderBy('name');
+                    };
                     break;
                 case 'productAttributes':
-                    $relationships[] = 'productAttributes.attribute';
+                    // Load product attributes with only enabled_on_dropship attributes
+                    $relationships['productAttributes'] = function ($query) {
+                        $query->whereHas('attribute', function ($q) {
+                            $q->where('enabled_on_dropship', true);
+                        })->with(['attribute' => function ($q) {
+                            $q->where('enabled_on_dropship', true)
+                              ->orderBy('sortby')
+                              ->orderBy('name');
+                        }]);
+                    };
                     break;
             }
         }

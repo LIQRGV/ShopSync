@@ -22,6 +22,7 @@ export class ProductSyncGrid {
      * @param {string} [config.clientBaseUrl=''] - Base URL for client assets
      * @param {boolean} [config.enableSSE=true] - Enable Server-Sent Events
      * @param {string} [config.sseEndpoint='/api/v1/sse/events'] - SSE endpoint URL
+     * @param {string} [config.csvExportPrefix='products'] - Prefix for CSV export filename
      */
     constructor(config) {
         // Configuration
@@ -32,6 +33,7 @@ export class ProductSyncGrid {
             sseEndpoint: '/api/v1/sse/events',
             clientId: null,
             clientBaseUrl: '',
+            csvExportPrefix: 'products',
             ...config
         };
 
@@ -43,6 +45,7 @@ export class ProductSyncGrid {
         this.selectedRows = [];
         this.currentData = null;
         this.currentMeta = null;
+        this.enabledAttributes = [];
         this.initialColumnState = null;
         this.isInitialized = false;
 
@@ -85,7 +88,8 @@ export class ProductSyncGrid {
         this.gridRenderer = new GridRenderer({
             baseUrl: this.config.clientBaseUrl || this.config.apiEndpoint,
             dataAdapter: this.dataAdapter,
-            currentData: null
+            currentData: null,
+            enabledAttributes: this.enabledAttributes
         });
 
         // Initialize SSE if enabled
@@ -97,25 +101,35 @@ export class ProductSyncGrid {
     /**
      * Initialize AG Grid with configuration
      */
-    initializeGrid() {
+    async initializeGrid() {
         if (this.isInitialized) {
             // Grid already initialized, just refresh data
             this.loadProducts();
             return;
         }
 
+        // No need to fetch enabled attributes anymore - we'll show first enabled attribute per product
+
         const gridOptions = {
             columnDefs: this.gridRenderer.getColumnDefs(),
             defaultColDef: this.gridRenderer.getDefaultColDef(),
             ...ProductGridConstants.AG_GRID_OPTIONS,
             paginationPageSize: ProductGridConstants.GRID_CONFIG.PAGINATION_SIZE,
+            // Add context to make currentData accessible in valueGetter
+            context: {
+                gridInstance: this
+            },
 
             onGridReady: (params) => {
                 this.gridApi = params.api;
                 this.columnApi = params.columnApi;
 
                 // Initialize remaining components that need grid APIs
-                this.clipboardManager = new ClipboardManager(this.gridApi, this.columnApi);
+                this.clipboardManager = new ClipboardManager(this.gridApi, this.columnApi, {
+                    csvExportPrefix: this.config.csvExportPrefix,
+                    dataMode: this.config.dataMode,
+                    gridInstance: this
+                });
                 this.clipboardManager.setNotificationCallback((type, message) =>
                     this.showNotification(type, message)
                 );
@@ -233,14 +247,14 @@ export class ProductSyncGrid {
             return;
         }
 
+        // Extract field name from colDef.field, handling both nested and flat paths
+        let fieldName = colDef.field;
+        if (fieldName.startsWith('attributes.')) {
+            fieldName = fieldName.replace('attributes.', '');
+        }
+
         try {
             const productId = data.id;
-
-            // Extract field name from colDef.field, handling both nested and flat paths
-            let fieldName = colDef.field;
-            if (fieldName.startsWith('attributes.')) {
-                fieldName = fieldName.replace('attributes.', '');
-            }
 
             const result = await this.apiClient.updateProduct(productId, fieldName, newValue);
 

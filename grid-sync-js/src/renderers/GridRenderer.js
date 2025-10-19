@@ -10,11 +10,13 @@ export class GridRenderer {
      * @param {string} config.baseUrl - Base URL for links
      * @param {GridDataAdapter} config.dataAdapter - Data adapter for field access
      * @param {Object} config.currentData - Current grid data with included relationships
+     * @param {Array} config.enabledAttributes - Enabled attributes for dynamic columns
      */
     constructor(config) {
         this.baseUrl = config.baseUrl || '';
         this.dataAdapter = config.dataAdapter;
         this.currentData = config.currentData || null;
+        this.enabledAttributes = config.enabledAttributes || [];
 
         // Inject custom CSS for colored dropdowns and read-only cells
         this.injectStatusDropdownCSS();
@@ -238,8 +240,8 @@ export class GridRenderer {
                 cellRenderer: (params) => this.truncatedTextRenderer(params)
             },
 
-            // Relations Group (only for nested mode with relationships)
-            ...(this.dataAdapter.mode === 'nested' ? [
+            // Relations Group (only for flat/WL mode with relationships)
+            ...(this.dataAdapter.mode === 'flat' ? [
                 {
                     headerName: 'Category',
                     field: 'category_name',
@@ -275,8 +277,8 @@ export class GridRenderer {
                 }
             ] : []),
 
-            // SEO Group (only for nested mode - thediamondbox specific)
-            ...(this.dataAdapter.mode === 'nested' ? [
+            // SEO Group (only for flat/WL mode - thediamondbox specific)
+            ...(this.dataAdapter.mode === 'flat' ? [
                 {
                     headerName: 'SEO Title',
                     field: this.dataAdapter.getFieldPath('seo_title'),
@@ -305,6 +307,55 @@ export class GridRenderer {
                 }
             ] : []),
 
+            // Attributes Column (only for nested/WTM mode - shows first enabled attribute)
+            ...(this.dataAdapter.mode === 'nested' ? [{
+                headerName: 'Attributes',
+                field: 'first_enabled_attribute',
+                width: 200,
+                sortable: false,
+                filter: 'agTextColumnFilter',
+                editable: false,
+                cellClass: 'read-only-cell',
+                cellStyle: (params) => this.getCellStyle(params),
+                valueGetter: (params) => {
+                    // Get first attribute from product's attributes relationship (belongsToMany with pivot)
+                    // Attributes are filtered by enabled_on_dropship = true on backend
+                    if (params.data && params.data.relationships && params.data.relationships.attributes) {
+                        const attributeIds = params.data.relationships.attributes.data.map(a => a.id);
+
+                        // If no attributes, show placeholder
+                        if (attributeIds.length === 0) {
+                            return '(No Attributes)';
+                        }
+
+                        // Get currentData from context (for ClipboardManager compatibility)
+                        const currentData = params.context?.gridInstance?.currentData || this.currentData;
+
+                        // Find first attribute in included data
+                        if (currentData && currentData.included) {
+                            const attr = currentData.included.find(inc =>
+                                inc.type === 'attributes' &&
+                                attributeIds.includes(inc.id)
+                            );
+
+                            if (attr && attr.attributes) {
+                                // Get value from pivot data
+                                const value = attr.attributes.pivot?.value || '';
+                                const name = attr.attributes.name || '';
+
+                                // Format: "AttributeName: Value"
+                                return value ? `${name}: ${value}` : '(No Attributes)';
+                            }
+                        }
+                    }
+                    return '(No Attributes)';
+                },
+                // valueFormatter ensures the value is properly copied to clipboard
+                valueFormatter: (params) => {
+                    return params.value || '';
+                }
+            }] : []),
+
             // URL Slug (both modes)
             {
                 headerName: 'URL Slug',
@@ -329,6 +380,7 @@ export class GridRenderer {
             }
         ];
     }
+
 
     /**
      * Render product image cell

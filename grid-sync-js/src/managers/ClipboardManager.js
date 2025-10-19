@@ -7,10 +7,13 @@ import { ProductGridConstants } from '../constants/ProductGridConstants.js';
  * @class ClipboardManager
  */
 export class ClipboardManager {
-    constructor(gridApi, columnApi) {
+    constructor(gridApi, columnApi, config = {}) {
         this.gridApi = gridApi;
         this.columnApi = columnApi;
+        this.gridInstance = config.gridInstance || null;
         this.notificationCallback = null;
+        this.csvExportPrefix = config.csvExportPrefix || 'products';
+        this.dataMode = config.dataMode || 'auto';
     }
 
     /**
@@ -36,7 +39,10 @@ export class ClipboardManager {
             const cellsMap = new Map();
 
             selectedCells.forEach(cellKey => {
-                const [rowIndex, colId] = cellKey.split('_');
+                // Split only at the first underscore (cellKey format: "rowIndex_colId")
+                const underscoreIndex = cellKey.indexOf('_');
+                const rowIndex = cellKey.substring(0, underscoreIndex);
+                const colId = cellKey.substring(underscoreIndex + 1);
                 const row = parseInt(rowIndex);
 
                 if (!cellsMap.has(row)) {
@@ -76,7 +82,28 @@ export class ClipboardManager {
                     }
 
                     const col = colsMap.get(colIndex);
-                    const cellValue = this.gridApi.getValue(col, rowNode);
+
+                    // Get cell value - try getValue first (AG Grid handles valueGetter internally)
+                    let cellValue;
+                    const colDef = col.getColDef();
+
+                    // First try AG Grid's getValue which should execute valueGetter if present
+                    cellValue = this.gridApi.getValue(col, rowNode);
+
+                    // If getValue returns empty/null but column has valueGetter, execute it manually
+                    if ((cellValue === null || cellValue === undefined || cellValue === '') && colDef.valueGetter) {
+                        const gridContext = this.gridInstance ? { gridInstance: this.gridInstance } : {};
+                        cellValue = colDef.valueGetter({
+                            data: rowNode.data,
+                            node: rowNode,
+                            column: col,
+                            colDef: colDef,
+                            api: this.gridApi,
+                            columnApi: this.columnApi,
+                            context: gridContext
+                        });
+                    }
+
                     rowData.push(this.formatCellValue(cellValue));
                     lastColIndex++;
                 });
@@ -464,7 +491,19 @@ export class ClipboardManager {
      * @param {string|null} filename - Custom filename or null for default
      */
     exportToCsv(filename = null) {
-        const defaultFilename = `products-${new Date().toISOString().split('T')[0]}.csv`;
+        const defaultFilename = `${this.csvExportPrefix}-${new Date().toISOString().split('T')[0]}.csv`;
+
+        // Debug: Log current mode and sample data
+        console.log('[CSV Export] Mode:', this.dataMode);
+        console.log('[CSV Export] Prefix:', this.csvExportPrefix);
+        console.log('[CSV Export] Filename:', filename || defaultFilename);
+
+        // Get first row to check data structure
+        const firstRow = this.gridApi.getDisplayedRowAtIndex(0);
+        if (firstRow) {
+            console.log('[CSV Export] First row data sample:', firstRow.data);
+        }
+
         this.gridApi.exportDataAsCsv({
             fileName: filename || defaultFilename
         });
