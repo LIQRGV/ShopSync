@@ -109,10 +109,44 @@ export class ProductSyncGrid {
             return;
         }
 
-        // No need to fetch enabled attributes anymore - we'll show first enabled attribute per product
+        // Pre-load data to get attribute groups BEFORE initializing grid (nested mode only)
+        let initialColumnDefs = this.gridRenderer.getColumnDefs();
+
+        if (this.dataAdapter.mode === 'nested') {
+            try {
+                const response = await this.apiClient.loadProducts(1, ProductGridConstants.GRID_CONFIG.PAGINATION_SIZE);
+                this.gridRenderer.updateCurrentData(response);
+
+                // Generate attribute columns from loaded data
+                const attributeColumnGroups = this.gridRenderer.generateAttributeColumnGroups();
+
+                if (attributeColumnGroups.length > 0) {
+                    const urlSlugIndex = initialColumnDefs.findIndex(col =>
+                        col.headerName === 'URL Slug' || col.field === 'slug' || col.field === this.dataAdapter.getFieldPath('slug')
+                    );
+
+                    const newColumnDefs = [];
+                    if (urlSlugIndex > -1) {
+                        newColumnDefs.push(...initialColumnDefs.slice(0, urlSlugIndex));
+                        newColumnDefs.push(...attributeColumnGroups);
+                        newColumnDefs.push(...initialColumnDefs.slice(urlSlugIndex));
+                    } else {
+                        newColumnDefs.push(...initialColumnDefs);
+                        newColumnDefs.push(...attributeColumnGroups);
+                    }
+
+                    initialColumnDefs = newColumnDefs;
+                }
+
+                // Store the response to use in onGridReady
+                this.initialData = response;
+            } catch (error) {
+                console.warn('ProductSync: Failed to pre-load attribute columns, will use default columns', error);
+            }
+        }
 
         const gridOptions = {
-            columnDefs: this.gridRenderer.getColumnDefs(),
+            columnDefs: initialColumnDefs,
             defaultColDef: this.gridRenderer.getDefaultColDef(),
             ...ProductGridConstants.AG_GRID_OPTIONS,
             paginationPageSize: ProductGridConstants.GRID_CONFIG.PAGINATION_SIZE,
@@ -144,8 +178,20 @@ export class ProductSyncGrid {
                 this.setupEventListeners();
                 this.setupKeyboardShortcuts();
 
-                // Load initial data
-                this.loadProducts();
+                // Load initial data (or use pre-loaded data if available)
+                if (this.initialData) {
+                    // Use pre-loaded data
+                    this.currentData = this.initialData;
+                    this.currentMeta = this.initialData.meta;
+                    const gridData = this.apiClient.transformApiData(this.initialData);
+                    this.gridApi.setRowData(gridData);
+                    this.updateStats();
+                    this.updatePaginationInfo(1);
+                    this.columnsUpdated = true; // Mark as already updated
+                    delete this.initialData; // Clear after use
+                } else {
+                    this.loadProducts();
+                }
 
                 // Setup post-initialization tasks
                 setTimeout(() => {
@@ -223,38 +269,8 @@ export class ProductSyncGrid {
             // Update renderer with new data (for relationships lookup in nested mode)
             this.gridRenderer.updateCurrentData(response);
 
-            // Update column definitions with dynamic attribute groups on first load
-            if (this.gridApi && !this.columnsUpdated && this.dataAdapter.mode === 'nested') {
-                // Get current column definitions
-                const currentColumnDefs = this.gridApi.getColumnDefs();
-
-                // Generate attribute column groups
-                const attributeColumnGroups = this.gridRenderer.generateAttributeColumnGroups();
-
-                if (attributeColumnGroups.length > 0) {
-                    // Find index to insert attribute columns (before URL Slug)
-                    const urlSlugIndex = currentColumnDefs.findIndex(col =>
-                        col.headerName === 'URL Slug' || col.field === 'slug'
-                    );
-
-                    if (urlSlugIndex > -1) {
-                        // Insert attribute column groups before URL Slug
-                        currentColumnDefs.splice(urlSlugIndex, 0, ...attributeColumnGroups);
-                    } else {
-                        // Fallback: add at the end before Actions
-                        const actionsIndex = currentColumnDefs.findIndex(col => col.headerName === 'Actions');
-                        if (actionsIndex > -1) {
-                            currentColumnDefs.splice(actionsIndex, 0, ...attributeColumnGroups);
-                        } else {
-                            currentColumnDefs.push(...attributeColumnGroups);
-                        }
-                    }
-
-                    this.gridApi.setColumnDefs(currentColumnDefs);
-                }
-
-                this.columnsUpdated = true;
-            }
+            // Column definitions already set during grid initialization (pre-loaded)
+            // No need to call setColumnDefs() here which would cause reordering issues
 
             // Transform data for grid display using data adapter
             const gridData = this.apiClient.transformApiData(response);
