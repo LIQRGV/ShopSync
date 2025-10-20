@@ -30,6 +30,106 @@ export class GridRenderer {
     }
 
     /**
+     * Extract attribute groups from current data
+     * Returns grouped attributes with group_name as key
+     */
+    extractAttributeGroups() {
+        if (!this.currentData || !this.currentData.included) {
+            return {};
+        }
+
+        const attributeGroups = {};
+
+        // Filter attributes that are enabled_on_dropship
+        const enabledAttributes = this.currentData.included.filter(item =>
+            item.type === 'attributes' &&
+            item.attributes.enabled_on_dropship === true
+        );
+
+        // Group by group_name
+        enabledAttributes.forEach(attr => {
+            const groupName = attr.attributes.group_name || 'Other';
+
+            if (!attributeGroups[groupName]) {
+                attributeGroups[groupName] = [];
+            }
+
+            attributeGroups[groupName].push({
+                id: attr.id,
+                name: attr.attributes.name,
+                code: attr.attributes.code,
+                type: attr.attributes.type
+            });
+        });
+
+        return attributeGroups;
+    }
+
+    /**
+     * Generate dynamic attribute column groups
+     */
+    generateAttributeColumnGroups() {
+        const attributeGroups = this.extractAttributeGroups();
+        const columnGroups = [];
+
+        // Generate column group for each attribute group
+        Object.entries(attributeGroups).forEach(([groupName, attributes]) => {
+            const children = attributes.map((attr, index) => {
+                // Capture attr.id in closure
+                const attrId = String(attr.id);
+                const attrName = attr.name;
+
+                return {
+                    headerName: attrName,
+                    field: `attribute_${attrId}`,
+                    width: 150,
+                    sortable: false,
+                    filter: 'agTextColumnFilter',
+                    editable: false,
+                    cellClass: 'read-only-cell',
+                    cellStyle: (params) => this.getCellStyle(params),
+                    valueGetter: (params) => {
+                        if (params.data && params.data.relationships && params.data.relationships.attributes) {
+                            const attributeIds = params.data.relationships.attributes.data.map(a => String(a.id));
+
+                            // Check if this attribute is in the product
+                            if (!attributeIds.includes(attrId)) {
+                                return '';
+                            }
+
+                            // Get currentData from context
+                            const currentData = params.context?.gridInstance?.currentData || this.currentData;
+
+                            if (currentData && currentData.included) {
+                                // Find the attribute in included data for this specific product
+                                const includedAttr = currentData.included.find(inc =>
+                                    inc.type === 'attributes' &&
+                                    String(inc.id) === attrId &&
+                                    attributeIds.includes(String(inc.id))
+                                );
+
+                                if (includedAttr && includedAttr.attributes) {
+                                    return includedAttr.attributes.pivot?.value || '';
+                                }
+                            }
+                        }
+                        return '';
+                    },
+                    valueFormatter: (params) => params.value || ''
+                };
+            });
+
+            columnGroups.push({
+                headerName: groupName,
+                headerGroupClass: 'attribute-group-header',
+                children: children
+            });
+        });
+
+        return columnGroups;
+    }
+
+    /**
      * Get column definitions for the grid
      */
     getColumnDefs() {
@@ -307,85 +407,8 @@ export class GridRenderer {
                 }
             ] : []),
 
-            // Attributes Column (only for nested/WTM mode - shows first enabled attribute with hover tooltip for all)
-            ...(this.dataAdapter.mode === 'nested' ? [{
-                headerName: 'Attributes',
-                field: 'first_enabled_attribute',
-                width: 200,
-                sortable: false,
-                filter: 'agTextColumnFilter',
-                editable: false,
-                cellClass: 'read-only-cell',
-                cellStyle: (params) => this.getCellStyle(params),
-                valueGetter: (params) => {
-                    // Get first attribute from product's attributes relationship (belongsToMany with pivot)
-                    // Attributes are filtered by enabled_on_dropship = true on backend
-                    if (params.data && params.data.relationships && params.data.relationships.attributes) {
-                        const attributeIds = params.data.relationships.attributes.data.map(a => a.id);
-
-                        // If no attributes, show placeholder
-                        if (attributeIds.length === 0) {
-                            return '(No Attributes)';
-                        }
-
-                        // Get currentData from context (for ClipboardManager compatibility)
-                        const currentData = params.context?.gridInstance?.currentData || this.currentData;
-
-                        // Find first attribute in included data
-                        if (currentData && currentData.included) {
-                            const attr = currentData.included.find(inc =>
-                                inc.type === 'attributes' &&
-                                attributeIds.includes(inc.id)
-                            );
-
-                            if (attr && attr.attributes) {
-                                // Get value from pivot data
-                                const value = attr.attributes.pivot?.value || '';
-                                const name = attr.attributes.name || '';
-
-                                // Format: "AttributeName: Value"
-                                return value ? `${name}: ${value}` : '(No Attributes)';
-                            }
-                        }
-                    }
-                    return '(No Attributes)';
-                },
-                // valueFormatter ensures the value is properly copied to clipboard
-                valueFormatter: (params) => {
-                    return params.value || '';
-                },
-                // tooltipValueGetter to show ALL attributes on hover
-                tooltipValueGetter: (params) => {
-                    if (params.data && params.data.relationships && params.data.relationships.attributes) {
-                        const attributeIds = params.data.relationships.attributes.data.map(a => a.id);
-
-                        if (attributeIds.length === 0) {
-                            return 'No attributes';
-                        }
-
-                        // Get currentData from context
-                        const currentData = params.context?.gridInstance?.currentData || this.currentData;
-
-                        if (currentData && currentData.included) {
-                            // Find ALL attributes in included data
-                            const attrs = currentData.included.filter(inc =>
-                                inc.type === 'attributes' &&
-                                attributeIds.includes(inc.id)
-                            );
-
-                            if (attrs.length > 0) {
-                                // Format all attributes as multi-line tooltip
-                                return attrs.map(attr => {
-                                    const value = attr.attributes?.pivot?.value || '';
-                                    const name = attr.attributes?.name || '';
-                                    return `${name}: ${value}`;
-                                }).join('\n');
-                            }
-                        }
-                    }
-                    return 'No attributes';
-                }
-            }] : []),
+            // Dynamic Attribute Column Groups will be added after data loads (see ProductSyncGrid.loadProducts)
+            // Removed from initial column defs to prevent empty columns
 
             // URL Slug (both modes)
             {

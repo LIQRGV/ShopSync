@@ -48,6 +48,7 @@ export class ProductSyncGrid {
         this.enabledAttributes = [];
         this.initialColumnState = null;
         this.isInitialized = false;
+        this.columnsUpdated = false;
 
         // Click tracking for enhanced editing UX
         this.lastClickedCell = null;
@@ -221,6 +222,39 @@ export class ProductSyncGrid {
 
             // Update renderer with new data (for relationships lookup in nested mode)
             this.gridRenderer.updateCurrentData(response);
+
+            // Update column definitions with dynamic attribute groups on first load
+            if (this.gridApi && !this.columnsUpdated && this.dataAdapter.mode === 'nested') {
+                // Get current column definitions
+                const currentColumnDefs = this.gridApi.getColumnDefs();
+
+                // Generate attribute column groups
+                const attributeColumnGroups = this.gridRenderer.generateAttributeColumnGroups();
+
+                if (attributeColumnGroups.length > 0) {
+                    // Find index to insert attribute columns (before URL Slug)
+                    const urlSlugIndex = currentColumnDefs.findIndex(col =>
+                        col.headerName === 'URL Slug' || col.field === 'slug'
+                    );
+
+                    if (urlSlugIndex > -1) {
+                        // Insert attribute column groups before URL Slug
+                        currentColumnDefs.splice(urlSlugIndex, 0, ...attributeColumnGroups);
+                    } else {
+                        // Fallback: add at the end before Actions
+                        const actionsIndex = currentColumnDefs.findIndex(col => col.headerName === 'Actions');
+                        if (actionsIndex > -1) {
+                            currentColumnDefs.splice(actionsIndex, 0, ...attributeColumnGroups);
+                        } else {
+                            currentColumnDefs.push(...attributeColumnGroups);
+                        }
+                    }
+
+                    this.gridApi.setColumnDefs(currentColumnDefs);
+                }
+
+                this.columnsUpdated = true;
+            }
 
             // Transform data for grid display using data adapter
             const gridData = this.apiClient.transformApiData(response);

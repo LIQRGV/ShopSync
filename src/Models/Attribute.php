@@ -29,6 +29,7 @@ class Attribute extends Model
         'validation_rules',
         'default_value',
         'enabled_on_dropship',
+        'group_name',
     ];
 
     protected $casts = [
