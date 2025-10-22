@@ -219,7 +219,17 @@ class ProductController extends Controller
                 return response()->json($error, Response::HTTP_NOT_FOUND);
             }
 
-            return response()->json(null, Response::HTTP_NO_CONTENT);
+            // Return 200 OK with JSON body instead of 204 No Content
+            return response()->json([
+                'data' => [
+                    'type' => 'products',
+                    'id' => (string) $id,
+                    'attributes' => [
+                        'deleted' => true,
+                        'message' => 'Product deleted successfully'
+                    ]
+                ]
+            ], Response::HTTP_OK);
 
         } catch (\Exception $e) {
             Log::error('Failed to delete product', [
@@ -300,7 +310,17 @@ class ProductController extends Controller
                 return response()->json($error, Response::HTTP_NOT_FOUND);
             }
 
-            return response()->json(null, Response::HTTP_NO_CONTENT);
+            // Return 200 OK with JSON body instead of 204 No Content
+            return response()->json([
+                'data' => [
+                    'type' => 'products',
+                    'id' => (string) $id,
+                    'attributes' => [
+                        'deleted' => true,
+                        'message' => 'Product deleted successfully'
+                    ]
+                ]
+            ], Response::HTTP_OK);
 
         } catch (\Exception $e) {
             Log::error('Failed to force delete product', [

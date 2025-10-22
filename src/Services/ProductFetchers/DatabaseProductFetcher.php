@@ -38,14 +38,17 @@ class DatabaseProductFetcher implements ProductFetcherInterface
 
     public function update($id, array $data)
     {
-        $product = Product::findOrFail($id);
+        // Use withoutGlobalScopes() to bypass any global scopes that might interfere
+        $product = Product::withoutGlobalScopes()->findOrFail($id);
         $product->update($data);
         return $product->fresh();
     }
 
     public function delete($id)
     {
-        Product::findOrFail($id)->delete();
+        // Use withoutGlobalScopes() to bypass any global scopes that might interfere
+        // (e.g., App\Product has global scopes that add extra query conditions)
+        return Product::withoutGlobalScopes()->findOrFail($id)->delete();
     }
 
     public function restore($id)
@@ -150,9 +153,34 @@ class DatabaseProductFetcher implements ProductFetcherInterface
 
     public function exportToCsv(array $filters = [])
     {
+        // Get all attributes that should be exported (enabled_on_dropship)
+        // Support dual mode: WL (direct column) vs WTM (via attribute_groups join)
+        $mode = config('products-package.mode', 'wl');
+
+        if ($mode === 'wl') {
+            // WL mode: Direct column query
+            $enabledAttributes = \TheDiamondBox\ShopSync\Models\Attribute::where('enabled_on_dropship', true)
+                ->orderBy('sortby')
+                ->orderBy('name')
+                ->get();
+        } else {
+            // WTM mode: Join with attribute_groups table
+            $enabledAttributes = \TheDiamondBox\ShopSync\Models\Attribute::join('attribute_groups', 'attributes.group_name', '=', 'attribute_groups.group_name')
+                ->where('attribute_groups.enabled_on_dropship', true)
+                ->select('attributes.*')
+                ->orderBy('attributes.sortby')
+                ->orderBy('attributes.name')
+                ->get();
+        }
+
         // Use chunked processing to prevent memory exhaustion
         $chunkSize = 1000; // Process 1000 records at a time
-        $csv = "ID,Name,Description,Price,Stock,SKU,Category,Active,Created At\n";
+
+        $headerColumns = ['ID', 'Name', 'Description', 'Price', 'Stock', 'SKU', 'Category', 'Active', 'Created At'];
+        foreach ($enabledAttributes as $attribute) {
+            $headerColumns[] = $attribute->name;
+        }
+        $csv = implode(',', $headerColumns) . "\n";
 
         // Use output buffering and temporary file for large exports
         $tempHandle = fopen('php://temp/maxmemory:' . (5 * 1024 * 1024), 'r+'); // 5MB memory limit
@@ -166,9 +194,10 @@ class DatabaseProductFetcher implements ProductFetcherInterface
             fwrite($tempHandle, $csv);
 
             // Process data in chunks to prevent memory exhaustion
-            $this->buildQuery($filters, [])->chunk($chunkSize, function ($products) use ($tempHandle) {
+            // Include attributes relationship for export
+            $this->buildQuery($filters, ['attributes'])->chunk($chunkSize, function ($products) use ($tempHandle, $enabledAttributes) {
                 foreach ($products as $product) {
-                    $row = $this->formatCsvRow($product);
+                    $row = $this->formatCsvRow($product, $enabledAttributes);
                     fwrite($tempHandle, $row . "\n");
                 }
 
@@ -193,9 +222,9 @@ class DatabaseProductFetcher implements ProductFetcherInterface
     /**
      * Format a single product row for CSV export
      */
-    protected function formatCsvRow($product): string
+    protected function formatCsvRow($product, $enabledAttributes = []): string
     {
-        return implode(',', [
+        $columns = [
             $product->id,
             '"' . str_replace('"', '""', $product->name ?? '') . '"',
             '"' . str_replace('"', '""', $product->description ?? '') . '"',
@@ -205,7 +234,42 @@ class DatabaseProductFetcher implements ProductFetcherInterface
             '"' . str_replace('"', '""', $product->category ?? '') . '"',
             $product->is_active ? 'Yes' : 'No',
             $product->created_at ? $product->created_at->toDateTimeString() : '',
-        ]);
+        ];
+
+        // Add attribute values
+        foreach ($enabledAttributes as $attribute) {
+            $value = '';
+
+            // Find the attribute value from product's attributes relationship
+            if ($product->relationLoaded('attributes')) {
+                $productAttribute = $product->attributes->where('id', $attribute->id)->first();
+                if ($productAttribute) {
+                    // Try to get value from pivot first
+                    if (isset($productAttribute->pivot) && isset($productAttribute->pivot->value)) {
+                        $value = $productAttribute->pivot->value;
+                    }
+                    // Fallback: try direct property access (in case pivot is accessed differently)
+                    elseif (isset($productAttribute->value)) {
+                        $value = $productAttribute->value;
+                    }
+                }
+            } else {
+                // If relationship not loaded, query directly from database
+                $productAttributeValue = DB::table('product_attributes')
+                    ->where('product_id', $product->id)
+                    ->where('attribute_id', $attribute->id)
+                    ->value('value');
+
+                if ($productAttributeValue !== null) {
+                    $value = $productAttributeValue;
+                }
+            }
+
+            // Escape and add to columns
+            $columns[] = '"' . str_replace('"', '""', $value) . '"';
+        }
+
+        return implode(',', $columns);
     }
 
     public function importFromCsv($csvContent)
@@ -390,10 +454,24 @@ class DatabaseProductFetcher implements ProductFetcherInterface
                     $relationships[] = 'supplier';
                     break;
                 case 'attributes':
-                    $relationships[] = 'attributes';
+                    // Only load attributes that are enabled_on_dropship
+                    $relationships['attributes'] = function ($query) {
+                        $query->where('enabled_on_dropship', true)
+                              ->orderBy('sortby')
+                              ->orderBy('name');
+                    };
                     break;
                 case 'productAttributes':
-                    $relationships[] = 'productAttributes.attribute';
+                    // Load product attributes with only enabled_on_dropship attributes
+                    $relationships['productAttributes'] = function ($query) {
+                        $query->whereHas('attribute', function ($q) {
+                            $q->where('enabled_on_dropship', true);
+                        })->with(['attribute' => function ($q) {
+                            $q->where('enabled_on_dropship', true)
+                              ->orderBy('sortby')
+                              ->orderBy('name');
+                        }]);
+                    };
                     break;
             }
         }
@@ -410,8 +488,8 @@ class DatabaseProductFetcher implements ProductFetcherInterface
      */
     public function uploadProductImage($id, $file)
     {
-        // Try to find with query builder for debugging
-        $product = Product::findOrFail($id);
+        // Use withoutGlobalScopes() to bypass any global scopes that might interfere
+        $product = Product::withoutGlobalScopes()->findOrFail($id);
 
         // Store the uploaded image (only to original_image directory)
         $originalImagePath = $this->storeProductImage($file);

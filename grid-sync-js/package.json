@@ -1,0 +1,45 @@
+{
+  "name": "@thediamondbox/grid-sync",
+  "version": "1.0.0",
+  "description": "Unified AG Grid implementation for product synchronization with support for nested and flat data structures",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"No tests yet - add tests in future versions\"",
+    "lint": "echo \"No linter configured yet\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thediamondbox/module-shopsync.git",
+    "directory": "grid-sync-js"
+  },
+  "keywords": [
+    "ag-grid",
+    "product-sync",
+    "laravel",
+    "real-time",
+    "sse",
+    "grid",
+    "data-grid",
+    "product-management",
+    "nested-data",
+    "flat-data"
+  ],
+  "author": "TheDiamondBox",
+  "license": "MIT",
+  "peerDependencies": {
+    "ag-grid-community": ">=28.0.0"
+  },
+  "publishConfig": {
+    "@thediamondbox:registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

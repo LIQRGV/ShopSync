@@ -180,14 +180,14 @@ class JsonApiTransformer
         if (!$model->relationLoaded($relationshipName)) {
             return null;
         }
-        
+
         $related = $model->getRelation($relationshipName);
-        
+
         if ($related === null) {
             return ['data' => []];
         }
-        
-        if ($related instanceof Collection || is_array($related)) {
+
+        if ($related instanceof Collection || $related instanceof BaseCollection || is_array($related)) {
             // Has many relationship
             $data = [];
             foreach ($related as $item) {
@@ -197,13 +197,13 @@ class JsonApiTransformer
                     'type' => $type,
                     'id' => (string) $item->getKey(),
                 ];
-                
-                // Add to included resources
-                $this->addToIncluded($item, $type);
+
+                // Add to included resources with parent context for pivot relationships
+                $this->addToIncluded($item, $type, $model->getKey());
             }
-            
+
             return ['data' => $data];
-        } else {
+        } else if ($related instanceof Model) {
             // Belongs to relationship
             $type = $this->getTypeFromModel($related);
             $relationshipData = [
@@ -212,46 +212,55 @@ class JsonApiTransformer
                     'id' => (string) $related->getKey(),
                 ]
             ];
-            
+
             // Add to included resources
             $this->addToIncluded($related, $type);
-            
+
             return $relationshipData;
+        } else {
+            // Unknown relationship type, return empty
+            return ['data' => []];
         }
     }
 
     /**
      * Add a model to the included resources
      */
-    protected function addToIncluded(Model $model, string $type): void
+    protected function addToIncluded(Model $model, string $type, $parentId = null): void
     {
+        // For models with pivot (like attributes in a many-to-many relationship),
+        // create a unique key that includes the parent ID to allow duplicate attribute IDs
+        // with different pivot data for different products
         $key = $type . ':' . $model->getKey();
-        
+        if ($parentId !== null && isset($model->pivot)) {
+            $key = $type . ':' . $model->getKey() . ':' . $parentId;
+        }
+
         if (!isset($this->included[$key])) {
             $this->currentDepth++;
-            
+
             $includedData = [
                 'type' => $type,
                 'id' => (string) $model->getKey(),
                 'attributes' => $this->getModelAttributes($model),
             ];
-            
+
             // Add nested relationships if we haven't reached max depth
             if ($this->currentDepth < $this->maxIncludeDepth) {
                 $nestedIncludes = $this->getNestedIncludes($type);
                 if (!empty($nestedIncludes)) {
                     $oldIncludes = $this->includes;
                     $this->includes = $nestedIncludes;
-                    
+
                     $relationships = $this->buildRelationships($model);
                     if (!empty($relationships)) {
                         $includedData['relationships'] = $relationships;
                     }
-                    
+
                     $this->includes = $oldIncludes;
                 }
             }
-            
+
             $this->included[$key] = $includedData;
             $this->currentDepth--;
         }
