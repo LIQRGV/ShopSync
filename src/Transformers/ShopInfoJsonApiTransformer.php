@@ -15,7 +15,7 @@ class ShopInfoJsonApiTransformer extends JsonApiTransformer
         parent::__construct($this->availableIncludes, $this->maxDepth);
     }
 
-    public function transformShopInfo(ShopInfo $shopInfo, array $includes = []): array
+    public function transformShopInfo(Model $shopInfo, array $includes = []): array
     {
         $this->setIncludes($includes);
         return $this->transformItem($shopInfo, 'shop-info');
@@ -23,7 +23,9 @@ class ShopInfoJsonApiTransformer extends JsonApiTransformer
 
     protected function getModelAttributes(Model $model): array
     {
-        if (!$model instanceof ShopInfo) {
+        // Support both App\ShopInfo (WL mode) and TheDiamondBox\ShopSync\Models\ShopInfo (WTM mode)
+        $className = class_basename($model);
+        if ($className !== 'ShopInfo') {
             return parent::getModelAttributes($model);
         }
 
@@ -56,7 +58,7 @@ class ShopInfoJsonApiTransformer extends JsonApiTransformer
         return $attributes;
     }
 
-    protected function transformShopInfoAttributes(array $attributes, ShopInfo $shopInfo): array
+    protected function transformShopInfoAttributes(array $attributes, Model $shopInfo): array
     {
         if (isset($attributes['document_attribute_last_updated_at']) && $attributes['document_attribute_last_updated_at']) {
             $attributes['document_attribute_last_updated_at'] = $shopInfo->document_attribute_last_updated_at
@@ -143,7 +145,7 @@ class ShopInfoJsonApiTransformer extends JsonApiTransformer
         return $attributes;
     }
 
-    protected function addToIncluded(Model $model, string $type): void
+    protected function addToIncluded(Model $model, string $type, $parentId = null): void
     {
         $key = $type . ':' . $model->getKey();
 
