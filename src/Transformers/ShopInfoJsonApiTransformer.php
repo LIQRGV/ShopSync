@@ -15,7 +15,7 @@ class ShopInfoJsonApiTransformer extends JsonApiTransformer
         parent::__construct($this->availableIncludes, $this->maxDepth);
     }
 
-    public function transformShopInfo(ShopInfo $shopInfo, array $includes = []): array
+    public function transformShopInfo(Model $shopInfo, array $includes = []): array
     {
         $this->setIncludes($includes);
         return $this->transformItem($shopInfo, 'shop-info');
@@ -143,7 +143,7 @@ class ShopInfoJsonApiTransformer extends JsonApiTransformer
         return $attributes;
     }
 
-    protected function addToIncluded(Model $model, string $type): void
+    protected function addToIncluded(Model $model, string $type, $parentId = null): void
     {
         $key = $type . ':' . $model->getKey();
 
