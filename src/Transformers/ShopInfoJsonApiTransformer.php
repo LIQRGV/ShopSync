@@ -23,7 +23,8 @@ class ShopInfoJsonApiTransformer extends JsonApiTransformer
 
     protected function getModelAttributes(Model $model): array
     {
-        if (!$model instanceof ShopInfo) {
+        $className = class_basename($model);
+        if ($className !== 'ShopInfo') {
             return parent::getModelAttributes($model);
         }
 
@@ -56,7 +57,7 @@ class ShopInfoJsonApiTransformer extends JsonApiTransformer
         return $attributes;
     }
 
-    protected function transformShopInfoAttributes(array $attributes, ShopInfo $shopInfo): array
+    protected function transformShopInfoAttributes(array $attributes, Model $shopInfo): array
     {
         if (isset($attributes['document_attribute_last_updated_at']) && $attributes['document_attribute_last_updated_at']) {
             $attributes['document_attribute_last_updated_at'] = $shopInfo->document_attribute_last_updated_at
