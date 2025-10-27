@@ -18,6 +18,7 @@ export { GridRenderer } from './renderers/GridRenderer.js';
 // Managers
 export { ClipboardManager } from './managers/ClipboardManager.js';
 export { SelectionHandler } from './managers/SelectionHandler.js';
+export { CsvPreviewHandler } from './managers/CsvPreviewHandler.js';
 
 // Real-time
 export { ProductSSEClient } from './realtime/SSEClient.js';
