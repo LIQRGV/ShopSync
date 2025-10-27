@@ -984,7 +984,6 @@ export class ProductSyncGrid {
      * Handle SSE connection state change
      */
     handleSSEConnectionChange(state, data) {
-        console.log(`[SSE] Connection state: ${state}`, data);
         this.updateSSEStatusIndicator(state);
 
         switch (state) {
@@ -1161,7 +1160,8 @@ export class ProductSyncGrid {
     }
 
     /**
-     * Handle CSV import
+     * Handle CSV import with preview confirmation
+     * Shows first 10 rows before importing
      */
     async handleCsvImport(file) {
         // Validate file type
@@ -1171,7 +1171,23 @@ export class ProductSyncGrid {
         }
 
         try {
-            // Show uploading notification
+            // Step 1: Parse CSV and get preview data (first 10 rows)
+            const previewData = await this.parseCsvPreview(file, 10);
+
+            if (!previewData || previewData.rows.length === 0) {
+                this.showNotification('error', 'CSV file is empty or invalid');
+                return;
+            }
+
+            // Step 2: Show confirmation modal with preview
+            const userConfirmed = await this.showImportPreviewModal(file, previewData);
+
+            if (!userConfirmed) {
+                this.showNotification('info', 'Import cancelled');
+                return;
+            }
+
+            // Step 3: Proceed with actual import
             this.showNotification('info', 'Importing CSV file...');
 
             // Create form data
@@ -1191,6 +1207,346 @@ export class ProductSyncGrid {
             console.error('CSV import error:', error);
             this.showNotification('error', `Import failed: ${error.message}`);
         }
+    }
+
+    /**
+     * Parse CSV file and extract first N rows for preview
+     * @param {File} file - CSV file to parse
+     * @param {number} maxRows - Maximum number of rows to preview (default: 10)
+     * @returns {Promise<Object>} Preview data with headers and rows
+     */
+    async parseCsvPreview(file, maxRows = 10) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+
+            reader.onload = (e) => {
+                try {
+                    const csvText = e.target.result;
+                    const lines = csvText.split('\n').filter(line => line.trim() !== '');
+
+                    if (lines.length === 0) {
+                        resolve(null);
+                        return;
+                    }
+
+                    // Parse header (first line)
+                    const rawHeader = this.parseCsvLine(lines[0]);
+
+                    // Exclude image-related columns (case-insensitive)
+                    const excludedColumns = ['image', 'images', 'image_url', 'image url', 'image_path', 'image path'];
+                    const excludedIndices = [];
+                    const header = rawHeader.filter((col, index) => {
+                        const isExcluded = excludedColumns.some(exc =>
+                            col.toLowerCase().trim() === exc.toLowerCase()
+                        );
+                        if (isExcluded) {
+                            excludedIndices.push(index);
+                        }
+                        return !isExcluded;
+                    });
+
+                    // Calculate how many data rows exist (excluding header)
+                    const totalDataRows = lines.length - 1;
+
+                    // Determine how many rows to show in preview
+                    const rowsToShow = Math.min(totalDataRows, maxRows);
+
+                    // Parse preview rows
+                    const previewRows = [];
+                    for (let i = 1; i <= rowsToShow; i++) {
+                        const rawRowData = this.parseCsvLine(lines[i]);
+
+                        // Filter out excluded column values
+                        const rowData = rawRowData.filter((val, index) => !excludedIndices.includes(index));
+
+                        // Combine header with row data
+                        const rowObject = {};
+                        header.forEach((col, index) => {
+                            rowObject[col] = rowData[index] || '';
+                        });
+
+                        previewRows.push(rowObject);
+                    }
+
+                    resolve({
+                        header: header,
+                        rows: previewRows,
+                        totalRows: totalDataRows,
+                        showingRows: rowsToShow,
+                        hasMore: totalDataRows > maxRows,
+                        moreRowsCount: totalDataRows > maxRows ? totalDataRows - maxRows : 0,
+                        fileName: file.name,
+                        fileSize: (file.size / 1024).toFixed(2) + ' KB',
+                        hasExcludedColumns: excludedIndices.length > 0,
+                        excludedColumnCount: excludedIndices.length
+                    });
+
+                } catch (error) {
+                    reject(error);
+                }
+            };
+
+            reader.onerror = (error) => reject(error);
+            reader.readAsText(file);
+        });
+    }
+
+    /**
+     * Parse a single CSV line (handle quoted values and commas)
+     * @param {string} line - CSV line to parse
+     * @returns {Array<string>} Parsed values
+     */
+    parseCsvLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+
+            if (char === '"') {
+                inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+                result.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+
+        result.push(current.trim());
+        return result;
+    }
+
+    /**
+     * Show import preview modal with data confirmation
+     * @param {File} file - Original CSV file
+     * @param {Object} previewData - Parsed preview data
+     * @returns {Promise<boolean>} User confirmation (true = confirmed, false = cancelled)
+     */
+    async showImportPreviewModal(file, previewData) {
+        return new Promise((resolve) => {
+            // Create or get modal container
+            let modalContainer = document.getElementById('csvPreviewModal');
+
+            if (!modalContainer) {
+                modalContainer = document.createElement('div');
+                modalContainer.id = 'csvPreviewModal';
+                modalContainer.className = 'modal fade';
+                modalContainer.setAttribute('tabindex', '-1');
+                modalContainer.setAttribute('role', 'dialog');
+                modalContainer.setAttribute('aria-labelledby', 'csvPreviewModalLabel');
+                modalContainer.setAttribute('aria-hidden', 'true');
+                document.body.appendChild(modalContainer);
+            }
+
+            // Build preview message based on data
+            let previewMessage = '';
+            if (previewData.hasMore) {
+                previewMessage = `Showing first ${previewData.showingRows} of ${previewData.totalRows} rows. ${previewData.moreRowsCount} more rows will be imported.`;
+            } else {
+                previewMessage = `Showing all ${previewData.totalRows} rows from the CSV file.`;
+            }
+
+            // Build modal HTML
+            modalContainer.innerHTML = `
+                <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+                    <div class="modal-content">
+                        <!-- Modal Body -->
+                        <div class="modal-body">
+                            <!-- File Info -->
+                            <div class="alert alert-info mb-2">
+                                <h6 class="mb-2"><i class="fa fa-info-circle"></i> File Information</h6>
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <strong>File Name:</strong> ${this.escapeHtml(previewData.fileName)}
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>File Size:</strong> ${previewData.fileSize}
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>Total Rows:</strong> ${previewData.totalRows}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Preview Message -->
+                            <div class="alert alert-warning mb-2">
+                                <i class="fa fa-exclamation-triangle"></i>
+                                <strong>Preview:</strong> ${previewMessage}
+                            </div>
+
+                            <!-- Preview Table -->
+                            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                <table class="table table-bordered table-sm table-hover" style="font-size: 0.875rem;">
+                                    <thead class="thead-light" style="position: sticky; top: 0; z-index: 10;">
+                                        <tr>
+                                            <th style="width: 50px; font-size: 0.875rem;">#</th>
+                                            ${previewData.header.map(col =>
+                                                `<th style="min-width: 120px; white-space: nowrap; font-size: 0.875rem;">${this.escapeHtml(col)}</th>`
+                                            ).join('')}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${previewData.rows.map((row, index) => `
+                                            <tr>
+                                                <td class="text-center text-muted" style="font-size: 0.875rem;"><strong>${index + 1}</strong></td>
+                                                ${previewData.header.map(col => {
+                                                    const value = row[col] || '';
+                                                    const displayValue = value.length > 50
+                                                        ? value.substring(0, 50) + '...'
+                                                        : value;
+                                                    return `<td title="${this.escapeHtml(value)}" style="font-size: 0.875rem;">${this.escapeHtml(displayValue)}</td>`;
+                                                }).join('')}
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            ${previewData.hasMore ? `
+                                <div class="alert alert-secondary mt-2 mb-0">
+                                    <i class="fa fa-arrow-down"></i>
+                                    <strong>${previewData.moreRowsCount} more rows</strong> will be imported after confirmation.
+                                </div>
+                            ` : ''}
+                        </div>
+
+                        <!-- Modal Footer -->
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" id="cancelImportBtn">
+                                <i class="fa fa-times"></i> Cancel
+                            </button>
+                            <button type="button" class="btn btn-success" id="confirmImportBtn">
+                                <i class="fa fa-check"></i> Confirm Import (${previewData.totalRows} ${previewData.totalRows === 1 ? 'row' : 'rows'})
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Inject modal styles if not already present
+            this.injectModalStyles();
+
+            // Show modal (Bootstrap or fallback)
+            const useBootstrapModal = typeof $ !== 'undefined' && $.fn && $.fn.modal;
+
+            if (useBootstrapModal) {
+                // Use Bootstrap modal
+                $(modalContainer).modal({
+                    backdrop: 'static',
+                    keyboard: false
+                });
+                $(modalContainer).modal('show');
+
+                // Handle confirm button
+                $('#confirmImportBtn').off('click').on('click', () => {
+                    $(modalContainer).modal('hide');
+                    resolve(true);
+                });
+
+                // Handle cancel button
+                $('#cancelImportBtn').off('click').on('click', () => {
+                    $(modalContainer).modal('hide');
+                    resolve(false);
+                });
+
+                // Handle modal hidden event
+                $(modalContainer).off('hidden.bs.modal').on('hidden.bs.modal', function() {
+                    // Default to false if modal closed without clicking button
+                    resolve(false);
+                });
+
+            } else {
+                // Fallback: Vanilla JS
+                modalContainer.style.display = 'block';
+                modalContainer.classList.add('show');
+                document.body.classList.add('modal-open');
+
+                const confirmBtn = document.getElementById('confirmImportBtn');
+                const cancelBtn = document.getElementById('cancelImportBtn');
+                const closeBtn = modalContainer.querySelector('.close');
+
+                const closeModal = (confirmed) => {
+                    modalContainer.style.display = 'none';
+                    modalContainer.classList.remove('show');
+                    document.body.classList.remove('modal-open');
+                    resolve(confirmed);
+                };
+
+                confirmBtn.addEventListener('click', () => closeModal(true));
+                cancelBtn.addEventListener('click', () => closeModal(false));
+                closeBtn.addEventListener('click', () => closeModal(false));
+            }
+        });
+    }
+
+    /**
+     * Escape HTML to prevent XSS in preview table
+     * @param {string} text - Text to escape
+     * @returns {string} Escaped HTML
+     */
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    /**
+     * Inject modal styles dynamically if not already present
+     */
+    injectModalStyles() {
+        // Check if styles already injected
+        if (document.getElementById('csvPreviewModalStyles')) {
+            return;
+        }
+
+        const styleElement = document.createElement('style');
+        styleElement.id = 'csvPreviewModalStyles';
+        styleElement.textContent = `
+            #csvPreviewModal .modal-dialog {
+                max-width: 90%;
+            }
+
+            #csvPreviewModal .table thead th {
+                background-color: #f8f9fa;
+                box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+            }
+
+            #csvPreviewModal .table td {
+                max-width: 200px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            #csvPreviewModal .table tbody tr:hover {
+                background-color: #f8f9fa;
+            }
+
+            #csvPreviewModal .close {
+                opacity: 1;
+            }
+
+            /* Fallback modal styles */
+            .modal {
+                position: fixed;
+                top: 0;
+                left: 0;
+                z-index: 1050;
+                width: 100%;
+                height: 100%;
+                overflow: hidden;
+                outline: 0;
+            }
+
+            .modal.show {
+                display: block !important;
+                background-color: rgba(0, 0, 0, 0.5);
+            }
+        `;
+
+        document.head.appendChild(styleElement);
     }
 
     /**
