@@ -1,6 +1,6 @@
 {
   "name": "@thediamondbox/grid-sync",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Unified AG Grid implementation for product synchronization with support for nested and flat data structures",
   "main": "src/index.js",
   "type": "module",
