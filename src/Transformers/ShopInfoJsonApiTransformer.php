@@ -23,6 +23,7 @@ class ShopInfoJsonApiTransformer extends JsonApiTransformer
 
     protected function getModelAttributes(Model $model): array
     {
+        // Support both App\ShopInfo (WL mode) and TheDiamondBox\ShopSync\Models\ShopInfo (WTM mode)
         $className = class_basename($model);
         if ($className !== 'ShopInfo') {
             return parent::getModelAttributes($model);

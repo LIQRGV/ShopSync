@@ -395,7 +395,7 @@ export class CsvPreviewHandler {
                 position: fixed;
                 top: 0;
                 left: 0;
-                z-index: 1050;
+                z-index: 10000;
                 width: 100%;
                 height: 100%;
                 overflow: auto;
@@ -414,6 +414,7 @@ export class CsvPreviewHandler {
                 width: auto;
                 margin: 1.75rem auto;
                 max-width: 90%;
+                z-index: 10001;
             }
 
             #csvPreviewModal .modal-content {
@@ -422,6 +423,7 @@ export class CsvPreviewHandler {
                 border: 1px solid rgba(0,0,0,.2);
                 border-radius: 6px;
                 outline: 0;
+                z-index: 10002;
             }
 
             #csvPreviewModal .modal-body {
