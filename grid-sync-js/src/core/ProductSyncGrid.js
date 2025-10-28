@@ -9,6 +9,7 @@ import { ProductGridApiClient } from '../api/ProductGridApiClient.js';
 import { GridRenderer } from '../renderers/GridRenderer.js';
 import { ClipboardManager } from '../managers/ClipboardManager.js';
 import { SelectionHandler } from '../managers/SelectionHandler.js';
+import { CsvPreviewHandler } from '../managers/CsvPreviewHandler.js';
 import { ProductSSEClient } from '../realtime/SSEClient.js';
 import { ProductGridConstants } from '../constants/ProductGridConstants.js';
 
@@ -61,6 +62,7 @@ export class ProductSyncGrid {
         this.apiClient = null;
         this.clipboardManager = null;
         this.selectionHandler = null;
+        this.csvPreviewHandler = null;
         this.gridRenderer = null;
         this.sseClient = null;
         this.sseConnectionStatus = null;
@@ -173,6 +175,13 @@ export class ProductSyncGrid {
                 this.selectionHandler.setNotificationCallback((type, message) =>
                     this.showNotification(type, message)
                 );
+
+                // Initialize CSV Preview Handler (separate from grid-sync core)
+                this.csvPreviewHandler = new CsvPreviewHandler({
+                    apiClient: this.apiClient,
+                    showNotification: (type, message) => this.showNotification(type, message),
+                    onImportSuccess: () => this.refresh()
+                });
 
                 // Setup UI event listeners and keyboard shortcuts
                 this.setupEventListeners();
@@ -984,7 +993,6 @@ export class ProductSyncGrid {
      * Handle SSE connection state change
      */
     handleSSEConnectionChange(state, data) {
-        console.log(`[SSE] Connection state: ${state}`, data);
         this.updateSSEStatusIndicator(state);
 
         switch (state) {
@@ -1161,35 +1169,16 @@ export class ProductSyncGrid {
     }
 
     /**
-     * Handle CSV import
+     * Handle CSV import with preview confirmation
+     * Shows first 10 rows before importing
      */
     async handleCsvImport(file) {
-        // Validate file type
-        if (!file.name.endsWith('.csv')) {
-            this.showNotification('error', 'Please select a valid CSV file');
-            return;
-        }
-
-        try {
-            // Show uploading notification
-            this.showNotification('info', 'Importing CSV file...');
-
-            // Create form data
-            const formData = new FormData();
-            formData.append('file', file);
-
-            // Upload to API endpoint using apiClient
-            const result = await this.apiClient.importProducts(formData);
-
-            // Show success message
-            this.showNotification('success', result.message || 'CSV imported successfully!');
-
-            // Refresh the grid to show imported data
-            this.refresh();
-
-        } catch (error) {
-            console.error('CSV import error:', error);
-            this.showNotification('error', `Import failed: ${error.message}`);
+        // Delegate to CsvPreviewHandler (CSV preview is separate from grid-sync core)
+        if (this.csvPreviewHandler) {
+            await this.csvPreviewHandler.handleCsvImport(file);
+        } else {
+            console.error('[ProductSyncGrid] CSV Preview Handler not initialized');
+            this.showNotification('error', 'CSV import feature not available');
         }
     }
 

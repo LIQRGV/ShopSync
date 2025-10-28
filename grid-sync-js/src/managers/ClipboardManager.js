@@ -487,26 +487,115 @@ export class ClipboardManager {
     }
 
     /**
-     * Export current grid data to CSV format
+     * Export ALL products using AG Grid's native export (maintains perfect format)
      * @param {string|null} filename - Custom filename or null for default
      */
-    exportToCsv(filename = null) {
+    async exportToCsv(filename = null) {
         const defaultFilename = `${this.csvExportPrefix}-${new Date().toISOString().split('T')[0]}.csv`;
 
-        // Debug: Log current mode and sample data
-        console.log('[CSV Export] Mode:', this.dataMode);
-        console.log('[CSV Export] Prefix:', this.csvExportPrefix);
-        console.log('[CSV Export] Filename:', filename || defaultFilename);
+        try {
+            // Step 1: Get total product count
+            const apiClient = this.gridInstance?.apiClient;
+            if (!apiClient) {
+                throw new Error('API client not available');
+            }
 
-        // Get first row to check data structure
-        const firstRow = this.gridApi.getDisplayedRowAtIndex(0);
-        if (firstRow) {
-            console.log('[CSV Export] First row data sample:', firstRow.data);
+            this.showNotification('info', 'Checking product count...');
+
+            // Get total count from current pagination info
+            const currentData = this.gridInstance?.currentData;
+            const totalProducts = currentData?.meta?.pagination?.total || 0;
+
+            // Step 2: Show warning if >1000 products
+            if (totalProducts > 1000) {
+                const confirmed = await this.showExportWarning(totalProducts);
+                if (!confirmed) {
+                    this.showNotification('info', 'Export cancelled');
+                    return;
+                }
+            }
+
+            // Step 3: Show loading notification
+            this.showNotification('info', `Loading all ${totalProducts} products for export...`);
+
+            // Step 4: Fetch ALL products (no pagination)
+            const allProductsData = await this.fetchAllProducts(apiClient);
+
+            if (!allProductsData || !allProductsData.data || allProductsData.data.length === 0) {
+                throw new Error('No products to export');
+            }
+
+            // Step 5: Save current state
+            const currentPage = this.gridInstance?.currentPage || 1;
+            const currentRowData = [];
+            this.gridApi.forEachNode(node => currentRowData.push(node.data));
+
+            // Step 6: Temporarily load all products to grid
+            const transformedData = this.gridInstance.apiClient.dataAdapter.transformForGrid(allProductsData);
+            this.gridApi.setRowData(transformedData);
+
+            // Step 7: Export using AG Grid's native method (perfect format!)
+            this.showNotification('info', 'Generating CSV file...');
+
+            // Small delay to ensure grid is updated
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Get all column keys except image column
+            const allColumns = this.columnApi.getAllDisplayedColumns();
+            const exportColumnKeys = allColumns
+                .filter(col => {
+                    const colId = col.getColId();
+                    // Exclude image column
+                    return colId !== 'image';
+                })
+                .map(col => col.getColId());
+
+            this.gridApi.exportDataAsCsv({
+                fileName: filename || defaultFilename,
+                columnKeys: exportColumnKeys  // Only export non-image columns
+            });
+
+            // Step 8: Restore original pagination
+            this.gridApi.setRowData(currentRowData);
+
+            this.showNotification('success', `Exported ${transformedData.length} products successfully`);
+
+        } catch (error) {
+            console.error('[CSV Export] Error:', error);
+            this.showNotification('error', `Export failed: ${error.message}`);
         }
+    }
 
-        this.gridApi.exportDataAsCsv({
-            fileName: filename || defaultFilename
+    /**
+     * Show warning popup for large exports
+     * @param {number} count - Total product count
+     * @returns {Promise<boolean>} True if user confirmed
+     */
+    async showExportWarning(count) {
+        return new Promise((resolve) => {
+            const message = `You are about to export ${count.toLocaleString()} products.\n\n` +
+                          `This may take a significant amount of time and may slow down your browser.\n\n` +
+                          `Do you want to proceed?`;
+
+            const confirmed = confirm(message);
+            resolve(confirmed);
         });
+    }
+
+    /**
+     * Fetch all products without pagination
+     * @param {Object} apiClient - API client instance
+     * @returns {Promise<Object>} All products data
+     */
+    async fetchAllProducts(apiClient) {
+        try {
+            // Fetch with very high per_page to get all products in one request
+            // AG Grid API should support this, or we need to implement pagination loop
+            const response = await apiClient.loadProducts(1, 999999);
+            return response;
+        } catch (error) {
+            throw new Error(`Failed to fetch all products: ${error.message}`);
+        }
     }
 
     /**
