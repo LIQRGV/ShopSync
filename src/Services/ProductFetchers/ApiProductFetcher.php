@@ -339,9 +339,20 @@ class ApiProductFetcher implements ProductFetcherInterface
     public function importFromCsv($csvContent)
     {
         return $this->handleRequest(function () use ($csvContent) {
-            return $this->client()
-                ->attach('file', $csvContent, 'products.csv')
-                ->post('/products/import');
+
+            $client = $this->multipartClient();
+
+            $fullUrl = $this->baseUrl . '/products/import';
+
+            $httpResponse = $client->attach(
+                'file',
+                $csvContent,
+                'products.csv'
+            )
+                ->post($fullUrl);
+
+
+            return $httpResponse;
         }, ['imported' => 0, 'errors' => ['API import failed - connection error']]);
     }
 

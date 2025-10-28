@@ -5,6 +5,7 @@ namespace TheDiamondBox\ShopSync\Services\ProductFetchers;
 use TheDiamondBox\ShopSync\Observers\ProductObserver;
 use TheDiamondBox\ShopSync\Services\Contracts\ProductFetcherInterface;
 use TheDiamondBox\ShopSync\Models\Product;
+use TheDiamondBox\ShopSync\Constants\ProductImportMappings;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -324,13 +325,13 @@ class DatabaseProductFetcher implements ProductFetcherInterface
                         'sku_prefix' => isset($data['SKU Prefix']) ? trim($data['SKU Prefix']) : null,
                         'rol_number' => isset($data['SKU Value']) ? trim($data['SKU Value']) : null,
                         'sku_custom_ref' => isset($data['SKU Custom Ref']) ? trim($data['SKU Custom Ref']) : null,
-                        'status' => isset($data['Product Status']) ? trim($data['Product Status']) : 'active',
-                        'sell_status' => isset($data['Sell Status']) ? trim($data['Sell Status']) : null,
+                        'status' => isset($data['Product Status']) ? ProductImportMappings::map('PRODUCT_STATUS', $data['Product Status'], 1) : 1,
+                        'sell_status' => isset($data['Sell Status']) ? ProductImportMappings::map('SELL_STATUS', $data['Sell Status'], 1) : 1,
                         'purchase_date' => isset($data['Purchase Date']) ? trim($data['Purchase Date']) : null,
                         'price' => isset($data['Current Price']) ? (float)$data['Current Price'] : 0,
                         'sale_price' => isset($data['Sale Price']) && !empty(trim($data['Sale Price'])) ? (float)$data['Sale Price'] : null,
                         'trade_price' => isset($data['Trade Price']) && !empty(trim($data['Trade Price'])) ? (float)$data['Trade Price'] : null,
-                        'vat_scheme' => isset($data['VAT Scheme']) ? trim($data['VAT Scheme']) : null,
+                        'vat_scheme' => isset($data['VAT Scheme']) ? ProductImportMappings::map('VAT_SCHEME', $data['VAT Scheme'], 0) : 0,
                         'description' => isset($data['Description']) ? trim($data['Description']) : null,
                         'seo_keywords' => isset($data['SEO Keywords']) ? trim($data['SEO Keywords']) : null,
                         'seo_description' => isset($data['SEO Description']) ? trim($data['SEO Description']) : null,
