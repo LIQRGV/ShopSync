@@ -1,6 +1,6 @@
 {
   "name": "@thediamondbox/grid-sync",
-  "version": "1.0.0",
+  "version": "2.0.2",
   "description": "Unified AG Grid implementation for product synchronization - Root package wrapper",
   "main": "grid-sync-js/src/index.js",
   "type": "module",
