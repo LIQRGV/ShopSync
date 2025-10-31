@@ -1,6 +1,6 @@
 {
   "name": "@thediamondbox/grid-sync",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Unified AG Grid implementation for product synchronization - Root package wrapper",
   "main": "grid-sync-js/src/index.js",
   "type": "module",
@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com:The-Diamond-Box/stock-sync.git"
+    "url": "git+https://git@github.com:The-Diamond-Box/stock-sync.git"
   },
   "keywords": [
     "ag-grid",
