@@ -86,7 +86,7 @@ abstract class BaseShopInfoRequest extends JsonApiRequest
             'registered_office_postal_code' => 'nullable|string|max:20',
 
             // Financial/Banking Info
-            'vat_no' => 'nullable|integer',
+            'vat_no' => 'nullable|string',
             'company_no' => 'nullable|integer',
             'bank_name' => 'nullable|string|max:255',
             'account_name' => 'nullable|string|max:255',
