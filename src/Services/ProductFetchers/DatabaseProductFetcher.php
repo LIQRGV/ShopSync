@@ -275,11 +275,19 @@ class DatabaseProductFetcher implements ProductFetcherInterface
 
     public function importFromCsv($csvContent)
     {
+        // Remove UTF-8 BOM if present
+        $csvContent = preg_replace('/^\xEF\xBB\xBF/', '', $csvContent);
+
         $rows = array_map('str_getcsv', explode("\n", $csvContent));
         $header = array_shift($rows);
 
         if (empty($header)) {
             return ['imported' => 0, 'errors' => ['Invalid CSV format: No header row found']];
+        }
+
+        // Additional safety: trim any remaining BOM or whitespace from first header
+        if (!empty($header[0])) {
+            $header[0] = trim($header[0], "\xEF\xBB\xBF\t\n\r\0\x0B ");
         }
 
         // Validate header format
