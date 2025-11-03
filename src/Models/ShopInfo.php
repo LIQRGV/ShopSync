@@ -172,7 +172,6 @@ class ShopInfo extends Model
     protected $casts = [
         'invoice_tc_enabled' => 'boolean',
         'invoice_tc_selected_page_id' => 'integer',
-        'vat_no' => 'integer',
         'company_no' => 'integer',
         'account_number' => 'integer',
         'catalogue_mode' => 'boolean',
