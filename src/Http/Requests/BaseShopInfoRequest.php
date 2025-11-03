@@ -60,7 +60,7 @@ abstract class BaseShopInfoRequest extends JsonApiRequest
             'phone_number' => 'nullable|string|max:50',
             'email' => 'nullable|email|max:255',
             'legal_name' => 'nullable|string|max:255',
-            'website' => 'nullable|url|max:255',
+            'website' => 'nullable|regex:/^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})\/?$/i|max:255',
             'about_us' => 'nullable|string',
 
             // Social Media
