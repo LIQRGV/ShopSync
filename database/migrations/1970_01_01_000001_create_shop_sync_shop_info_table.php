@@ -78,7 +78,7 @@ class CreateShopSyncShopInfoTable extends Migration
                 // Invoice settings
                 $table->integer('invoice_tc_enabled')->default(0)->comment('0:Disable | 1:Enable');
                 $table->unsignedBigInteger('invoice_tc_selected_page_id')->nullable();
-                $table->integer('vat_no')->nullable();
+                $table->string('vat_no')->nullable();
                 $table->integer('company_no')->nullable();
 
                 // Registered office address
