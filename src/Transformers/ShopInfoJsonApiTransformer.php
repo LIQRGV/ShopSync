@@ -84,7 +84,6 @@ class ShopInfoJsonApiTransformer extends JsonApiTransformer
 
         $integerFields = [
             'invoice_tc_selected_page_id',
-            'vat_no',
             'company_no',
             'account_number'
         ];
