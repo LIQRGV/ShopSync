@@ -33,10 +33,40 @@ class UpdateProductRequest extends BaseProductRequest
         // Special case: if this is an attribute update (has attribute_id and value)
         // skip JSON:API validation and use simple validation instead
         if ($this->has('attribute_id')) {
-            return [
+            $attributeId = $this->input('attribute_id');
+            $rules = [
                 'attribute_id' => 'required|integer',
-                'value' => 'nullable|string'
+                'value' => ['nullable', 'string']
             ];
+
+            // Only validate option values in WL mode (direct database access)
+            // WTM mode will validate via WL API on the backend
+            if (config('products-package.mode', 'wl') === 'wl') {
+                // Fetch attribute to validate option-type values
+                $attribute = \TheDiamondBox\ShopSync\Models\Attribute::where('id', $attributeId)
+                    ->where('enabled_on_dropship', true)
+                    ->first();
+
+                if ($attribute && $attribute->input_type != 1 && !empty($attribute->input_type_value)) {
+                    // Parse comma-separated options from input_type_value field
+                    $validOptions = array_map('trim', explode(',', $attribute->input_type_value));
+
+                    // Add custom validation rule for option values
+                    $rules['value'][] = function ($attr, $value, $fail) use ($validOptions) {
+                        // Allow empty string/null for attribute deletion
+                        if ($value === '' || $value === null) {
+                            return;
+                        }
+
+                        // Validate that value is in allowed options
+                        if (!in_array($value, $validOptions, true)) {
+                            $fail('The selected option is invalid. Valid options: ' . implode(', ', $validOptions));
+                        }
+                    };
+                }
+            }
+
+            return $rules;
         }
 
         return array_merge(parent::rules(), [
