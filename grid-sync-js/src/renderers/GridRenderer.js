@@ -86,9 +86,13 @@ export class GridRenderer {
                 // Check if this is an option type without options configured
                 const isOptionWithoutValues = inputType !== 1 && options.length === 0;
 
+                // Placeholder text for different states
+                const emptyOptionText = '- Select -'; // For clearing attribute when options exist
+                const noOptionsText = 'No options available'; // For disabled dropdown without options
+
                 // Add clear option as first option to allow clearing attribute value
                 // Use special marker "- Select -" that will be converted to empty string on save
-                const editorOptions = inputType === 1 ? options : ['- Select -', ...options];
+                const editorOptions = inputType === 1 ? options : [emptyOptionText, ...options];
 
                 return {
                     headerName: attrName,
@@ -117,8 +121,8 @@ export class GridRenderer {
                         // First check if there's a locally updated value (from recent edit)
                         if (params.data && params.data._attributeValues && params.data._attributeValues[attrId] !== undefined) {
                             const value = params.data._attributeValues[attrId];
-                            // For option types, return "- Select -" for empty values so dropdown shows it
-                            return (inputType !== 1 && !value) ? '- Select -' : value;
+                            // For option types, show appropriate placeholder for empty values
+                            return (inputType !== 1 && !value) ? (isOptionWithoutValues ? noOptionsText : emptyOptionText) : value;
                         }
 
                         // Otherwise, get from original API data
@@ -127,8 +131,8 @@ export class GridRenderer {
 
                             // Check if this attribute is in the product
                             if (!attributeIds.includes(attrId)) {
-                                // For option types, return "- Select -" for empty values
-                                return inputType !== 1 ? '- Select -' : '';
+                                // For option types, show appropriate placeholder for empty values
+                                return inputType !== 1 ? (isOptionWithoutValues ? noOptionsText : emptyOptionText) : '';
                             }
 
                             // Get currentData from context
@@ -151,13 +155,13 @@ export class GridRenderer {
 
                                         if (includedAttr._productValues[productIdStr] !== undefined) {
                                             const value = includedAttr._productValues[productIdStr];
-                                            // For option types, return "- Select -" for empty values
-                                            return (inputType !== 1 && !value) ? '- Select -' : value;
+                                            // For option types, show appropriate placeholder for empty values
+                                            return (inputType !== 1 && !value) ? (isOptionWithoutValues ? noOptionsText : emptyOptionText) : value;
                                         }
                                         if (includedAttr._productValues[productIdNum] !== undefined) {
                                             const value = includedAttr._productValues[productIdNum];
-                                            // For option types, return "- Select -" for empty values
-                                            return (inputType !== 1 && !value) ? '- Select -' : value;
+                                            // For option types, show appropriate placeholder for empty values
+                                            return (inputType !== 1 && !value) ? (isOptionWithoutValues ? noOptionsText : emptyOptionText) : value;
                                         }
                                     }
 
@@ -167,8 +171,8 @@ export class GridRenderer {
                                 }
                             }
                         }
-                        // For option types, return "- Select -" for empty values
-                        return inputType !== 1 ? '- Select -' : '';
+                        // For option types, show appropriate placeholder for empty values
+                        return inputType !== 1 ? (isOptionWithoutValues ? noOptionsText : emptyOptionText) : '';
                     },
                     valueSetter: (params) => {
                         // Convert "- Select -" to empty string for clearing attribute
