@@ -41,8 +41,31 @@ class DatabaseProductFetcher implements ProductFetcherInterface
     {
         // Use withoutGlobalScopes() to bypass any global scopes that might interfere
         $product = Product::withoutGlobalScopes()->findOrFail($id);
+
+        // CRITICAL: Load attributes BEFORE update() so observer gets complete data
+        // Observer triggers during update() call, so attributes must be loaded first
+        $product->load(['attributes' => function ($query) {
+            $query->where('enabled_on_dropship', true)
+                  ->with('inputTypeValues:id,attribute_id,value,sortby')
+                  ->orderBy('sortby')
+                  ->orderBy('name');
+        }]);
+
+        // Update will trigger ProductObserver which broadcasts with attributes
         $product->update($data);
-        return $product->fresh();
+
+        // Reload to get fresh data including any changes from update
+        $product = $product->fresh();
+
+        // Load attributes again for the return value
+        $product->load(['attributes' => function ($query) {
+            $query->where('enabled_on_dropship', true)
+                  ->with('inputTypeValues:id,attribute_id,value,sortby')
+                  ->orderBy('sortby')
+                  ->orderBy('name');
+        }]);
+
+        return $product;
     }
 
     public function delete($id)
@@ -456,8 +479,10 @@ class DatabaseProductFetcher implements ProductFetcherInterface
                     break;
                 case 'attributes':
                     // Only load attributes that are enabled_on_dropship
+                    // Also eager load inputTypeValues for options
                     $relationships['attributes'] = function ($query) {
                         $query->where('enabled_on_dropship', true)
+                              ->with('inputTypeValues:id,attribute_id,value,sortby')
                               ->orderBy('sortby')
                               ->orderBy('name');
                     };
@@ -543,5 +568,48 @@ class DatabaseProductFetcher implements ProductFetcherInterface
             ]);
             return null;
         }
+    }
+
+    /**
+     * Get all enabled attributes with their options
+     * Used for grid column rendering in WL mode
+     *
+     * @return array
+     */
+    public function getAllEnabledAttributes(): array
+    {
+        $attributes = \TheDiamondBox\ShopSync\Models\Attribute::where('enabled_on_dropship', true)
+            ->with('inputTypeValues:id,attribute_id,value,sortby')
+            ->orderBy('sortby')
+            ->orderBy('name')
+            ->get();
+
+        \Log::info('DatabaseProductFetcher::getAllEnabledAttributes', [
+            'count' => $attributes->count(),
+            'first_3_ids' => $attributes->take(3)->pluck('id')->toArray()
+        ]);
+
+        // Transform to array format matching API response
+        $result = $attributes->map(function ($attr) {
+            $data = $attr->toArray();
+
+            // Transform input_type_values to options array for frontend
+            if (isset($data['input_type_values']) && is_array($data['input_type_values'])) {
+                $data['options'] = array_map(function ($opt) {
+                    return $opt['value'];
+                }, $data['input_type_values']);
+            } else {
+                $data['options'] = [];
+            }
+
+            return $data;
+        })->toArray();
+
+        \Log::info('DatabaseProductFetcher::getAllEnabledAttributes result', [
+            'result_count' => count($result),
+            'first_result_id' => !empty($result) ? $result[0]['id'] : 'EMPTY'
+        ]);
+
+        return $result;
     }
 }

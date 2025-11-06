@@ -172,8 +172,26 @@ class ProductController extends Controller
                 return response()->json(JsonApiErrorResponse::multiple($includeErrors), 400);
             }
 
-            $data = $request->getValidatedDataWithFormatting();
-            $result = $this->productService->updateProduct($id, $data, $includes);
+            // Check if this is an attribute update (check from request before validation strips it)
+            $attributeId = $request->input('attribute_id');
+            $attributeValue = $request->input('value');
+
+            // If attribute_id is present, treat as attribute update
+            // Value can be null/empty for deleting attribute
+            if ($attributeId !== null) {
+                // Convert null to empty string for consistent handling
+                $attributeValue = $attributeValue ?? '';
+
+                $result = $this->productService->updateProductAttribute(
+                    $id,
+                    $attributeId,
+                    $attributeValue,
+                    $includes
+                );
+            } else {
+                $data = $request->getValidatedDataWithFormatting();
+                $result = $this->productService->updateProduct($id, $data, $includes);
+            }
 
             if (!$result) {
                 $error = JsonApiErrorResponse::notFound('product', $id);
@@ -740,5 +758,35 @@ class ProductController extends Controller
         }
 
         return false;
+    }
+
+    /**
+     * Get all enabled attributes for grid rendering
+     * This endpoint is used by WTM to fetch attributes from WL without database queries
+     *
+     * @return JsonResponse
+     */
+    public function getAttributes(): JsonResponse
+    {
+        try {
+            $attributes = $this->productService->getAllEnabledAttributes();
+
+            return response()->json([
+                'data' => $attributes,
+                'meta' => [
+                    'count' => count($attributes)
+                ]
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Error fetching attributes', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json(
+                JsonApiErrorResponse::internalError('Failed to fetch attributes: ' . $e->getMessage()),
+                500
+            );
+        }
     }
 }

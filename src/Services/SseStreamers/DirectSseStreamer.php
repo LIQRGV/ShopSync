@@ -397,6 +397,8 @@ class DirectSseStreamer implements SseStreamerInterface
             while (!empty($this->broadcastQueue)) {
                 $message = array_shift($this->broadcastQueue);
 
+                Log::debug("SSE [WL][{$sessionId}]: Sending broadcast with event type: " . ($message['event'] ?? 'NO_EVENT'));
+
                 $writeSuccess = $this->sendEventWithCheck(
                     $message['event'] ?? 'broadcast',
                     $message['data'] ?? [],

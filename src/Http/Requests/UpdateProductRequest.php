@@ -30,6 +30,15 @@ class UpdateProductRequest extends BaseProductRequest
     {
         $productId = $this->route('product') ?? $this->route('id');
 
+        // Special case: if this is an attribute update (has attribute_id and value)
+        // skip JSON:API validation and use simple validation instead
+        if ($this->has('attribute_id')) {
+            return [
+                'attribute_id' => 'required|integer',
+                'value' => 'nullable|string'
+            ];
+        }
+
         return array_merge(parent::rules(), [
             'name' => 'sometimes|required|string|max:255',
             'sku_prefix' => 'nullable|string|max:50',
