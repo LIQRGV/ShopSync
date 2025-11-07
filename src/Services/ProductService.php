@@ -31,7 +31,17 @@ class ProductService
     public function __construct(ProductJsonApiTransformer $transformer = null, Request $request = null)
     {
         $this->productFetcher = ProductFetcherFactory::makeFromConfig($request);
-        $this->transformer = $transformer ?? new ProductJsonApiTransformer();
+
+        // Always create transformer with productFetcher, even if one was injected
+        // This ensures transformer has access to productFetcher for getAllEnabledAttributes()
+        if ($transformer && !$transformer->hasProductFetcher()) {
+            // If transformer was injected but doesn't have productFetcher, set it
+            $transformer->setProductFetcher($this->productFetcher);
+            $this->transformer = $transformer;
+        } else {
+            // Create new transformer with productFetcher
+            $this->transformer = new ProductJsonApiTransformer($this->productFetcher);
+        }
     }
 
     /**
@@ -99,6 +109,58 @@ class ProductService
             // Transform to JSON API format
             $result = $this->transformer->transformProducts($products->items(), $includes);
 
+            // For WTM mode (ApiProductFetcher), merge original included data
+            // This preserves ALL enabled attributes from client's shop API
+            if (method_exists($this->productFetcher, 'getOriginalIncludedData')) {
+                $originalIncluded = $this->productFetcher->getOriginalIncludedData();
+
+                if (!empty($originalIncluded) && isset($result['included'])) {
+                    // Build map of existing included items for faster lookup and update
+                    $existingMap = [];
+                    foreach ($result['included'] as $index => $item) {
+                        if (isset($item['type']) && isset($item['id'])) {
+                            $key = $item['type'] . ':' . $item['id'];
+                            $existingMap[$key] = $index;
+                        }
+                    }
+
+                    // Merge original included data (contains ALL enabled attributes with _productValues)
+                    foreach ($originalIncluded as $item) {
+                        if (isset($item['type']) && isset($item['id'])) {
+                            $key = $item['type'] . ':' . $item['id'];
+                            if (isset($existingMap[$key])) {
+                                // UPDATE existing item - merge _productValues from WL API
+                                $existingItem = $result['included'][$existingMap[$key]];
+
+                                // Preserve _productValues from WL API (has correct pivot data)
+                                if (isset($item['_productValues'])) {
+                                    $result['included'][$existingMap[$key]]['_productValues'] = $item['_productValues'];
+                                }
+
+                                // Also update attributes if they have more complete data from WL
+                                if (isset($item['attributes']) && is_array($item['attributes'])) {
+                                    if (!isset($existingItem['attributes'])) {
+                                        $result['included'][$existingMap[$key]]['attributes'] = $item['attributes'];
+                                    } else {
+                                        // Merge attributes, WL data takes precedence for options
+                                        $result['included'][$existingMap[$key]]['attributes'] = array_merge(
+                                            $existingItem['attributes'],
+                                            $item['attributes']
+                                        );
+                                    }
+                                }
+                            } else {
+                                // ADD new item that transformer didn't include
+                                $result['included'][] = $item;
+                            }
+                        }
+                    }
+                } elseif (!empty($originalIncluded) && !isset($result['included'])) {
+                    // If no included data in result, use original
+                    $result['included'] = $originalIncluded;
+                }
+            }
+
             // Add pagination meta
             $result['meta'] = [
                 'pagination' => [
@@ -122,6 +184,31 @@ class ProductService
             $products = $this->productFetcher->getAll($filters, $includes);
 
             $result = $this->transformer->transformProducts($products, $includes);
+
+            // For WTM mode (ApiProductFetcher), merge original included data
+            if (method_exists($this->productFetcher, 'getOriginalIncludedData')) {
+                $originalIncluded = $this->productFetcher->getOriginalIncludedData();
+
+                if (!empty($originalIncluded) && isset($result['included'])) {
+                    $existingIds = [];
+                    foreach ($result['included'] as $item) {
+                        if (isset($item['type']) && isset($item['id'])) {
+                            $existingIds[] = $item['type'] . ':' . $item['id'];
+                        }
+                    }
+
+                    foreach ($originalIncluded as $item) {
+                        if (isset($item['type']) && isset($item['id'])) {
+                            $key = $item['type'] . ':' . $item['id'];
+                            if (!in_array($key, $existingIds)) {
+                                $result['included'][] = $item;
+                            }
+                        }
+                    }
+                } elseif (!empty($originalIncluded) && !isset($result['included'])) {
+                    $result['included'] = $originalIncluded;
+                }
+            }
         }
 
         return $result;
@@ -227,6 +314,108 @@ class ProductService
 
         // Transform to JSON API format
         return $this->transformer->transformProduct($product, $includes);
+    }
+
+    /**
+     * Update a product attribute value
+     *
+     * @param mixed $productId
+     * @param mixed $attributeId
+     * @param string $value
+     * @param array $includes
+     * @return array|null
+     */
+    public function updateProductAttribute($productId, $attributeId, $value, array $includes = [])
+    {
+
+        // Check mode based on ProductFetcher type (NOT product model type)
+        // ApiProductFetcher = WTM mode (proxy only)
+        // DatabaseProductFetcher = WL mode (direct database)
+        $isWlMode = !($this->productFetcher instanceof \TheDiamondBox\ShopSync\Services\ProductFetchers\ApiProductFetcher);
+
+        if ($isWlMode) {
+            // WL mode: Need to fetch product for database operations
+            $product = $this->productFetcher->find($productId);
+
+            if (!$product) {
+                \Log::error('Product not found', ['product_id' => $productId]);
+                return null;
+            }
+
+            // WL mode: Direct database update via Eloquent
+
+            // If value is empty, detach the attribute (remove from product)
+            // Otherwise, sync the attribute with the new value
+            if (empty($value) && $value !== '0') {
+                $product->attributes()->detach($attributeId);
+            } else {
+                $product->attributes()->syncWithoutDetaching([
+                    $attributeId => ['value' => $value]
+                ]);
+            }
+
+            // Reload product from database with fresh attributes
+            // Use fresh() to get clean state, then load attributes with pivot and options
+            $product = $product->fresh();
+
+            // IMPORTANT: Set attributes relation to empty Collection FIRST to prevent lazy loading
+            // Then load the actual data - this prevents any intermediate queries
+            $product->setRelation('attributes', new \Illuminate\Database\Eloquent\Collection());
+
+            $product->load(['attributes' => function ($query) {
+                $query->where('enabled_on_dropship', true)
+                      ->with('inputTypeValues:id,attribute_id,value,sortby')
+                      ->orderBy('sortby')
+                      ->orderBy('name');
+            }]);
+
+
+            // CRITICAL: Manually fire the 'updated' event to trigger ProductObserver and SSE broadcast
+            // touch() only updates timestamp but doesn't fire model events
+            // This must be AFTER reload so the broadcasted product includes updated attributes
+            // Use event() helper for compatibility instead of fireModelEvent()
+            event('eloquent.updated: ' . get_class($product), $product);
+
+            // Load additional relationships if needed for response (WL mode only)
+            if (!empty($includes) && method_exists($product, 'load')) {
+                $with = $this->getRelationshipsWith($includes);
+                if (!empty($with)) {
+                    // Remove 'attributes' from with since already loaded
+                    $with = array_diff($with, ['attributes']);
+                    if (!empty($with)) {
+                        $product->load($with);
+                    }
+                }
+            }
+
+            // Transform to JSON API format
+            return $this->transformer->transformProduct($product, $includes);
+        } else {
+            // WTM mode: Proxy attribute update to client shop API
+            // Send attribute update in format expected by ProductController
+            // Controller looks for attribute_id and value at root level
+            $updateData = [
+                'attribute_id' => (string) $attributeId,
+                'value' => (string) $value
+            ];
+
+            // For WTM mode, use updateRaw() to get raw API response without model conversion
+            // This avoids database queries for relationships that don't exist in WTM
+            // The client shop API already returns JSON:API format, so we return it directly
+            $response = $this->productFetcher->updateRaw($productId, $updateData);
+
+            if (!$response) {
+                \Log::error('Failed to update attribute via WTM API', [
+                    'product_id' => $productId,
+                    'attribute_id' => $attributeId
+                ]);
+                return null;
+            }
+
+            // Return the raw JSON:API response from client shop
+            // No need to transform since it's already in JSON:API format
+            return $response;
+        }
     }
 
     /**
@@ -415,5 +604,16 @@ class ProductService
 
         // Transform to JSON API format without includes (keep response simple)
         return $this->transformer->transformProduct($product, []);
+    }
+
+    /**
+     * Get all enabled attributes
+     * Delegates to productFetcher which handles WL vs WTM mode
+     *
+     * @return array
+     */
+    public function getAllEnabledAttributes(): array
+    {
+        return $this->productFetcher->getAllEnabledAttributes();
     }
 }
