@@ -93,11 +93,39 @@ class ProductObserver
                     'timestamp' => now()->toISOString()
                 ];
             } else {
+                // IMPORTANT: Always load attributes before broadcasting
+                // This ensures frontend always gets consistent attribute data
+                if (!$product->relationLoaded('attributes')) {
+                    $product->load(['attributes' => function ($query) {
+                        $query->where('enabled_on_dropship', true)
+                              ->with('inputTypeValues:id,attribute_id,value,sortby')
+                              ->orderBy('sortby')
+                              ->orderBy('name');
+                    }]);
+                }
+
+                $productArray = $product->toArray();
+
+                // Debug: Check if attributes are included in broadcast
+                $hasAttributes = isset($productArray['attributes']) && is_array($productArray['attributes']);
+                $attributeCount = $hasAttributes ? count($productArray['attributes']) : 0;
+
+                Log::debug("ProductObserver: Broadcasting product update", [
+                    'product_id' => $product->id,
+                    'product_name' => $product->name,
+                    'has_attributes' => $hasAttributes,
+                    'attribute_count' => $attributeCount,
+                    'attributes_loaded' => $product->relationLoaded('attributes'),
+                    'first_attribute_sample' => $hasAttributes && $attributeCount > 0
+                        ? $productArray['attributes'][0]
+                        : null
+                ]);
+
                 $message = [
-                    'event' => 'product.updated',
+                    'event' => 'product.' . $eventType,  // IMPORTANT: Use actual event type (created/updated/deleted/restored)
                     'data' => [
                         'product_id' => $product->id,
-                        'product' => $product->toArray(),
+                        'product' => $productArray,
                         'changes' => $changes,
                         'update_type' => $eventType,
                         'timestamp' => now()->toISOString(),

@@ -31,9 +31,31 @@ class ProductJsonApiTransformer extends JsonApiTransformer
      */
     protected $maxDepth = 3;
 
-    public function __construct()
+    /**
+     * Product fetcher instance for mode-aware data fetching
+     */
+    protected $productFetcher;
+
+    public function __construct($productFetcher = null)
     {
         parent::__construct($this->availableIncludes, $this->maxDepth);
+        $this->productFetcher = $productFetcher;
+    }
+
+    /**
+     * Check if transformer has productFetcher set
+     */
+    public function hasProductFetcher(): bool
+    {
+        return $this->productFetcher !== null;
+    }
+
+    /**
+     * Set productFetcher (used when transformer is injected via DI)
+     */
+    public function setProductFetcher($productFetcher): void
+    {
+        $this->productFetcher = $productFetcher;
     }
 
     /**
@@ -47,11 +69,84 @@ class ProductJsonApiTransformer extends JsonApiTransformer
 
     /**
      * Transform a collection of Products into JSON API format
+     * Override to include ALL enabled attributes, not just those attached to products
      */
     public function transformProducts($products, array $includes = []): array
     {
         $this->setIncludes($includes);
-        return $this->transformCollection($products, 'products');
+        $response = $this->transformCollection($products, 'products');
+
+        // If 'attributes' is requested, ensure ALL enabled attributes are in included
+        // This makes attribute columns appear in grid even if no products use them
+        if (in_array('attributes', $includes)) {
+            $allEnabledAttributes = $this->getAllEnabledAttributes();
+
+            // Build a map of attribute ID to complete attribute data from getAllEnabledAttributes
+            // This ensures we have complete data with options for all attributes
+            $completeAttributesMap = [];
+            foreach ($allEnabledAttributes as $attribute) {
+                $attributeId = is_array($attribute) ? (string) $attribute['id'] : (string) $attribute->id;
+                $completeAttributesMap[$attributeId] = [
+                    'type' => 'attributes',
+                    'id' => $attributeId,
+                    'attributes' => is_array($attribute) ? $attribute : $this->getRelatedModelAttributes($attribute)
+                ];
+            }
+
+            if (!isset($response['included'])) {
+                $response['included'] = [];
+            }
+
+            // Collect pivot values from all products for each attribute
+            // This builds _productValues map: {attributeId: {productId: value}}
+            $pivotValuesMap = [];
+            foreach ($products as $product) {
+                if ($product->relationLoaded('attributes')) {
+                    foreach ($product->attributes as $attr) {
+                        $attrId = (string) $attr->id;
+                        if (!isset($pivotValuesMap[$attrId])) {
+                            $pivotValuesMap[$attrId] = [];
+                        }
+                        // Store pivot value for this product-attribute combination
+                        // Store with BOTH string and number keys for frontend compatibility
+                        if (isset($attr->pivot->value)) {
+                            $pivotValuesMap[$attrId][(string) $product->id] = $attr->pivot->value;
+                            $pivotValuesMap[$attrId][(int) $product->id] = $attr->pivot->value;
+                        }
+                    }
+                }
+            }
+
+            // Replace/update existing attributes with complete data from getAllEnabledAttributes
+            // This ensures attributes from product relationships get their options restored
+            $attributeIndices = [];
+            foreach ($response['included'] as $index => $item) {
+                if ($item['type'] === 'attributes') {
+                    $attributeIndices[$item['id']] = $index;
+                }
+            }
+
+            // Replace existing attributes with complete data and add _productValues
+            foreach ($completeAttributesMap as $attrId => $completeAttrData) {
+                // Add _productValues map at ROOT level if this attribute has pivot data
+                // Frontend expects _productValues at item level, not in nested attributes
+                $hasPivot = isset($pivotValuesMap[$attrId]) && !empty($pivotValuesMap[$attrId]);
+
+                if ($hasPivot) {
+                    $completeAttrData['_productValues'] = $pivotValuesMap[$attrId];
+                }
+
+                if (isset($attributeIndices[$attrId])) {
+                    // Replace with complete data including _productValues
+                    $response['included'][$attributeIndices[$attrId]] = $completeAttrData;
+                } else {
+                    // Add new attribute that wasn't used by any products
+                    $response['included'][] = $completeAttrData;
+                }
+            }
+        }
+
+        return $response;
     }
 
     /**
@@ -229,12 +324,29 @@ class ProductJsonApiTransformer extends JsonApiTransformer
                 }
                 // Explicitly include enabled_on_dropship field directly from model
                 $attributes['enabled_on_dropship'] = $model->getAttribute('enabled_on_dropship') ?? false;
-                // Include pivot data if available (for product attributes relationship)
-                if ($pivotData !== null) {
-                    $attributes['pivot'] = $pivotData;
-                } elseif (isset($attributes['pivot'])) {
-                    $attributes['pivot'] = $attributes['pivot'];
+
+                // Include input_type for determining editor type (1=text, 2/3=dropdown)
+                $attributes['input_type'] = $model->getAttribute('input_type') ?? 1;
+
+                // Include dropdown options based on mode
+                $mode = config('products-package.mode', 'wl');
+                if ($mode === 'wl') {
+                    // WL mode: Get options from inputTypeValues relationship
+                    if ($model->getAttribute('input_type') != 1 && $model->relationLoaded('inputTypeValues')) {
+                        $attributes['options'] = $model->inputTypeValues->pluck('value')->values()->toArray();
+                    } else {
+                        $attributes['options'] = [];
+                    }
+                } else {
+                    // WTM mode: Options already in attributes array from client API
+                    // If not present, initialize as empty array
+                    if (!isset($attributes['options'])) {
+                        $attributes['options'] = [];
+                    }
                 }
+
+                // DO NOT include pivot in included array - pivot belongs in product's relationships only
+                // This prevents duplicate attributes with different pivot values in included array
                 break;
 
             case 'ProductAttribute':
@@ -268,18 +380,16 @@ class ProductJsonApiTransformer extends JsonApiTransformer
      */
     protected function addToIncluded(Model $model, string $type, $parentId = null): void
     {
-        // For models with pivot (like attributes in a many-to-many relationship),
-        // create a unique key that includes the parent ID to allow duplicate attribute IDs
-        // with different pivot data for different products
+        // For attributes, use only type:id as key (no parentId)
+        // This prevents duplicate attributes in included array
+        // Pivot data should be in product's relationships, not in included
         $key = $type . ':' . $model->getKey();
-        if ($parentId !== null && isset($model->pivot)) {
-            $key = $type . ':' . $model->getKey() . ':' . $parentId;
-        }
 
         if (!isset($this->included[$key])) {
             $this->currentDepth++;
 
             // Use custom attribute method for related models
+            // For attributes, this will NOT include pivot data (pivot stays in relationships)
             $attributes = $this->getRelatedModelAttributes($model);
 
             $includedData = [
@@ -367,5 +477,24 @@ class ProductJsonApiTransformer extends JsonApiTransformer
         }
 
         return $this->transformProducts($products, $includes);
+    }
+
+    /**
+     * Get all enabled attributes regardless of product relationships
+     * This ensures all enabled attributes appear in the grid even if no products use them
+     *
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    protected function getAllEnabledAttributes()
+    {
+        // Use productFetcher to get attributes (handles WL vs WTM mode automatically)
+        // WL mode: queries database directly and returns array
+        // WTM mode: calls WL API endpoint and returns array
+        if ($this->productFetcher) {
+            return $this->productFetcher->getAllEnabledAttributes();
+        }
+
+        // Fallback if no fetcher (shouldn't happen in normal operation)
+        return [];
     }
 }

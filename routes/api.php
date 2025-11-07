@@ -63,6 +63,11 @@ if (config('products-package.features.import', true)) {
         ->name('products.import');
 }
 
+// Get all enabled attributes - must come before {id} routes
+// Used by WTM to fetch attributes from WL without database queries
+Route::get('/products/attributes', [ProductController::class, 'getAttributes'])
+    ->name('products.attributes');
+
 // Main CRUD routes
 Route::get('/products', [ProductController::class, 'index'])
     ->name('products.index');

@@ -16,6 +16,7 @@ class ApiProductFetcher implements ProductFetcherInterface
     protected $baseUrl;
     protected $apiKey;
     protected $timeout;
+    protected $originalIncludedData = [];
 
     public function __construct($client)
     {
@@ -121,6 +122,9 @@ class ApiProductFetcher implements ProductFetcherInterface
             return $this->client()->get('/products', $params);
         }, ['data' => []]);
 
+        // Store original included data before conversion
+        $this->originalIncludedData = $response['included'] ?? [];
+
         return $this->convertToProductCollection($response['data'] ?? [], $response['included'] ?? []);
     }
 
@@ -163,6 +167,9 @@ class ApiProductFetcher implements ProductFetcherInterface
             ]
         ]);
 
+        // Store original included data before conversion
+        $this->originalIncludedData = $response['included'] ?? [];
+
         $paginationMeta = $response['meta']['pagination'] ?? null;
 
         if (!$paginationMeta) {
@@ -193,6 +200,17 @@ class ApiProductFetcher implements ProductFetcherInterface
                 'pageName' => 'page'
             ]
         );
+    }
+
+    /**
+     * Get original included data from last API call
+     * This preserves ALL attributes from client shop API response
+     *
+     * @return array
+     */
+    public function getOriginalIncludedData(): array
+    {
+        return $this->originalIncludedData;
     }
 
     /**
@@ -247,6 +265,21 @@ class ApiProductFetcher implements ProductFetcherInterface
         }, null);
 
         return $response ? $this->convertToProduct($response['data'] ?? $response) : null;
+    }
+
+    /**
+     * Update product and return raw API response (no model conversion)
+     * Used for attribute updates in WTM mode to avoid database queries
+     *
+     * @param int|string $id
+     * @param array $data
+     * @return array|null
+     */
+    public function updateRaw($id, array $data)
+    {
+        return $this->handleRequest(function () use ($id, $data) {
+            return $this->client()->put("/products/{$id}", $data);
+        }, null);
     }
 
     public function delete($id)
@@ -475,7 +508,13 @@ class ApiProductFetcher implements ProductFetcherInterface
                 $relationData = $data[$relation];
 
                 if ($relationData === null) {
-                    $product->setRelation($relation, null);
+                    // For attributes, use empty Collection instead of null to prevent lazy loading
+                    // null means "not loaded" while empty Collection means "loaded but empty"
+                    if ($relation === 'attributes') {
+                        $product->setRelation($relation, new \Illuminate\Database\Eloquent\Collection());
+                    } else {
+                        $product->setRelation($relation, null);
+                    }
                 } elseif (is_array($relationData)) {
                     $modelClass = $relationshipModelMap[$relation];
 
@@ -540,10 +579,22 @@ class ApiProductFetcher implements ProductFetcherInterface
                             $product->setRelation($relation, null);
                         }
                     }
+                } else {
+                    // Handle unexpected data type - set to empty Collection for attributes to prevent lazy loading
+                    if ($relation === 'attributes') {
+                        $product->setRelation($relation, new \Illuminate\Database\Eloquent\Collection());
+                    } else {
+                        $product->setRelation($relation, null);
+                    }
                 }
             } else {
                 // Mark relationship as loaded but empty to prevent further loading attempts
-                $product->setRelation($relation, null);
+                // For has-many relationships like attributes, use empty Collection instead of null
+                if ($relation === 'attributes') {
+                    $product->setRelation($relation, new \Illuminate\Database\Eloquent\Collection());
+                } else {
+                    $product->setRelation($relation, null);
+                }
             }
         }
 
@@ -654,5 +705,21 @@ class ApiProductFetcher implements ProductFetcherInterface
         ]);
 
         return $response ? $this->convertToProduct($response['data'] ?? $response) : null;
+    }
+
+    /**
+     * Get all enabled attributes from WL API
+     * Used for grid column rendering in WTM mode
+     *
+     * @return array
+     */
+    public function getAllEnabledAttributes(): array
+    {
+        $response = $this->handleRequest(function () {
+            return $this->client()->get('/products/attributes');
+        }, []);
+
+        // Extract data array from response
+        return $response['data'] ?? [];
     }
 }
