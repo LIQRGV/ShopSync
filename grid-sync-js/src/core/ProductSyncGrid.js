@@ -306,31 +306,172 @@ export class ProductSyncGrid {
             return;
         }
 
-        // Extract field name from colDef.field, handling both nested and flat paths
-        let fieldName = colDef.field;
-        if (fieldName.startsWith('attributes.')) {
-            fieldName = fieldName.replace('attributes.', '');
-        }
+        const productId = data.id;
+        const fieldName = colDef.field;
 
         try {
-            const productId = data.id;
+            // Check if this is an attribute update
+            if (colDef.field.startsWith('attribute_') && data._attributeUpdate) {
+                const { attributeId, newValue: actualNewValue } = data._attributeUpdate;
 
-            const result = await this.apiClient.updateProduct(productId, fieldName, newValue);
+                // Use actualNewValue from _attributeUpdate (not event.newValue)
+                // This ensures "- Select -" is converted to empty string
+                const result = await this.apiClient.updateProductAttribute(
+                    productId,
+                    attributeId,
+                    actualNewValue
+                );
 
-            // Update local data with server response
-            if (result.data) {
-                // Use dataAdapter to update the field
-                const updatedFields = result.data.attributes || result.data;
-                Object.keys(updatedFields).forEach(key => {
-                    this.dataAdapter.setValue(data, key, updatedFields[key]);
-                });
+                // Update local data with response (including updated attribute values)
+                if (result.data) {
+                    // Initialize _attributeValues if not exists
+                    if (!data._attributeValues) {
+                        data._attributeValues = {};
+                    }
+
+                    // Update product relationships from response if available
+                    if (result.data.relationships) {
+                        data.relationships = result.data.relationships;
+                    }
+
+                    // CRITICAL: Update _attributeValues from API response, NOT user input
+                    // Backend may transform/validate value, so we must use response value
+                    let actualSavedValue = actualNewValue; // fallback to user input
+
+                    // If response includes attribute data, extract actual saved value
+                    if (result.included && this.currentData && this.currentData.included) {
+                        // CRITICAL FIX: DO NOT replace entire includedItem object!
+                        // Only update _productValues for this specific product
+                        result.included.forEach(includedItem => {
+                            if (includedItem.type === 'attributes') {
+                                const existingIndex = this.currentData.included.findIndex(
+                                    item => item.type === 'attributes' && item.id === includedItem.id
+                                );
+
+                                // Extract pivot value from response
+                                const pivotValue = (includedItem.attributes && includedItem.attributes.pivot)
+                                    ? includedItem.attributes.pivot.value || ''
+                                    : '';
+
+                                if (existingIndex >= 0) {
+                                    // DON'T replace object! Just update _productValues for THIS product
+                                    if (!this.currentData.included[existingIndex]._productValues) {
+                                        this.currentData.included[existingIndex]._productValues = {};
+                                    }
+                                    this.currentData.included[existingIndex]._productValues[String(productId)] = pivotValue;
+                                    this.currentData.included[existingIndex]._productValues[Number(productId)] = pivotValue;
+                                } else {
+                                    // New attribute - create with _productValues
+                                    const newAttr = {
+                                        id: String(includedItem.id),
+                                        type: 'attributes',
+                                        attributes: includedItem.attributes,
+                                        _productValues: {
+                                            [String(productId)]: pivotValue,
+                                            [Number(productId)]: pivotValue
+                                        }
+                                    };
+                                    this.currentData.included.push(newAttr);
+                                }
+
+                                // Extract actual saved value for this specific attribute
+                                if (String(includedItem.id) === String(attributeId)) {
+                                    actualSavedValue = pivotValue;
+                                }
+                            }
+                        });
+                    }
+
+                    // Update _attributeValues with actual saved value from backend
+                    // CRITICAL: Use STRING key consistently across all operations
+                    const attrKeyString = String(attributeId);
+                    data._attributeValues[attrKeyString] = actualSavedValue;
+                }
+
+                // Clear temp data
+                delete data._attributeUpdate;
+
+                // Show success notification
+                this.showNotification('success', 'Attribute updated successfully');
+            } else {
+                // Regular field update
+                let fieldName = colDef.field;
+                if (fieldName.startsWith('attributes.')) {
+                    fieldName = fieldName.replace('attributes.', '');
+                }
+
+                const result = await this.apiClient.updateProduct(productId, fieldName, newValue);
+
+                // Update local data with server response
+                if (result.data) {
+                    // Use dataAdapter to update the field
+                    const updatedFields = result.data.attributes || result.data;
+                    Object.keys(updatedFields).forEach(key => {
+                        this.dataAdapter.setValue(data, key, updatedFields[key]);
+                    });
+
+                    // IMPORTANT: If response includes attributes, update them too
+                    // This ensures data stays consistent when SSE broadcasts include attributes
+                    if (result.included && this.currentData && this.currentData.included) {
+                        result.included.forEach(includedItem => {
+                            if (includedItem.type === 'attributes') {
+                                const existingIndex = this.currentData.included.findIndex(
+                                    item => item.type === 'attributes' && item.id === includedItem.id
+                                );
+
+                                // Extract pivot value from API response for THIS product only
+                                const pivotValue = (includedItem.attributes && includedItem.attributes.pivot)
+                                    ? includedItem.attributes.pivot.value || ''
+                                    : '';
+
+                                if (existingIndex >= 0) {
+                                    // CRITICAL FIX: DON'T replace entire object!
+                                    // Just update _productValues for THIS product
+                                    // Replacing the object would delete _productValues for OTHER products
+                                    if (!this.currentData.included[existingIndex]._productValues) {
+                                        this.currentData.included[existingIndex]._productValues = {};
+                                    }
+                                    this.currentData.included[existingIndex]._productValues[String(productId)] = pivotValue;
+                                    this.currentData.included[existingIndex]._productValues[Number(productId)] = pivotValue;
+                                } else {
+                                    // New attribute - add with _productValues
+                                    const newAttr = {
+                                        id: String(includedItem.id),
+                                        type: 'attributes',
+                                        attributes: includedItem.attributes,
+                                        _productValues: {
+                                            [String(productId)]: pivotValue,
+                                            [Number(productId)]: pivotValue
+                                        }
+                                    };
+                                    this.currentData.included.push(newAttr);
+                                }
+                            }
+                        });
+                    }
+                }
+
+                // Show success notification for regular field updates too
+                this.showNotification('success', 'Product updated successfully');
             }
 
-            // Refresh the cell
-            this.gridApi.refreshCells({ rowNodes: [event.node] });
+            // Refresh the cell with force to ensure valueGetter is re-evaluated
+            // This is critical for attributes to update correctly
+            this.gridApi.refreshCells({
+                rowNodes: [event.node],
+                force: true  // Force refresh even if value hasn't changed
+            });
 
         } catch (error) {
             // Revert the change
+            if (data._attributeUpdate) {
+                delete data._attributeUpdate;
+            }
+
+            let fieldName = colDef.field;
+            if (fieldName.startsWith('attributes.')) {
+                fieldName = fieldName.replace('attributes.', '');
+            }
             this.dataAdapter.setValue(data, fieldName, oldValue);
 
             this.gridApi.refreshCells({ rowNodes: [event.node] });
@@ -846,12 +987,12 @@ export class ProductSyncGrid {
      */
     initializeSSE() {
         if (!window.EventSource) {
-            console.warn('[SSE] EventSource is not supported in this browser');
+            console.warn('[SSE] EventSource not supported in this browser');
             return;
         }
 
         if (typeof ProductSSEClient === 'undefined') {
-            console.warn('[SSE] ProductSSEClient not loaded, SSE features disabled');
+            console.warn('[SSE] ProductSSEClient not loaded');
             return;
         }
 
@@ -879,6 +1020,7 @@ export class ProductSyncGrid {
         this.sseClient.on('product.updated', (data) => this.handleSSEProductUpdate(data));
         this.sseClient.on('product.created', (data) => this.handleSSEProductCreated(data));
         this.sseClient.on('product.deleted', (data) => this.handleSSEProductDeleted(data));
+        this.sseClient.on('product.restored', (data) => this.handleSSEProductRestored(data));
         this.sseClient.on('product.imported', (data) => this.handleSSEProductImported(data));
         this.sseClient.on('products.bulk.updated', (data) => this.handleSSEBulkUpdate(data));
         this.sseClient.on('server.error', (data) => this.handleSSEServerError(data));
@@ -891,7 +1033,10 @@ export class ProductSyncGrid {
      * Handle SSE product update event
      */
     handleSSEProductUpdate(data) {
-        if (!this.gridApi) return;
+        if (!this.gridApi) {
+            console.warn('[SSE] Grid API not available, ignoring update');
+            return;
+        }
 
         const productId = data.product_id || data.id;
         let rowNode = null;
@@ -902,16 +1047,137 @@ export class ProductSyncGrid {
             }
         });
 
+        if (!rowNode) {
+            console.warn('[SSE] Product not found in grid:', productId);
+            return;
+        }
+
         if (rowNode) {
             const productData = data.product || data.attributes || data;
 
-            // Update fields using dataAdapter
+            // Handle attribute updates specially
+            // ProductObserver broadcasts attributes in Eloquent format: [{id, name, pivot: {value}}]
+            // But grid expects JSON:API format in currentData.included
+            if (productData.attributes && Array.isArray(productData.attributes)) {
+                // Initialize _attributeValues if not exists
+                if (!rowNode.data._attributeValues) {
+                    rowNode.data._attributeValues = {};
+                }
+
+                // Build a set of attribute IDs that are in the broadcast
+                const broadcastAttributeIds = new Set(productData.attributes.map(attr => attr.id));
+
+                // Update relationships.attributes.data to match broadcast
+                if (rowNode.data.relationships && rowNode.data.relationships.attributes && rowNode.data.relationships.attributes.data) {
+                    // Filter to keep only attributes in broadcast
+                    rowNode.data.relationships.attributes.data = rowNode.data.relationships.attributes.data.filter(attr =>
+                        broadcastAttributeIds.has(Number(attr.id))
+                    );
+                }
+
+                // CRITICAL: For attributes that existed but are NOT in broadcast anymore,
+                // set to empty string so they display "- Select -"
+                // Check _attributeValues for previously edited attributes
+                if (rowNode.data._attributeValues) {
+                    Object.keys(rowNode.data._attributeValues).forEach(attrKey => {
+                        const attrIdNum = Number(attrKey);
+                        if (!broadcastAttributeIds.has(attrIdNum)) {
+                            // Not in broadcast = deleted, set to empty (use STRING key)
+                            const attrKeyString = String(attrIdNum);
+                            rowNode.data._attributeValues[attrKeyString] = '';
+                        }
+                    });
+                }
+
+                // Also check currentData.included for attributes that had values for this product
+                if (this.currentData && this.currentData.included) {
+                    this.currentData.included.forEach(item => {
+                        if (item.type === 'attributes' && item._productValues) {
+                            const attrIdNum = Number(item.id);
+                            const hasValueForThisProduct = item._productValues[String(productId)] !== undefined ||
+                                                          item._productValues[Number(productId)] !== undefined;
+
+                            if (hasValueForThisProduct && !broadcastAttributeIds.has(attrIdNum)) {
+                                // Attribute had value for this product but not in broadcast = deleted
+                                // Set to empty in _attributeValues (use STRING key)
+                                const attrKeyString = String(attrIdNum);
+                                rowNode.data._attributeValues[attrKeyString] = '';
+                            }
+                        }
+                    });
+                }
+
+                // CRITICAL: Update ALL attributes from broadcast to ensure consistency
+                // Backend broadcasts complete attribute list, so we sync with it
+                if (this.currentData && this.currentData.included) {
+                    // First, update attributes that ARE in broadcast
+                    productData.attributes.forEach(attr => {
+                        // Get the attribute value from pivot (could be empty string)
+                        const attrValue = (attr.pivot && attr.pivot.value !== undefined) ? attr.pivot.value : '';
+
+                        // Find matching attribute in included array
+                        const includedIndex = this.currentData.included.findIndex(
+                            item => item.type === 'attributes' && item.id === String(attr.id)
+                        );
+
+                        if (includedIndex >= 0) {
+                            // Update the pivot value for this product's attribute
+                            // Store in format that valueGetter can find
+                            // Use both string and number keys for compatibility
+                            if (!this.currentData.included[includedIndex]._productValues) {
+                                this.currentData.included[includedIndex]._productValues = {};
+                            }
+                            this.currentData.included[includedIndex]._productValues[String(productId)] = attrValue;
+                            this.currentData.included[includedIndex]._productValues[Number(productId)] = attrValue;
+                        }
+
+                        // MOST IMPORTANT: Store directly on rowNode.data for valueGetter
+                        // ValueGetter checks params.data._attributeValues FIRST
+                        // This is the primary source of truth for attribute values
+                        // CRITICAL: Use STRING key consistently
+                        if (!rowNode.data._attributeValues) {
+                            rowNode.data._attributeValues = {};
+                        }
+                        const attrKeyString = String(attr.id);
+                        rowNode.data._attributeValues[attrKeyString] = attrValue;
+                    });
+
+                    // CRITICAL: Clean up _productValues for attributes that were DELETED (not in broadcast)
+                    // This prevents valueGetter fallback from finding stale pivot values
+                    this.currentData.included.forEach(includedItem => {
+                        if (includedItem.type === 'attributes' && includedItem._productValues) {
+                            const attrId = Number(includedItem.id);
+                            // If this attribute is NOT in broadcast for this product, clean it up
+                            if (!broadcastAttributeIds.has(attrId)) {
+                                // Remove this product's value from _productValues
+                                delete includedItem._productValues[String(productId)];
+                                delete includedItem._productValues[Number(productId)];
+                            }
+                        }
+                    });
+                }
+
+                // Don't set attributes on rowNode.data as it's in wrong format
+                // Remove it from productData before updating
+                delete productData.attributes;
+            }
+
+            // Update regular fields using dataAdapter
             Object.keys(productData).forEach(key => {
                 this.dataAdapter.setValue(rowNode.data, key, productData[key]);
             });
 
-            rowNode.setData(rowNode.data);
+            // Don't call setData, just refresh the cells
+            // setData might reset the row and lose our _productValues updates
 
+            // IMPORTANT: Force refresh cells to trigger valueGetter for attributes
+            // This is critical for attribute deletions to show "- Select -"
+            this.gridApi.refreshCells({
+                rowNodes: [rowNode],
+                force: true  // Force refresh even if value hasn't changed
+            });
+
+            // Flash the entire row to show it was updated
             this.gridApi.flashCells({
                 rowNodes: [rowNode],
                 flashDelay: 300,
@@ -955,6 +1221,20 @@ export class ProductSyncGrid {
             const productName = this.dataAdapter.getValue(rowToRemove, 'name') || 'Product';
             this.showNotification('info', `${productName} deleted via real-time sync`);
         }
+    }
+
+    /**
+     * Handle SSE product restored event
+     */
+    handleSSEProductRestored(data) {
+        if (!this.gridApi) return;
+
+        // Reload grid to show restored product
+        this.loadProducts();
+
+        const productData = data.product || data.data || data;
+        const productName = (productData.attributes && productData.attributes.name) || productData.name || 'Product';
+        this.showNotification('success', `${productName} restored via real-time sync`);
     }
 
     /**

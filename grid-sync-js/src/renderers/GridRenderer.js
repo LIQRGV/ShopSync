@@ -58,7 +58,9 @@ export class GridRenderer {
                 id: attr.id,
                 name: attr.attributes.name,
                 code: attr.attributes.code,
-                type: attr.attributes.type
+                type: attr.attributes.type,
+                input_type: attr.attributes.input_type || 1,
+                options: attr.attributes.options || []
             });
         });
 
@@ -75,9 +77,22 @@ export class GridRenderer {
         // Generate column group for each attribute group
         Object.entries(attributeGroups).forEach(([groupName, attributes]) => {
             const children = attributes.map((attr, index) => {
-                // Capture attr.id in closure
+                // Capture attr properties in closure
                 const attrId = String(attr.id);
                 const attrName = attr.name;
+                const inputType = attr.input_type || 1;
+                const options = attr.options || [];
+
+                // Check if this is an option type without options configured
+                const isOptionWithoutValues = inputType !== 1 && options.length === 0;
+
+                // Placeholder text for different states
+                const emptyOptionText = '- Select -'; // For clearing attribute when options exist
+                const noOptionsText = 'No options available'; // For disabled dropdown without options
+
+                // Add clear option as first option to allow clearing attribute value
+                // Use special marker "- Select -" that will be converted to empty string on save
+                const editorOptions = inputType === 1 ? options : [emptyOptionText, ...options];
 
                 return {
                     headerName: attrName,
@@ -85,16 +100,39 @@ export class GridRenderer {
                     width: 150,
                     sortable: false,
                     filter: 'agTextColumnFilter',
-                    editable: false,
-                    cellClass: 'read-only-cell',
-                    cellStyle: (params) => this.getCellStyle(params),
+                    editable: !isOptionWithoutValues, // Non-editable if option type has no options
+                    cellEditor: inputType === 1 ? 'agTextCellEditor' : this.getAutoOpenSelectEditor(),
+                    cellEditorPopup: inputType !== 1,
+                    cellEditorParams: inputType === 1 ? {} : { values: editorOptions },
+                    cellStyle: (params) => {
+                        const baseStyle = this.getCellStyle(params);
+                        // Add gray italic style for placeholder text
+                        // Show for: option without values OR option with values but empty
+                        if (!params.value && inputType !== 1) {
+                            return {
+                                ...baseStyle,
+                                color: '#999',
+                                fontStyle: 'italic'
+                            };
+                        }
+                        return baseStyle;
+                    },
                     valueGetter: (params) => {
+                        // First check if there's a locally updated value (from recent edit)
+                        if (params.data && params.data._attributeValues && params.data._attributeValues[attrId] !== undefined) {
+                            const value = params.data._attributeValues[attrId];
+                            // For option types, show appropriate placeholder for empty values
+                            return (inputType !== 1 && !value) ? (isOptionWithoutValues ? noOptionsText : emptyOptionText) : value;
+                        }
+
+                        // Otherwise, get from original API data
                         if (params.data && params.data.relationships && params.data.relationships.attributes) {
                             const attributeIds = params.data.relationships.attributes.data.map(a => String(a.id));
 
                             // Check if this attribute is in the product
                             if (!attributeIds.includes(attrId)) {
-                                return '';
+                                // For option types, show appropriate placeholder for empty values
+                                return inputType !== 1 ? (isOptionWithoutValues ? noOptionsText : emptyOptionText) : '';
                             }
 
                             // Get currentData from context
@@ -108,14 +146,76 @@ export class GridRenderer {
                                     attributeIds.includes(String(inc.id))
                                 );
 
-                                if (includedAttr && includedAttr.attributes) {
-                                    return includedAttr.attributes.pivot?.value || '';
+                                if (includedAttr) {
+                                    // Check for SSE-updated value first (from real-time sync)
+                                    // Try both as string and number since JavaScript object keys are strings
+                                    if (includedAttr._productValues) {
+                                        const productIdStr = String(params.data.id);
+                                        const productIdNum = Number(params.data.id);
+
+                                        if (includedAttr._productValues[productIdStr] !== undefined) {
+                                            const value = includedAttr._productValues[productIdStr];
+                                            // For option types, show appropriate placeholder for empty values
+                                            return (inputType !== 1 && !value) ? (isOptionWithoutValues ? noOptionsText : emptyOptionText) : value;
+                                        }
+                                        if (includedAttr._productValues[productIdNum] !== undefined) {
+                                            const value = includedAttr._productValues[productIdNum];
+                                            // For option types, show appropriate placeholder for empty values
+                                            return (inputType !== 1 && !value) ? (isOptionWithoutValues ? noOptionsText : emptyOptionText) : value;
+                                        }
+                                    }
+
+                                    // REMOVED FALLBACK TO attributes.pivot.value
+                                    // This was causing all products to show same value!
+                                    // If _productValues doesn't have value for this product, it means empty
                                 }
                             }
                         }
-                        return '';
+                        // For option types, show appropriate placeholder for empty values
+                        return inputType !== 1 ? (isOptionWithoutValues ? noOptionsText : emptyOptionText) : '';
                     },
-                    valueFormatter: (params) => params.value || ''
+                    valueSetter: (params) => {
+                        // Convert "- Select -" to empty string for clearing attribute
+                        const actualValue = params.newValue === '- Select -' ? '' : params.newValue;
+
+                        // Store attribute_id for update handler
+                        params.data._attributeUpdate = {
+                            attributeId: attrId,
+                            oldValue: params.oldValue === '- Select -' ? '' : params.oldValue,
+                            newValue: actualValue
+                        };
+
+                        // Actually update the value in the data to trigger onCellValueChanged
+                        // This is necessary for AG Grid to properly detect the change
+                        // The field name matches what valueGetter uses
+                        const fieldName = `attribute_${attrId}`;
+
+                        // Update the data directly - this triggers onCellValueChanged event
+                        if (!params.data._attributeValues) {
+                            params.data._attributeValues = {};
+                        }
+                        // Store the actual value (empty string for "- Select -")
+                        params.data._attributeValues[attrId] = actualValue;
+
+                        return true; // Return true to indicate value was set successfully
+                    },
+                    valueFormatter: (params) => {
+                        // Don't format "- Select -" - let it pass through as is
+                        if (params.value === '- Select -') {
+                            return '- Select -';
+                        }
+
+                        if (!params.value) {
+                            // Show different placeholder based on whether options are configured
+                            if (isOptionWithoutValues) {
+                                return 'No options configured';
+                            } else if (inputType !== 1) {
+                                // Option type with values but not selected yet
+                                return '- Select -';
+                            }
+                        }
+                        return params.value || '';
+                    }
                 };
             });
 
