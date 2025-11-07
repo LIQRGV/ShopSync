@@ -5,6 +5,7 @@ namespace TheDiamondBox\ShopSync\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Attribute Model for Diamond Box Integration
@@ -71,6 +72,15 @@ class Attribute extends Model
             'product_id'
         )->withPivot('value', 'created_at', 'updated_at')
           ->withTimestamps();
+    }
+
+    /**
+     * Get the input type values (dropdown options) for this attribute
+     */
+    public function inputTypeValues(): HasMany
+    {
+        return $this->hasMany(AttributeInputTypeValue::class, 'attribute_id', 'id')
+                    ->orderBy('sortby');
     }
 
     /**

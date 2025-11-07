@@ -269,6 +269,29 @@ class ProxySseStreamer implements SseStreamerInterface
      */
     private function forwardSseMessage(string $message, string $sessionId): bool
     {
+        // Debug: Log what we're forwarding
+        $lines = explode("\n", $message);
+        $eventType = 'none';
+        $hasEventLine = false;
+
+        foreach ($lines as $line) {
+            $trimmedLine = trim($line);
+            if (strpos($trimmedLine, 'event:') === 0) {
+                $eventType = trim(substr($trimmedLine, 6));
+                $hasEventLine = true;
+                break;
+            }
+        }
+
+        // Only log non-timestamp events to reduce noise
+        if ($eventType !== 'timestamp' && $eventType !== 'connected') {
+            Log::info("SSE [WTM][{$sessionId}]: Forwarding event", [
+                'type' => $eventType,
+                'has_event_line' => $hasEventLine,
+                'first_50_chars' => substr($message, 0, 50)
+            ]);
+        }
+
         // Set error handler to catch write errors
         $writeError = false;
         set_error_handler(function($errno, $errstr) use (&$writeError) {

@@ -120,7 +120,11 @@ class ProductPackageServiceProvider extends ServiceProvider
     protected function bootObservers()
     {
         // Register Product Observer for SSE broadcasting
-        Product::observe(ProductObserver::class);
+        // ONLY in WL mode - WTM mode proxies to WL, no need for observers
+        $mode = config('products-package.mode', 'wl');
+        if ($mode === 'wl') {
+            Product::observe(ProductObserver::class);
+        }
     }
 
     /**

@@ -18,6 +18,12 @@ export class ProductSSEClient {
         this.lastEventTime = null;
         this.heartbeatInterval = null;
         this.connectionTimeout = null;
+        // State for incomplete SSE events across chunks
+        this.incompleteEvent = {
+            eventType: 'message',
+            eventData: '',
+            eventId: null
+        };
     }
 
     /**
@@ -30,8 +36,6 @@ export class ProductSSEClient {
 
         try {
             const url = new URL(this.endpoint, window.location.origin);
-            console.log('[SSE] Connecting to:', url.toString());
-
             // Use custom EventSource implementation that supports headers
             this.createCustomEventSource(url.toString());
 
@@ -160,9 +164,10 @@ export class ProductSSEClient {
      * Process event stream lines
      */
     processEventLines(lines, eventSource) {
-        let eventType = 'message';
-        let eventData = '';
-        let eventId = null;
+        // Use incomplete event state from previous chunk (if any)
+        let eventType = this.incompleteEvent.eventType;
+        let eventData = this.incompleteEvent.eventData;
+        let eventId = this.incompleteEvent.eventId;
 
         for (const line of lines) {
             if (line === '') {
@@ -200,6 +205,13 @@ export class ProductSSEClient {
             }
             // Ignore comments (lines starting with :)
         }
+
+        // Save incomplete event state for next chunk
+        this.incompleteEvent = {
+            eventType: eventType,
+            eventData: eventData,
+            eventId: eventId
+        };
     }
 
     /**
@@ -253,6 +265,7 @@ export class ProductSSEClient {
             'product.updated': (event) => this.handleProductUpdate(event),
             'product.created': (event) => this.handleProductCreated(event),
             'product.deleted': (event) => this.handleProductDeleted(event),
+            'product.restored': (event) => this.handleProductRestored(event),
             'product.imported': (event) => this.handleProductImported(event),
             'products.bulk.updated': (event) => this.handleBulkUpdate(event),
             'ping': (event) => this.handlePing(event),
@@ -324,6 +337,22 @@ export class ProductSSEClient {
             this.notifyListeners('product.deleted', data);
         } catch (error) {
             console.error('[SSE] Error handling product deleted:', error);
+        }
+    }
+
+    /**
+     * Handle product restored event
+     */
+    handleProductRestored(event) {
+        try {
+            const data = JSON.parse(event.data);
+            this.lastEventTime = Date.now();
+            this.resetConnectionTimeout();
+
+            console.log('[SSE] Product restored:', data);
+            this.notifyListeners('product.restored', data);
+        } catch (error) {
+            console.error('[SSE] Error handling product restored:', error);
         }
     }
 

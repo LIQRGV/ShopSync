@@ -172,6 +172,62 @@ export class ProductGridApiClient {
     }
 
     /**
+     * Update product attribute value
+     * @param {number} productId - Product ID
+     * @param {string|number} attributeId - Attribute ID
+     * @param {*} value - New value
+     * @returns {Promise<Object>} Update result
+     */
+    async updateProductAttribute(productId, attributeId, value) {
+        try {
+            // Transform for API using JSON:API format
+            const updateData = {
+                data: {
+                    type: 'products',
+                    id: String(productId),
+                    attributes: {
+                        attribute_id: String(attributeId),
+                        value: String(value)
+                    }
+                }
+            };
+
+            // Add include parameter to get updated attribute data in response
+            const url = `${this.baseUrl}/${productId}?include=attributes`;
+
+            const response = await fetch(url, {
+                method: ProductGridConstants.API_CONFIG.METHODS.PUT,
+                headers: this.getHeaders(),
+                body: JSON.stringify(updateData)
+            });
+
+            if (!response.ok) {
+                let errorMessage = `HTTP error! status: ${response.status}`;
+                try {
+                    const errorData = await response.json();
+                    if (errorData.message) {
+                        errorMessage = errorData.message;
+                    }
+                } catch (parseError) {
+                    // Use default error message
+                }
+                throw new Error(errorMessage);
+            }
+
+            const result = await response.json();
+
+            // Validate response
+            if (!result.data) {
+                throw new Error('Invalid response format: missing data');
+            }
+
+            return result;
+        } catch (error) {
+            throw new Error(`Failed to update attribute: ${error.message}`);
+        }
+    }
+
+    /**
      * Bulk update multiple products
      * @param {Array<Object>} updates - Array of update operations
      * @returns {Promise<Object>} Bulk update results
