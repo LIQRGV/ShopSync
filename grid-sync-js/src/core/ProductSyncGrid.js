@@ -24,6 +24,7 @@ export class ProductSyncGrid {
      * @param {boolean} [config.enableSSE=true] - Enable Server-Sent Events
      * @param {string} [config.sseEndpoint='/api/v1/sse/events'] - SSE endpoint URL
      * @param {string} [config.csvExportPrefix='products'] - Prefix for CSV export filename
+     * @param {Array} [config.masterAttributes=[]] - Master attributes data (for flat mode)
      */
     constructor(config) {
         // Configuration
@@ -35,6 +36,7 @@ export class ProductSyncGrid {
             clientId: null,
             clientBaseUrl: '',
             csvExportPrefix: 'products',
+            masterAttributes: [],
             ...config
         };
 
@@ -92,7 +94,8 @@ export class ProductSyncGrid {
             baseUrl: this.config.clientBaseUrl || this.config.apiEndpoint,
             dataAdapter: this.dataAdapter,
             currentData: null,
-            enabledAttributes: this.enabledAttributes
+            enabledAttributes: this.enabledAttributes,
+            masterAttributes: this.config.masterAttributes
         });
 
         // Initialize SSE if enabled
@@ -111,10 +114,11 @@ export class ProductSyncGrid {
             return;
         }
 
-        // Pre-load data to get attribute groups BEFORE initializing grid (nested mode only)
+        // Pre-load data to get attribute groups BEFORE initializing grid (both modes)
         let initialColumnDefs = this.gridRenderer.getColumnDefs();
 
-        if (this.dataAdapter.mode === 'nested') {
+        // Pre-load data for both nested and flat modes to get attribute columns
+        if (this.dataAdapter.mode === 'nested' || this.dataAdapter.mode === 'flat') {
             try {
                 const response = await this.apiClient.loadProducts(1, ProductGridConstants.GRID_CONFIG.PAGINATION_SIZE);
                 this.gridRenderer.updateCurrentData(response);
@@ -635,32 +639,246 @@ export class ProductSyncGrid {
     }
 
     /**
-     * Enforce column order (prevents accidental column reordering)
+     * Enforce column order using applyColumnState for atomic operation
+     * This prevents AG Grid from reorganizing columns during visibility changes
      */
     enforceColumnOrder() {
         if (!this.columnApi || !this.initialColumnState) {
+            console.warn('[ProductSyncGrid] Cannot enforce order: missing columnApi or initialColumnState');
             return;
         }
 
-        const allColumns = this.columnApi.getAllGridColumns();
-        const initialPositions = {};
+        // Get current column state to preserve visibility and other properties
+        const currentState = this.columnApi.getColumnState();
 
-        this.initialColumnState.forEach((col, index) => {
-            initialPositions[col.colId] = index;
+        // Build a map of current column properties by colId
+        const currentPropsMap = {};
+        currentState.forEach(col => {
+            currentPropsMap[col.colId] = col;
         });
 
-        const sortedColumns = allColumns.sort((a, b) => {
-            const aPos = initialPositions[a.getColId()] || 999;
-            const bPos = initialPositions[b.getColId()] || 999;
-            return aPos - bPos;
+        // Build new state based on initial order, preserving current visibility
+        const newState = this.initialColumnState.map(initialCol => {
+            const currentCol = currentPropsMap[initialCol.colId];
+            if (currentCol) {
+                // Preserve current properties but enforce initial order
+                return {
+                    ...currentCol,
+                    // Ensure pinned property is preserved from initial state
+                    pinned: initialCol.pinned || null
+                };
+            }
+            return initialCol;
         });
 
-        sortedColumns.forEach((col, index) => {
-            const currentIndex = this.columnApi.getAllGridColumns().indexOf(col);
-            if (currentIndex !== index) {
-                this.columnApi.moveColumn(col, index);
+        // Add any dynamic columns (like attributes) that weren't in initial state
+        currentState.forEach(col => {
+            const existsInNew = newState.find(s => s.colId === col.colId);
+            if (!existsInNew) {
+                newState.push(col);
             }
         });
+
+        // Apply the complete state atomically
+        this.columnApi.applyColumnState({
+            state: newState,
+            applyOrder: true
+        });
+
+        console.log('[ProductSyncGrid] Column order enforced via applyColumnState');
+    }
+
+    /**
+     * Set visibility for a group of columns (Issue #183)
+     * @param {string} groupName - Group name (essential, content, marketing, attributes)
+     * @param {boolean} visible - Show or hide
+     */
+    setColumnGroupVisibility(groupName, visible) {
+        if (!this.columnApi) {
+            console.warn('[ProductSyncGrid] Column API not initialized yet');
+            return;
+        }
+
+        let columnIds = ProductGridConstants.COLUMN_GROUPS[groupName];
+
+        // For attributes group, get all attribute_* columns dynamically
+        if (groupName === 'attributes') {
+            const allColumns = this.columnApi.getAllColumns();
+            columnIds = allColumns
+                .filter(col => col.getColId().startsWith('attribute_'))
+                .map(col => col.getColId());
+        }
+
+        // Filter out columns that don't exist in current grid
+        if (columnIds && columnIds.length > 0) {
+            const existingColumnIds = columnIds.filter(colId => {
+                const col = this.columnApi.getColumn(colId);
+                return col !== null && col !== undefined;
+            });
+
+            // IMPORTANT: Essential group contains pinned columns (image, productName)
+            // When hiding other groups (content/marketing/attributes), we should NOT hide essential
+            // But when showing other groups, we should ALSO hide essential
+            // So the logic is: only apply visibility to non-essential groups, keep essential always visible
+
+            if (existingColumnIds.length > 0) {
+
+                // Get current state to preserve width and sort
+                const currentState = this.columnApi.getColumnState();
+                const currentPropsMap = {};
+                currentState.forEach(col => {
+                    currentPropsMap[col.colId] = {
+                        width: col.width,
+                        hide: col.hide,
+                        sort: col.sort,
+                        sortIndex: col.sortIndex
+                    };
+                });
+
+                // CRITICAL: Rebuild state strictly following initialColumnState order
+                // Step 1: Create map of all columns (initial + dynamic)
+                const allColumnsMap = {};
+
+                // Add initial columns
+                this.initialColumnState.forEach(col => {
+                    allColumnsMap[col.colId] = col;
+                });
+
+                // Add dynamic columns (attributes) that aren't in initial state
+                currentState.forEach(col => {
+                    if (!allColumnsMap[col.colId]) {
+                        allColumnsMap[col.colId] = col;
+                    }
+                });
+
+                // Step 2: Build ordered state array following strict order:
+                // Pinned left (in initial order) -> Center (in initial order + dynamic attributes) -> Pinned right
+                const newState = [];
+
+                // Add pinned left columns in their initial order
+                this.initialColumnState.forEach(col => {
+                    if (col.pinned === 'left') {
+                        const currentProps = currentPropsMap[col.colId] || {};
+                        const isInTargetGroup = existingColumnIds.includes(col.colId);
+                        const hide = isInTargetGroup ? !visible : (currentProps.hide !== undefined ? currentProps.hide : col.hide);
+
+                        newState.push({
+                            colId: col.colId,
+                            hide: hide,
+                            width: currentProps.width || col.width,
+                            pinned: col.pinned,
+                            sort: currentProps.sort || null,
+                            sortIndex: currentProps.sortIndex || null
+                        });
+                    }
+                });
+
+                // Add center columns in their initial order, then dynamic attributes
+                this.initialColumnState.forEach(col => {
+                    if (!col.pinned) {
+                        const currentProps = currentPropsMap[col.colId] || {};
+                        const isInTargetGroup = existingColumnIds.includes(col.colId);
+                        const hide = isInTargetGroup ? !visible : (currentProps.hide !== undefined ? currentProps.hide : col.hide);
+
+                        newState.push({
+                            colId: col.colId,
+                            hide: hide,
+                            width: currentProps.width || col.width,
+                            pinned: null,
+                            sort: currentProps.sort || null,
+                            sortIndex: currentProps.sortIndex || null
+                        });
+                    }
+                });
+
+                // Add dynamic attribute columns (not in initial state)
+                currentState.forEach(col => {
+                    const existsInNew = newState.find(s => s.colId === col.colId);
+                    if (!existsInNew && !col.pinned) {
+                        const isInTargetGroup = existingColumnIds.includes(col.colId);
+                        const hide = isInTargetGroup ? !visible : col.hide;
+
+                        newState.push({
+                            colId: col.colId,
+                            hide: hide,
+                            width: col.width,
+                            pinned: null,
+                            sort: col.sort || null,
+                            sortIndex: col.sortIndex || null
+                        });
+                    }
+                });
+
+                // Add pinned right columns in their initial order
+                this.initialColumnState.forEach(col => {
+                    if (col.pinned === 'right') {
+                        const currentProps = currentPropsMap[col.colId] || {};
+                        const isInTargetGroup = existingColumnIds.includes(col.colId);
+                        const hide = isInTargetGroup ? !visible : (currentProps.hide !== undefined ? currentProps.hide : col.hide);
+
+                        newState.push({
+                            colId: col.colId,
+                            hide: hide,
+                            width: currentProps.width || col.width,
+                            pinned: col.pinned,
+                            sort: currentProps.sort || null,
+                            sortIndex: currentProps.sortIndex || null
+                        });
+                    }
+                });
+
+                const sortedState = newState;
+
+                // Apply state atomically - both visibility AND order in one operation
+                this.columnApi.applyColumnState({
+                    state: sortedState,
+                    applyOrder: true
+                });
+
+                // CRITICAL FIX: Force full refresh of header AND rows
+                // refreshHeader() fixes header column order
+                // redrawRows() fixes cell content to match header
+                this.gridApi.refreshHeader();
+                this.gridApi.redrawRows();
+            }
+        }
+    }
+
+    /**
+     * Get current visibility state of column groups (Issue #183)
+     * @returns {Object} Object with group names as keys and boolean visibility as values
+     */
+    getColumnGroupsVisibility() {
+        if (!this.columnApi) {
+            return {};
+        }
+
+        const visibility = {};
+        const groups = ['essential', 'content', 'marketing', 'attributes'];
+
+        groups.forEach(groupName => {
+            let columnIds = ProductGridConstants.COLUMN_GROUPS[groupName];
+
+            if (groupName === 'attributes') {
+                const allColumns = this.columnApi.getAllColumns();
+                columnIds = allColumns
+                    .filter(col => col.getColId().startsWith('attribute_'))
+                    .map(col => col.getColId());
+            }
+
+            if (columnIds && columnIds.length > 0) {
+                // Check if at least one column in the group is visible
+                const hasVisibleColumn = columnIds.some(colId => {
+                    const col = this.columnApi.getColumn(colId);
+                    return col && col.isVisible();
+                });
+                visibility[groupName] = hasVisibleColumn;
+            } else {
+                visibility[groupName] = false;
+            }
+        });
+
+        return visibility;
     }
 
     /**

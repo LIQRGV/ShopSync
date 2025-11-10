@@ -71,9 +71,14 @@ export class ProductGridApiClient {
                 url += `&client_id=${this.clientId}`;
             }
 
-            // Add includes for nested structure (thediamondbox style)
+            // Add includes for both nested and flat structures
+            // For nested (WTM): includes category, brand, supplier, attributes relationships
+            // For flat (WL): includes only master attributes metadata
             if (this.dataAdapter.getCurrentMode() === 'nested' || this.dataAdapter.mode === 'auto') {
                 url += '&include=category,brand,supplier,attributes';
+            } else if (this.dataAdapter.getCurrentMode() === 'flat') {
+                // For flat mode, only request attributes to get master attribute metadata
+                url += '&include=attributes';
             }
 
             const response = await fetch(url, {
