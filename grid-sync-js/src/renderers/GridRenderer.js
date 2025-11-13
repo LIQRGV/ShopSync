@@ -11,12 +11,16 @@ export class GridRenderer {
      * @param {GridDataAdapter} config.dataAdapter - Data adapter for field access
      * @param {Object} config.currentData - Current grid data with included relationships
      * @param {Array} config.enabledAttributes - Enabled attributes for dynamic columns
+     * @param {Array} config.masterAttributes - Master attributes data (for flat mode)
      */
     constructor(config) {
         this.baseUrl = config.baseUrl || '';
         this.dataAdapter = config.dataAdapter;
         this.currentData = config.currentData || null;
         this.enabledAttributes = config.enabledAttributes || [];
+        this.masterAttributes = config.masterAttributes || [];
+
+        console.log('[GridRenderer] Constructor: masterAttributes count =', this.masterAttributes.length);
 
         // Inject custom CSS for colored dropdowns and read-only cells
         this.injectStatusDropdownCSS();
@@ -34,35 +38,148 @@ export class GridRenderer {
      * Returns grouped attributes with group_name as key
      */
     extractAttributeGroups() {
-        if (!this.currentData || !this.currentData.included) {
+        if (!this.currentData) {
+            console.warn('[GridRenderer] extractAttributeGroups: No currentData');
             return {};
+        }
+
+        console.log('[GridRenderer] extractAttributeGroups: dataAdapter.mode =', this.dataAdapter.mode);
+        console.log('[GridRenderer] extractAttributeGroups: currentData keys =', Object.keys(this.currentData));
+        console.log('[GridRenderer] extractAttributeGroups: has included?', !!this.currentData.included);
+        console.log('[GridRenderer] extractAttributeGroups: has attributes?', !!this.currentData.attributes);
+
+        // Log first product structure to see where attributes are
+        if (this.currentData.data && this.currentData.data.length > 0) {
+            const firstProduct = this.currentData.data[0];
+            console.log('[GridRenderer] First product keys:', Object.keys(firstProduct));
+            console.log('[GridRenderer] First product full:', firstProduct);
         }
 
         const attributeGroups = {};
 
-        // Filter attributes that are enabled_on_dropship
-        const enabledAttributes = this.currentData.included.filter(item =>
-            item.type === 'attributes' &&
-            item.attributes.enabled_on_dropship === true
-        );
+        // Handle both nested and flat modes: Extract master attributes from included array
+        // For nested mode (WTM): included contains product relationships + master attributes
+        // For flat mode (WL): included contains only master attributes metadata
+        if (this.currentData.included) {
+            console.log('[GridRenderer] Found included array, extracting attributes...');
 
-        // Group by group_name
-        enabledAttributes.forEach(attr => {
-            const groupName = attr.attributes.group_name || 'Other';
+            // Filter attributes that are enabled_on_dropship
+            const enabledAttributes = this.currentData.included.filter(item =>
+                item.type === 'attributes' &&
+                item.attributes.enabled_on_dropship === true
+            );
 
-            if (!attributeGroups[groupName]) {
-                attributeGroups[groupName] = [];
-            }
+            console.log('[GridRenderer] Enabled attributes found:', enabledAttributes.length);
 
-            attributeGroups[groupName].push({
-                id: attr.id,
-                name: attr.attributes.name,
-                code: attr.attributes.code,
-                type: attr.attributes.type,
-                input_type: attr.attributes.input_type || 1,
-                options: attr.attributes.options || []
+            // Group by group_name
+            enabledAttributes.forEach(attr => {
+                const groupName = attr.attributes.group_name || 'Other';
+
+                if (!attributeGroups[groupName]) {
+                    attributeGroups[groupName] = [];
+                }
+
+                attributeGroups[groupName].push({
+                    id: attr.id,
+                    name: attr.attributes.name,
+                    code: attr.attributes.code,
+                    type: attr.attributes.type,
+                    input_type: attr.attributes.input_type || 1,
+                    options: attr.attributes.options || []
+                });
             });
-        });
+
+            console.log('[GridRenderer] Attribute groups extracted:', Object.keys(attributeGroups));
+        }
+
+        // Handle flat mode (master attributes passed from backend)
+        // In flat mode, master attributes are passed via blade template to JavaScript
+        if (this.dataAdapter.mode === 'flat' && this.masterAttributes && this.masterAttributes.length > 0) {
+            console.log('[GridRenderer] Using masterAttributes from blade template, count:', this.masterAttributes.length);
+
+            this.masterAttributes.forEach(attr => {
+                const groupName = attr.group_name || 'Other';
+
+                if (!attributeGroups[groupName]) {
+                    attributeGroups[groupName] = [];
+                }
+
+                attributeGroups[groupName].push({
+                    id: attr.id,
+                    name: attr.name,
+                    code: attr.code || null,
+                    type: attr.input_type || 1
+                });
+            });
+
+            console.log('[GridRenderer] Extracted attribute groups:', Object.keys(attributeGroups));
+        }
+
+        // Alternative: Extract from first product's attributes in flat mode
+        console.log('[GridRenderer] Checking product attributes extraction...');
+        console.log('[GridRenderer] - attributeGroups.length:', Object.keys(attributeGroups).length);
+        console.log('[GridRenderer] - has data?:', !!this.currentData.data);
+        console.log('[GridRenderer] - is array?:', Array.isArray(this.currentData.data));
+        console.log('[GridRenderer] - data.length:', this.currentData.data?.length);
+
+        if (this.dataAdapter.mode === 'flat' &&
+            Object.keys(attributeGroups).length === 0 &&
+            this.currentData.data &&
+            Array.isArray(this.currentData.data) &&
+            this.currentData.data.length > 0) {
+
+            console.log('[GridRenderer] Extracting attributes from products...');
+            console.log('[GridRenderer] First product:', this.currentData.data[0]);
+
+            // Get unique attributes from all products
+            const seenAttributes = new Set();
+
+            this.currentData.data.forEach((product, productIndex) => {
+                // Skip logging after first 3 products to avoid console spam
+                if (productIndex < 3) {
+                    console.log(`[GridRenderer] Product ${productIndex} keys:`, Object.keys(product));
+                    console.log(`[GridRenderer] Product ${productIndex} attributes type:`, typeof product.attributes);
+                    console.log(`[GridRenderer] Product ${productIndex} attributes isArray:`, Array.isArray(product.attributes));
+
+                    // Check for other potential attribute fields
+                    if (product.product_attributes) console.log(`[GridRenderer] Product ${productIndex} has product_attributes:`, product.product_attributes);
+                    if (product.attribute_values) console.log(`[GridRenderer] Product ${productIndex} has attribute_values:`, product.attribute_values);
+                    if (product.pivot_attributes) console.log(`[GridRenderer] Product ${productIndex} has pivot_attributes:`, product.pivot_attributes);
+                }
+
+                if (product.attributes && Array.isArray(product.attributes)) {
+                    if (productIndex < 3) {
+                        console.log(`[GridRenderer] Product ${productIndex} has ${product.attributes.length} attributes`);
+                    }
+
+                    product.attributes.forEach((attr, attrIndex) => {
+                        console.log(`[GridRenderer] - Attribute ${attrIndex}:`, attr);
+                        const attrKey = String(attr.id);
+
+                        if (!seenAttributes.has(attrKey) && attr.enabled_on_dropship === true) {
+                            console.log(`[GridRenderer] - Adding attribute ${attr.name} (${attr.id})`);
+                            seenAttributes.add(attrKey);
+
+                            const groupName = attr.group_name || 'Other';
+
+                            if (!attributeGroups[groupName]) {
+                                attributeGroups[groupName] = [];
+                            }
+
+                            attributeGroups[groupName].push({
+                                id: attr.id,
+                                name: attr.name,
+                                code: attr.code,
+                                type: attr.type
+                            });
+                        }
+                    });
+                }
+            });
+        }
+
+        console.log('[GridRenderer] Final attributeGroups:', attributeGroups);
+        console.log('[GridRenderer] Total attribute groups found:', Object.keys(attributeGroups).length);
 
         return attributeGroups;
     }
@@ -95,6 +212,7 @@ export class GridRenderer {
                 const editorOptions = inputType === 1 ? options : [emptyOptionText, ...options];
 
                 return {
+                    colId: `attribute_${attrId}`,
                     headerName: attrName,
                     field: `attribute_${attrId}`,
                     width: 150,
@@ -118,15 +236,21 @@ export class GridRenderer {
                         return baseStyle;
                     },
                     valueGetter: (params) => {
+                        if (!params.data) return '';
+
+                        // Get currentData and dataAdapter from context
+                        const currentData = params.context?.gridInstance?.currentData || this.currentData;
+                        const dataAdapter = params.context?.gridInstance?.dataAdapter || this.dataAdapter;
+
                         // First check if there's a locally updated value (from recent edit)
-                        if (params.data && params.data._attributeValues && params.data._attributeValues[attrId] !== undefined) {
+                        if (params.data._attributeValues && params.data._attributeValues[attrId] !== undefined) {
                             const value = params.data._attributeValues[attrId];
                             // For option types, show appropriate placeholder for empty values
                             return (inputType !== 1 && !value) ? (isOptionWithoutValues ? noOptionsText : emptyOptionText) : value;
                         }
 
-                        // Otherwise, get from original API data
-                        if (params.data && params.data.relationships && params.data.relationships.attributes) {
+                        // Handle nested mode (JSON:API with relationships + included)
+                        if (dataAdapter.mode === 'nested' && params.data.relationships && params.data.relationships.attributes) {
                             const attributeIds = params.data.relationships.attributes.data.map(a => String(a.id));
 
                             // Check if this attribute is in the product
@@ -134,9 +258,6 @@ export class GridRenderer {
                                 // For option types, show appropriate placeholder for empty values
                                 return inputType !== 1 ? (isOptionWithoutValues ? noOptionsText : emptyOptionText) : '';
                             }
-
-                            // Get currentData from context
-                            const currentData = params.context?.gridInstance?.currentData || this.currentData;
 
                             if (currentData && currentData.included) {
                                 // Find the attribute in included data for this specific product
@@ -171,6 +292,40 @@ export class GridRenderer {
                                 }
                             }
                         }
+
+                        // Handle flat mode (direct attributes array or object)
+                        if (dataAdapter.mode === 'flat') {
+                            // Get product ID for filtering
+                            const productId = String(params.data.id);
+
+                            // Check if data has attributes as array (with pivot)
+                            if (params.data.attributes && Array.isArray(params.data.attributes)) {
+                                const attr = params.data.attributes.find(a => String(a.id) === attrId);
+                                if (attr && attr.pivot) {
+                                    return attr.pivot.value || '';
+                                }
+                            }
+
+                            // Check if data has attribute values in included (filter by product_id!)
+                            if (currentData && currentData.included) {
+                                const includedAttr = currentData.included.find(inc =>
+                                    inc.type === 'attributes' &&
+                                    String(inc.id) === attrId &&
+                                    inc.attributes.pivot &&
+                                    String(inc.attributes.pivot.product_id) === productId
+                                );
+
+                                if (includedAttr && includedAttr.attributes && includedAttr.attributes.pivot) {
+                                    return includedAttr.attributes.pivot.value || '';
+                                }
+                            }
+
+                            // Fallback: check direct field attribute_X
+                            if (params.data[`attribute_${attrId}`]) {
+                                return params.data[`attribute_${attrId}`];
+                            }
+                        }
+
                         // For option types, show appropriate placeholder for empty values
                         return inputType !== 1 ? (isOptionWithoutValues ? noOptionsText : emptyOptionText) : '';
                     },
@@ -431,6 +586,7 @@ export class GridRenderer {
 
             // Content Group
             {
+                colId: 'description',
                 headerName: 'Description',
                 field: this.dataAdapter.getFieldPath('description'),
                 width: ProductGridConstants.COLUMN_WIDTHS.description,
@@ -443,6 +599,7 @@ export class GridRenderer {
             // Relations Group (only for flat/WL mode with relationships)
             ...(this.dataAdapter.mode === 'flat' ? [
                 {
+                    colId: 'categoryName',
                     headerName: 'Category',
                     field: 'category_name',
                     width: ProductGridConstants.COLUMN_WIDTHS.category,
@@ -454,6 +611,7 @@ export class GridRenderer {
                     cellStyle: (params) => this.getCellStyle(params)
                 },
                 {
+                    colId: 'brandName',
                     headerName: 'Brand',
                     field: 'brand_name',
                     width: ProductGridConstants.COLUMN_WIDTHS.brand,
@@ -465,6 +623,7 @@ export class GridRenderer {
                     cellStyle: (params) => this.getCellStyle(params)
                 },
                 {
+                    colId: 'supplierName',
                     headerName: 'Supplier',
                     field: 'supplier_name',
                     width: ProductGridConstants.COLUMN_WIDTHS.supplier,
@@ -480,6 +639,7 @@ export class GridRenderer {
             // SEO Group (only for flat/WL mode - thediamondbox specific)
             ...(this.dataAdapter.mode === 'flat' ? [
                 {
+                    colId: 'seoTitle',
                     headerName: 'SEO Title',
                     field: this.dataAdapter.getFieldPath('seo_title'),
                     width: ProductGridConstants.COLUMN_WIDTHS.seoTitle,
@@ -489,6 +649,7 @@ export class GridRenderer {
                     cellRenderer: (params) => this.truncatedTextRenderer(params)
                 },
                 {
+                    colId: 'seoKeywords',
                     headerName: 'SEO Keywords',
                     field: this.dataAdapter.getFieldPath('seo_keywords'),
                     width: ProductGridConstants.COLUMN_WIDTHS.seoKeywords,
@@ -497,6 +658,7 @@ export class GridRenderer {
                     editable: true
                 },
                 {
+                    colId: 'seoDescription',
                     headerName: 'SEO Description',
                     field: this.dataAdapter.getFieldPath('seo_description'),
                     width: ProductGridConstants.COLUMN_WIDTHS.seoDescription,
@@ -512,6 +674,7 @@ export class GridRenderer {
 
             // URL Slug (both modes)
             {
+                colId: 'urlSlug',
                 headerName: 'URL Slug',
                 field: this.dataAdapter.getFieldPath('slug'),
                 width: ProductGridConstants.COLUMN_WIDTHS.urlSlug,

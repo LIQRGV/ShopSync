@@ -219,6 +219,22 @@ const CLIPBOARD = {
     DOUBLE_QUOTE_REGEX: /""/g
 };
 
+// Column Group Definitions for visibility toggle (Issue #183)
+const COLUMN_GROUPS = {
+    essential: [
+        'image', 'productName', 'skuPrefix', 'skuValue', 'skuCustomRef', 'fullSku',
+        'productStatus', 'sellStatus', 'purchaseDate', 'currentPrice', 'salePrice',
+        'tradePrice', 'vatScheme'
+    ],
+    content: [
+        'description', 'categoryName', 'brandName', 'supplierName'
+    ],
+    marketing: [
+        'seoTitle', 'seoKeywords', 'seoDescription', 'urlSlug'
+    ],
+    attributes: [] // Populated dynamically with attribute_* columns
+};
+
 /**
  * Get product status text by numeric value
  */
@@ -285,6 +301,7 @@ export const ProductGridConstants = {
     TOAST_CONFIG,
     KEYBOARD,
     CLIPBOARD,
+    COLUMN_GROUPS,
     getProductStatusText,
     getProductStatusNumeric,
     getProductStatusClass,
