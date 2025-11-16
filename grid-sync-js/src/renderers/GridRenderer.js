@@ -306,17 +306,25 @@ export class GridRenderer {
                                 }
                             }
 
-                            // Check if data has attribute values in included (filter by product_id!)
+                            // Check if data has attribute values in included
+                            // Pivot is now an array of objects, find the one for this product
                             if (currentData && currentData.included) {
                                 const includedAttr = currentData.included.find(inc =>
                                     inc.type === 'attributes' &&
-                                    String(inc.id) === attrId &&
-                                    inc.attributes.pivot &&
-                                    String(inc.attributes.pivot.product_id) === productId
+                                    String(inc.id) === attrId
                                 );
 
                                 if (includedAttr && includedAttr.attributes && includedAttr.attributes.pivot) {
-                                    return includedAttr.attributes.pivot.value || '';
+                                    // Pivot is now an array - find the pivot for this product
+                                    const pivots = Array.isArray(includedAttr.attributes.pivot)
+                                        ? includedAttr.attributes.pivot
+                                        : [includedAttr.attributes.pivot];
+
+                                    const productPivot = pivots.find(p => String(p.product_id) === productId);
+
+                                    if (productPivot) {
+                                        return productPivot.value || '';
+                                    }
                                 }
                             }
 

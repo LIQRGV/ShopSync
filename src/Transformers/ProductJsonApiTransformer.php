@@ -331,19 +331,19 @@ class ProductJsonApiTransformer extends JsonApiTransformer
      */
     protected function addToIncluded(Model $model, string $type, $parentId = null): void
     {
-        // For models with pivot (like attributes in a many-to-many relationship),
-        // create a unique key that includes the parent ID to allow duplicate attribute IDs
-        // with different pivot data for different products
+        // Always use type:id as key - each resource should appear only once
         $key = $type . ':' . $model->getKey();
-        if ($parentId !== null && isset($model->pivot)) {
-            $key = $type . ':' . $model->getKey() . ':' . $parentId;
-        }
 
         if (!isset($this->included[$key])) {
             $this->currentDepth++;
 
             // Use custom attribute method for related models
             $attributes = $this->getRelatedModelAttributes($model);
+
+            // For pivot relationships, initialize pivot as an array
+            if (isset($model->pivot) && isset($attributes['pivot'])) {
+                $attributes['pivot'] = [$attributes['pivot']];
+            }
 
             $includedData = [
                 'type' => $type,
@@ -369,6 +369,22 @@ class ProductJsonApiTransformer extends JsonApiTransformer
 
             $this->included[$key] = $includedData;
             $this->currentDepth--;
+        } else {
+            // Resource already exists - merge pivot data if present
+            if (isset($model->pivot)) {
+                $pivotData = $model->pivot->toArray();
+
+                // Ensure pivot is an array
+                if (!isset($this->included[$key]['attributes']['pivot'])) {
+                    $this->included[$key]['attributes']['pivot'] = [];
+                } elseif (!is_array($this->included[$key]['attributes']['pivot'])) {
+                    // Convert single pivot to array
+                    $this->included[$key]['attributes']['pivot'] = [$this->included[$key]['attributes']['pivot']];
+                }
+
+                // Add new pivot data
+                $this->included[$key]['attributes']['pivot'][] = $pivotData;
+            }
         }
     }
 
