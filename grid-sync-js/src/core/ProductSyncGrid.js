@@ -699,6 +699,9 @@ export class ProductSyncGrid {
             return;
         }
 
+        // Columns that should always be visible regardless of group selection
+        const ALWAYS_VISIBLE_COLUMNS = ['image', 'productName'];
+
         let columnIds = ProductGridConstants.COLUMN_GROUPS[groupName];
 
         // For attributes group, get all attribute_* columns dynamically
@@ -760,7 +763,8 @@ export class ProductSyncGrid {
                     if (col.pinned === 'left') {
                         const currentProps = currentPropsMap[col.colId] || {};
                         const isInTargetGroup = existingColumnIds.includes(col.colId);
-                        const hide = isInTargetGroup ? !visible : (currentProps.hide !== undefined ? currentProps.hide : col.hide);
+                        const isAlwaysVisible = ALWAYS_VISIBLE_COLUMNS.includes(col.colId);
+                        const hide = isAlwaysVisible ? false : (isInTargetGroup ? !visible : (currentProps.hide !== undefined ? currentProps.hide : col.hide));
 
                         newState.push({
                             colId: col.colId,
@@ -778,7 +782,8 @@ export class ProductSyncGrid {
                     if (!col.pinned) {
                         const currentProps = currentPropsMap[col.colId] || {};
                         const isInTargetGroup = existingColumnIds.includes(col.colId);
-                        const hide = isInTargetGroup ? !visible : (currentProps.hide !== undefined ? currentProps.hide : col.hide);
+                        const isAlwaysVisible = ALWAYS_VISIBLE_COLUMNS.includes(col.colId);
+                        const hide = isAlwaysVisible ? false : (isInTargetGroup ? !visible : (currentProps.hide !== undefined ? currentProps.hide : col.hide));
 
                         newState.push({
                             colId: col.colId,
@@ -814,7 +819,8 @@ export class ProductSyncGrid {
                     if (col.pinned === 'right') {
                         const currentProps = currentPropsMap[col.colId] || {};
                         const isInTargetGroup = existingColumnIds.includes(col.colId);
-                        const hide = isInTargetGroup ? !visible : (currentProps.hide !== undefined ? currentProps.hide : col.hide);
+                        const isAlwaysVisible = ALWAYS_VISIBLE_COLUMNS.includes(col.colId);
+                        const hide = isAlwaysVisible ? false : (isInTargetGroup ? !visible : (currentProps.hide !== undefined ? currentProps.hide : col.hide));
 
                         newState.push({
                             colId: col.colId,
