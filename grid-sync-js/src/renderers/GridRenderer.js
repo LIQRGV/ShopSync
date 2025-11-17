@@ -1156,6 +1156,8 @@ export class GridRenderer {
 
             init(params) {
                 this.params = params;
+                this.cancelBeforeStart = false;
+                this.cancelAfterEnd = false;
 
                 // Create container
                 this.eGui = document.createElement('div');
@@ -1198,9 +1200,24 @@ export class GridRenderer {
                 this.applySelectColors(this.eSelect, this.eSelect.value);
 
                 // Handle value changes to update colors
-                this.eSelect.addEventListener('change', () => {
+                this.handleChange = () => {
                     this.applySelectColors(this.eSelect, this.eSelect.value);
-                });
+                };
+                this.eSelect.addEventListener('change', this.handleChange);
+
+                // ESC key handler to cancel editing
+                this.handleKeyDown = (e) => {
+                    if (e.key === 'Escape' || e.keyCode === 27) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.cancelAfterEnd = true;
+                        // Stop editing via AG Grid API
+                        if (this.params.api && this.params.stopEditing) {
+                            this.params.stopEditing(true); // true = cancel
+                        }
+                    }
+                };
+                this.eSelect.addEventListener('keydown', this.handleKeyDown);
 
                 this.eGui.appendChild(this.eSelect);
 
@@ -1214,13 +1231,14 @@ export class GridRenderer {
                         this.eSelect.click();
 
                         // Listen for selection and close
-                        this.eSelect.addEventListener('click', (e) => {
+                        this.handleClick = (e) => {
                             setTimeout(() => {
                                 if (!this.isDestroyed) {
                                     this.eSelect.size = 1; // Collapse back to single selection
                                 }
                             }, 100);
-                        });
+                        };
+                        this.eSelect.addEventListener('click', this.handleClick);
                     }
                 }, 10);
             }
@@ -1315,18 +1333,26 @@ export class GridRenderer {
 
             destroy() {
                 this.isDestroyed = true;
+
                 if (this.eSelect) {
-                    this.eSelect.removeEventListener('change', this.handleChange);
-                    this.eSelect.removeEventListener('click', this.handleClick);
+                    if (this.handleChange) {
+                        this.eSelect.removeEventListener('change', this.handleChange);
+                    }
+                    if (this.handleClick) {
+                        this.eSelect.removeEventListener('click', this.handleClick);
+                    }
+                    if (this.handleKeyDown) {
+                        this.eSelect.removeEventListener('keydown', this.handleKeyDown);
+                    }
                 }
             }
 
             isCancelBeforeStart() {
-                return false;
+                return this.cancelBeforeStart;
             }
 
             isCancelAfterEnd() {
-                return false;
+                return this.cancelAfterEnd;
             }
 
             focusIn() {
