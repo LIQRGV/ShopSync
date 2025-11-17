@@ -1057,6 +1057,9 @@ export class ProductSyncGrid {
             if (oldestToast.updateInterval) {
                 clearInterval(oldestToast.updateInterval);
             }
+            if (oldestToast.autoCloseTimeout) {
+                clearTimeout(oldestToast.autoCloseTimeout);
+            }
             oldestToast.remove();
             this.repositionNotifications();
         }
@@ -1089,6 +1092,9 @@ export class ProductSyncGrid {
             if (toast.updateInterval) {
                 clearInterval(toast.updateInterval);
             }
+            if (toast.autoCloseTimeout) {
+                clearTimeout(toast.autoCloseTimeout);
+            }
             toast.remove();
             this.repositionNotifications();
         });
@@ -1100,6 +1106,14 @@ export class ProductSyncGrid {
             const elapsed = Date.now() - toast.createdAt;
             timestampElement.textContent = this.formatElapsedTime(elapsed);
         }, 10000);
+
+        toast.autoCloseTimeout = setTimeout(() => {
+            if (toast.updateInterval) {
+                clearInterval(toast.updateInterval);
+            }
+            toast.remove();
+            this.repositionNotifications();
+        }, 3000);
     }
 
     /**
@@ -1499,12 +1513,17 @@ export class ProductSyncGrid {
     handleSSEConnectionChange(state, data) {
         this.updateSSEStatusIndicator(state);
 
+        // Issue #250: Disabled toast notifications for normal connect/disconnect events
+        // Visual status indicator is sufficient for connection state changes
+        // Only show notifications for actual errors that require user attention
         switch (state) {
             case 'connected':
-                this.showNotification('success', 'Real-time sync connected');
+                // this.showNotification('success', 'Real-time sync connected');
+                // Disabled per issue #250 - visual indicator is sufficient
                 break;
             case 'disconnected':
-                this.showNotification('warning', 'Real-time sync disconnected');
+                // this.showNotification('warning', 'Real-time sync disconnected');
+                // Disabled per issue #250 - visual indicator is sufficient
                 break;
             case 'failed':
                 this.showNotification('error', 'Real-time sync connection failed');
