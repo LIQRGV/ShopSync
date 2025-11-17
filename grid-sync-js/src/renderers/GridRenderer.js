@@ -2,8 +2,8 @@
  * GridRenderer - Unified cell rendering and formatting for Product Grid
  * Supports both nested and flat data structures via GridDataAdapter
  */
-import { ProductGridConstants } from '../constants/ProductGridConstants.js';
-import { SearchableSelectEditor } from '../editors/SearchableSelectEditor.js';
+import {ProductGridConstants} from '../constants/ProductGridConstants.js';
+import {SearchableSelectEditor} from '../editors/SearchableSelectEditor.js';
 
 export class GridRenderer {
     /**
@@ -222,7 +222,7 @@ export class GridRenderer {
                     editable: !isOptionWithoutValues, // Non-editable if option type has no options
                     cellEditor: inputType === 1 ? 'agTextCellEditor' : this.getAutoOpenSelectEditor(),
                     cellEditorPopup: inputType !== 1,
-                    cellEditorParams: inputType === 1 ? {} : { values: editorOptions },
+                    cellEditorParams: inputType === 1 ? {} : {values: editorOptions},
                     cellStyle: (params) => {
                         const baseStyle = this.getCellStyle(params);
                         // Add gray italic style for placeholder text
@@ -604,124 +604,116 @@ export class GridRenderer {
                 editable: true,
                 cellRenderer: (params) => this.truncatedTextRenderer(params)
             },
-
-            // Relations Group (only for flat/WL mode with relationships)
-            ...(this.dataAdapter.mode === 'flat' ? [
-                {
-                    colId: 'categoryName',
-                    headerName: 'Category',
-                    field: 'category_name',
-                    width: ProductGridConstants.COLUMN_WIDTHS.category,
-                    sortable: true,
-                    filter: 'agSetColumnFilter',
-                    editable: true,
-                    cellEditor: SearchableSelectEditor,
-                    cellEditorPopup: false,
-                    cellEditorParams: {
-                        fetchMethod: 'fetchCategories',
-                        valueField: 'id',
-                        displayField: 'name',
-                        relationshipIdField: 'category_id',
-                        placeholder: 'Search categories...'
-                    },
-                    valueGetter: (params) => this.getCategoryName(params),
-                    valueSetter: (params) => {
-                        // Store the relationship ID for update
-                        params.data._relationshipUpdate = {
-                            field: 'category_id',
-                            value: params.newValue
-                        };
-                        return true;
-                    }
+            {
+                colId: 'categoryName',
+                headerName: 'Category',
+                field: 'category_name',
+                width: ProductGridConstants.COLUMN_WIDTHS.category,
+                sortable: true,
+                filter: 'agSetColumnFilter',
+                editable: true,
+                cellEditor: SearchableSelectEditor,
+                cellEditorPopup: false,
+                cellEditorParams: {
+                    fetchMethod: 'fetchCategories',
+                    valueField: 'id',
+                    displayField: 'name',
+                    relationshipIdField: 'category_id',
+                    placeholder: 'Search categories...'
                 },
-                {
-                    colId: 'brandName',
-                    headerName: 'Brand',
-                    field: 'brand_name',
-                    width: ProductGridConstants.COLUMN_WIDTHS.brand,
-                    sortable: true,
-                    filter: 'agSetColumnFilter',
-                    editable: true,
-                    cellEditor: SearchableSelectEditor,
-                    cellEditorPopup: false,
-                    cellEditorParams: {
-                        fetchMethod: 'fetchBrands',
-                        valueField: 'id',
-                        displayField: 'name',
-                        relationshipIdField: 'brand_id',
-                        placeholder: 'Search brands...'
-                    },
-                    valueGetter: (params) => this.getBrandName(params),
-                    valueSetter: (params) => {
-                        // Store the relationship ID for update
-                        params.data._relationshipUpdate = {
-                            field: 'brand_id',
-                            value: params.newValue
-                        };
-                        return true;
-                    }
-                },
-                {
-                    colId: 'supplierName',
-                    headerName: 'Supplier',
-                    field: 'supplier_name',
-                    width: ProductGridConstants.COLUMN_WIDTHS.supplier,
-                    sortable: true,
-                    filter: 'agSetColumnFilter',
-                    editable: true,
-                    cellEditor: SearchableSelectEditor,
-                    cellEditorPopup: false,
-                    cellEditorParams: {
-                        fetchMethod: 'fetchSuppliers',
-                        valueField: 'id',
-                        displayField: 'name',
-                        relationshipIdField: 'supplier_id',
-                        placeholder: 'Search suppliers...'
-                    },
-                    valueGetter: (params) => this.getSupplierName(params),
-                    valueSetter: (params) => {
-                        // Store the relationship ID for update
-                        params.data._relationshipUpdate = {
-                            field: 'supplier_id',
-                            value: params.newValue
-                        };
-                        return true;
-                    }
+                valueGetter: (params) => this.getCategoryName(params),
+                valueSetter: (params) => {
+                    // Store the relationship ID for update
+                    params.data._relationshipUpdate = {
+                        field: 'category_id',
+                        value: params.newValue
+                    };
+                    return true;
                 }
-            ] : []),
-
-            // SEO Group (only for flat/WL mode - thediamondbox specific)
-            ...(this.dataAdapter.mode === 'flat' ? [
-                {
-                    colId: 'seoTitle',
-                    headerName: 'SEO Title',
-                    field: this.dataAdapter.getFieldPath('seo_title'),
-                    width: ProductGridConstants.COLUMN_WIDTHS.seoTitle,
-                    sortable: true,
-                    filter: 'agTextColumnFilter',
-                    editable: true,
-                    cellRenderer: (params) => this.truncatedTextRenderer(params)
+            },
+            {
+                colId: 'brandName',
+                headerName: 'Brand',
+                field: 'brand_name',
+                width: ProductGridConstants.COLUMN_WIDTHS.brand,
+                sortable: true,
+                filter: 'agSetColumnFilter',
+                editable: true,
+                cellEditor: SearchableSelectEditor,
+                cellEditorPopup: false,
+                cellEditorParams: {
+                    fetchMethod: 'fetchBrands',
+                    valueField: 'id',
+                    displayField: 'name',
+                    relationshipIdField: 'brand_id',
+                    placeholder: 'Search brands...'
                 },
-                {
-                    colId: 'seoKeywords',
-                    headerName: 'SEO Keywords',
-                    field: this.dataAdapter.getFieldPath('seo_keywords'),
-                    width: ProductGridConstants.COLUMN_WIDTHS.seoKeywords,
-                    sortable: true,
-                    filter: 'agTextColumnFilter',
-                    editable: true
-                },
-                {
-                    colId: 'seoDescription',
-                    headerName: 'SEO Description',
-                    field: this.dataAdapter.getFieldPath('seo_description'),
-                    width: ProductGridConstants.COLUMN_WIDTHS.seoDescription,
-                    sortable: true,
-                    filter: 'agTextColumnFilter',
-                    editable: true,
-                    cellRenderer: (params) => this.truncatedTextRenderer(params)
+                valueGetter: (params) => this.getBrandName(params),
+                valueSetter: (params) => {
+                    // Store the relationship ID for update
+                    params.data._relationshipUpdate = {
+                        field: 'brand_id',
+                        value: params.newValue
+                    };
+                    return true;
                 }
-            ] : []),
+            },
+            {
+                colId: 'supplierName',
+                headerName: 'Supplier',
+                field: 'supplier_name',
+                width: ProductGridConstants.COLUMN_WIDTHS.supplier,
+                sortable: true,
+                filter: 'agSetColumnFilter',
+                editable: true,
+                cellEditor: SearchableSelectEditor,
+                cellEditorPopup: false,
+                cellEditorParams: {
+                    fetchMethod: 'fetchSuppliers',
+                    valueField: 'id',
+                    displayField: 'name',
+                    relationshipIdField: 'supplier_id',
+                    placeholder: 'Search suppliers...'
+                },
+                valueGetter: (params) => this.getSupplierName(params),
+                valueSetter: (params) => {
+                    // Store the relationship ID for update
+                    params.data._relationshipUpdate = {
+                        field: 'supplier_id',
+                        value: params.newValue
+                    };
+                    return true;
+                }
+            },
+            {
+                colId: 'seoTitle',
+                headerName: 'SEO Title',
+                field: this.dataAdapter.getFieldPath('seo_title'),
+                width: ProductGridConstants.COLUMN_WIDTHS.seoTitle,
+                sortable: true,
+                filter: 'agTextColumnFilter',
+                editable: true,
+                cellRenderer: (params) => this.truncatedTextRenderer(params)
+            },
+            {
+                colId: 'seoKeywords',
+                headerName: 'SEO Keywords',
+                field: this.dataAdapter.getFieldPath('seo_keywords'),
+                width: ProductGridConstants.COLUMN_WIDTHS.seoKeywords,
+                sortable: true,
+                filter: 'agTextColumnFilter',
+                editable: true
+            },
+            {
+                colId: 'seoDescription',
+                headerName: 'SEO Description',
+                field: this.dataAdapter.getFieldPath('seo_description'),
+                width: ProductGridConstants.COLUMN_WIDTHS.seoDescription,
+                sortable: true,
+                filter: 'agTextColumnFilter',
+                editable: true,
+                cellRenderer: (params) => this.truncatedTextRenderer(params)
+            },
 
             // Dynamic Attribute Column Groups will be added after data loads (see ProductSyncGrid.loadProducts)
             // Removed from initial column defs to prevent empty columns
@@ -759,8 +751,8 @@ export class GridRenderer {
     imageCellRenderer(params) {
         const imageUrl = this.dataAdapter.getValue(params.data, 'image');
         const baseUrl = (window.ShopProductGridConfig && window.ShopProductGridConfig.clientBaseUrl) ||
-                       (window.ProductGridConfig && window.ProductGridConfig.baseUrl) ||
-                       this.baseUrl;
+            (window.ProductGridConfig && window.ProductGridConfig.baseUrl) ||
+            this.baseUrl;
 
         if (imageUrl && imageUrl !== 'null') {
             // Check if imageUrl is already a full URL
@@ -790,8 +782,8 @@ export class GridRenderer {
         const productId = params.data.id;
         const name = this.dataAdapter.getValue(params.data, 'name') || 'Unnamed Product';
         const baseUrl = (window.ShopProductGridConfig && window.ShopProductGridConfig.baseUrl) ||
-                       (window.ProductGridConfig && window.ProductGridConfig.baseUrl) ||
-                       this.baseUrl;
+            (window.ProductGridConfig && window.ProductGridConfig.baseUrl) ||
+            this.baseUrl;
         return `<a href="${baseUrl}/admin/products/${productId}" target="_blank" class="text-decoration-none" title="${name}" style="color: #727cf5;">${name}</a>`;
     }
 
@@ -804,16 +796,16 @@ export class GridRenderer {
 
         // Use the same color mapping as dropdown options for consistency
         const colorMap = {
-            'In Stock': { bg: '#d4edda', text: '#155724' },
-            'Out Of Stock': { bg: '#f8d7da', text: '#721c24' },
-            'Out Of Stock & Hide': { bg: '#fff3cd', text: '#856404' },
-            'Repair': { bg: '#d1ecf1', text: '#0c5460' },
-            'Coming Soon': { bg: '#e2e3e5', text: '#383d41' },
-            'In Stock & Hide': { bg: '#fff3cd', text: '#856404' },
-            'Unlisted': { bg: '#f8d7da', text: '#721c24' }
+            'In Stock': {bg: '#d4edda', text: '#155724'},
+            'Out Of Stock': {bg: '#f8d7da', text: '#721c24'},
+            'Out Of Stock & Hide': {bg: '#fff3cd', text: '#856404'},
+            'Repair': {bg: '#d1ecf1', text: '#0c5460'},
+            'Coming Soon': {bg: '#e2e3e5', text: '#383d41'},
+            'In Stock & Hide': {bg: '#fff3cd', text: '#856404'},
+            'Unlisted': {bg: '#f8d7da', text: '#721c24'}
         };
 
-        const colors = colorMap[statusText] || { bg: '#e2e3e5', text: '#383d41' };
+        const colors = colorMap[statusText] || {bg: '#e2e3e5', text: '#383d41'};
 
         return `<span class="status-badge" style="padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; background-color: ${colors.bg}; color: ${colors.text};">${statusText}</span>`;
     }
@@ -827,12 +819,12 @@ export class GridRenderer {
 
         // Define color mappings for sell status using text-based mapping for consistency
         const colorMap = {
-            'Sell as Standard': { bg: '#d4edda', text: '#155724' },
-            'Oversell': { bg: '#fff3cd', text: '#856404' },
-            'Unknown': { bg: '#f8d7da', text: '#721c24' }
+            'Sell as Standard': {bg: '#d4edda', text: '#155724'},
+            'Oversell': {bg: '#fff3cd', text: '#856404'},
+            'Unknown': {bg: '#f8d7da', text: '#721c24'}
         };
 
-        const colors = colorMap[statusText] || { bg: '#e2e3e5', text: '#383d41' };
+        const colors = colorMap[statusText] || {bg: '#e2e3e5', text: '#383d41'};
 
         return `<span class="sell-status-badge" style="padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; background-color: ${colors.bg}; color: ${colors.text};">${statusText}</span>`;
     }
@@ -846,14 +838,14 @@ export class GridRenderer {
 
         // Define color mappings for VAT scheme using text-based mapping for consistency
         const colorMap = {
-            'Standard Rate': { bg: '#d1ecf1', text: '#0c5460' },
-            'Reduced Rate': { bg: '#fff3cd', text: '#856404' },
-            'Zero Rate': { bg: '#d4edda', text: '#155724' },
-            'Exempt': { bg: '#f8d7da', text: '#721c24' },
-            'None': { bg: '#e2e3e5', text: '#383d41' }
+            'Standard Rate': {bg: '#d1ecf1', text: '#0c5460'},
+            'Reduced Rate': {bg: '#fff3cd', text: '#856404'},
+            'Zero Rate': {bg: '#d4edda', text: '#155724'},
+            'Exempt': {bg: '#f8d7da', text: '#721c24'},
+            'None': {bg: '#e2e3e5', text: '#383d41'}
         };
 
-        const colors = colorMap[schemeText] || { bg: '#e2e3e5', text: '#383d41' };
+        const colors = colorMap[schemeText] || {bg: '#e2e3e5', text: '#383d41'};
 
         return `<span class="vat-scheme-badge" style="padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; background-color: ${colors.bg}; color: ${colors.text};">${schemeText}</span>`;
     }
@@ -1292,27 +1284,27 @@ export class GridRenderer {
             applyOptionColors(option, value) {
                 // Apply colors based on the type of dropdown
                 const productStatusColorMap = {
-                    'In Stock': { bg: '#d4edda', text: '#155724' },
-                    'Out Of Stock': { bg: '#f8d7da', text: '#721c24' },
-                    'Out Of Stock & Hide': { bg: '#fff3cd', text: '#856404' },
-                    'Repair': { bg: '#d1ecf1', text: '#0c5460' },
-                    'Coming Soon': { bg: '#e2e3e5', text: '#383d41' },
-                    'In Stock & Hide': { bg: '#fff3cd', text: '#856404' },
-                    'Unlisted': { bg: '#f8d7da', text: '#721c24' }
+                    'In Stock': {bg: '#d4edda', text: '#155724'},
+                    'Out Of Stock': {bg: '#f8d7da', text: '#721c24'},
+                    'Out Of Stock & Hide': {bg: '#fff3cd', text: '#856404'},
+                    'Repair': {bg: '#d1ecf1', text: '#0c5460'},
+                    'Coming Soon': {bg: '#e2e3e5', text: '#383d41'},
+                    'In Stock & Hide': {bg: '#fff3cd', text: '#856404'},
+                    'Unlisted': {bg: '#f8d7da', text: '#721c24'}
                 };
 
                 const sellStatusColorMap = {
-                    'Sell as Standard': { bg: '#d4edda', text: '#155724' },
-                    'Oversell': { bg: '#fff3cd', text: '#856404' },
-                    'Unknown': { bg: '#f8d7da', text: '#721c24' }
+                    'Sell as Standard': {bg: '#d4edda', text: '#155724'},
+                    'Oversell': {bg: '#fff3cd', text: '#856404'},
+                    'Unknown': {bg: '#f8d7da', text: '#721c24'}
                 };
 
                 const vatSchemeColorMap = {
-                    'Standard Rate': { bg: '#d1ecf1', text: '#0c5460' },
-                    'Reduced Rate': { bg: '#fff3cd', text: '#856404' },
-                    'Zero Rate': { bg: '#d4edda', text: '#155724' },
-                    'Exempt': { bg: '#f8d7da', text: '#721c24' },
-                    'None': { bg: '#e2e3e5', text: '#383d41' }
+                    'Standard Rate': {bg: '#d1ecf1', text: '#0c5460'},
+                    'Reduced Rate': {bg: '#fff3cd', text: '#856404'},
+                    'Zero Rate': {bg: '#d4edda', text: '#155724'},
+                    'Exempt': {bg: '#f8d7da', text: '#721c24'},
+                    'None': {bg: '#e2e3e5', text: '#383d41'}
                 };
 
                 // Determine which color map to use based on the option values
@@ -1323,7 +1315,7 @@ export class GridRenderer {
                     colorMap = vatSchemeColorMap;
                 }
 
-                const colors = colorMap[value] || { bg: '#e2e3e5', text: '#383d41' };
+                const colors = colorMap[value] || {bg: '#e2e3e5', text: '#383d41'};
                 option.style.backgroundColor = colors.bg;
                 option.style.color = colors.text;
                 option.style.padding = '8px 12px';
@@ -1333,27 +1325,27 @@ export class GridRenderer {
             applySelectColors(select, value) {
                 // Apply colors to the select element itself
                 const productStatusColorMap = {
-                    'In Stock': { bg: '#d4edda', text: '#155724' },
-                    'Out Of Stock': { bg: '#f8d7da', text: '#721c24' },
-                    'Out Of Stock & Hide': { bg: '#fff3cd', text: '#856404' },
-                    'Repair': { bg: '#d1ecf1', text: '#0c5460' },
-                    'Coming Soon': { bg: '#e2e3e5', text: '#383d41' },
-                    'In Stock & Hide': { bg: '#fff3cd', text: '#856404' },
-                    'Unlisted': { bg: '#f8d7da', text: '#721c24' }
+                    'In Stock': {bg: '#d4edda', text: '#155724'},
+                    'Out Of Stock': {bg: '#f8d7da', text: '#721c24'},
+                    'Out Of Stock & Hide': {bg: '#fff3cd', text: '#856404'},
+                    'Repair': {bg: '#d1ecf1', text: '#0c5460'},
+                    'Coming Soon': {bg: '#e2e3e5', text: '#383d41'},
+                    'In Stock & Hide': {bg: '#fff3cd', text: '#856404'},
+                    'Unlisted': {bg: '#f8d7da', text: '#721c24'}
                 };
 
                 const sellStatusColorMap = {
-                    'Sell as Standard': { bg: '#d4edda', text: '#155724' },
-                    'Oversell': { bg: '#fff3cd', text: '#856404' },
-                    'Unknown': { bg: '#f8d7da', text: '#721c24' }
+                    'Sell as Standard': {bg: '#d4edda', text: '#155724'},
+                    'Oversell': {bg: '#fff3cd', text: '#856404'},
+                    'Unknown': {bg: '#f8d7da', text: '#721c24'}
                 };
 
                 const vatSchemeColorMap = {
-                    'Standard Rate': { bg: '#d1ecf1', text: '#0c5460' },
-                    'Reduced Rate': { bg: '#fff3cd', text: '#856404' },
-                    'Zero Rate': { bg: '#d4edda', text: '#155724' },
-                    'Exempt': { bg: '#f8d7da', text: '#721c24' },
-                    'None': { bg: '#e2e3e5', text: '#383d41' }
+                    'Standard Rate': {bg: '#d1ecf1', text: '#0c5460'},
+                    'Reduced Rate': {bg: '#fff3cd', text: '#856404'},
+                    'Zero Rate': {bg: '#d4edda', text: '#155724'},
+                    'Exempt': {bg: '#f8d7da', text: '#721c24'},
+                    'None': {bg: '#e2e3e5', text: '#383d41'}
                 };
 
                 // Determine which color map to use based on the option values
@@ -1364,7 +1356,7 @@ export class GridRenderer {
                     colorMap = vatSchemeColorMap;
                 }
 
-                const colors = colorMap[value] || { bg: '#e2e3e5', text: '#383d41' };
+                const colors = colorMap[value] || {bg: '#e2e3e5', text: '#383d41'};
                 select.style.backgroundColor = colors.bg;
                 select.style.color = colors.text;
             }
@@ -1420,5 +1412,5 @@ export class GridRenderer {
 
 // CommonJS compatibility
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { GridRenderer };
+    module.exports = {GridRenderer};
 }

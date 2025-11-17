@@ -306,15 +306,14 @@ export class ProductSyncGrid {
     async handleCellEdit(event) {
         const { data, colDef, newValue, oldValue } = event;
 
-        if (newValue === oldValue) {
-            return;
-        }
-
         const productId = data.id;
         const fieldName = colDef.field;
 
         try {
             // Check if this is a relationship update (category, brand, supplier)
+            // IMPORTANT: Check _relationshipUpdate BEFORE comparing newValue/oldValue
+            // because valueSetter sets _relationshipUpdate but doesn't modify the data,
+            // so valueGetter returns the same value causing newValue === oldValue
             if (data._relationshipUpdate) {
                 const { field, value } = data._relationshipUpdate;
 
@@ -431,6 +430,12 @@ export class ProductSyncGrid {
                 this.showNotification('success', 'Attribute updated successfully');
             } else {
                 // Regular field update
+
+                // Skip update if value hasn't changed
+                if (newValue === oldValue) {
+                    return;
+                }
+
                 let fieldName = colDef.field;
                 if (fieldName.startsWith('attributes.')) {
                     fieldName = fieldName.replace('attributes.', '');
