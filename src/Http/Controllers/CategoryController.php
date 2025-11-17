@@ -3,53 +3,49 @@
 namespace TheDiamondBox\ShopSync\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
-use TheDiamondBox\ShopSync\Models\Category;
 use Symfony\Component\HttpFoundation\Response;
+use TheDiamondBox\ShopSync\Helpers\JsonApiErrorResponse;
+use TheDiamondBox\ShopSync\Http\Requests\GetCategoryRequest;
+use TheDiamondBox\ShopSync\Services\CategoryService;
 
 class CategoryController extends Controller
 {
+    protected $categoryService;
+
+    public function __construct(CategoryService $categoryService)
+    {
+        $this->categoryService = $categoryService;
+    }
+
     /**
      * Display a listing of categories
      *
-     * @param Request $request
+     * @param GetCategoryRequest $request
      * @return JsonResponse
      */
-    public function index(Request $request): JsonResponse
+    public function index(GetCategoryRequest $request): JsonResponse
     {
         try {
-            $search = $request->query('search', '');
-            $limit = min((int) $request->query('limit', 100), 500); // Max 500
+            $filters = $request->getFilters();
+            $pagination = $request->getPagination();
 
-            $query = Category::query();
+            $result = $this->categoryService->getCategories($filters, $pagination);
 
-            // Apply search filter if provided
-            if ($search) {
-                $query->where('name', 'LIKE', "%{$search}%");
-            }
-
-            // Order by name and limit results
-            $categories = $query->orderBy('name')
-                               ->limit($limit)
-                               ->get();
-
-            return response()->json([
-                'data' => $categories
-            ]);
+            return response()->json($result);
 
         } catch (\Exception $e) {
             Log::error('Failed to fetch categories', [
                 'error' => $e->getMessage(),
-                'search' => $request->query('search'),
-                'trace' => $e->getTraceAsString()
+                'filters' => $request->getFilters(),
+                'trace' => $e->getTrace()
             ]);
 
-            return response()->json([
-                'error' => 'Failed to fetch categories',
-                'message' => app()->environment('local') ? $e->getMessage() : 'An error occurred'
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            $error = JsonApiErrorResponse::internalError(
+                app()->environment('local') ? $e->getMessage() : 'Failed to fetch categories'
+            );
+            return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -62,11 +58,14 @@ class CategoryController extends Controller
     public function show(int $id): JsonResponse
     {
         try {
-            $category = Category::findOrFail($id);
+            $result = $this->categoryService->findCategory($id);
 
-            return response()->json([
-                'data' => $category
-            ]);
+            if (!$result) {
+                $error = JsonApiErrorResponse::notFound('category', $id);
+                return response()->json($error, Response::HTTP_NOT_FOUND);
+            }
+
+            return response()->json($result);
 
         } catch (\Exception $e) {
             Log::error('Failed to fetch category', [
@@ -74,9 +73,10 @@ class CategoryController extends Controller
                 'id' => $id
             ]);
 
-            return response()->json([
-                'error' => 'Category not found'
-            ], Response::HTTP_NOT_FOUND);
+            $error = JsonApiErrorResponse::internalError(
+                app()->environment('local') ? $e->getMessage() : 'Failed to fetch category'
+            );
+            return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 }

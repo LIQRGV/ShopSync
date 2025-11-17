@@ -3,53 +3,49 @@
 namespace TheDiamondBox\ShopSync\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
-use TheDiamondBox\ShopSync\Models\Brand;
 use Symfony\Component\HttpFoundation\Response;
+use TheDiamondBox\ShopSync\Helpers\JsonApiErrorResponse;
+use TheDiamondBox\ShopSync\Http\Requests\GetBrandRequest;
+use TheDiamondBox\ShopSync\Services\BrandService;
 
 class BrandController extends Controller
 {
+    protected $brandService;
+
+    public function __construct(BrandService $brandService)
+    {
+        $this->brandService = $brandService;
+    }
+
     /**
      * Display a listing of brands
      *
-     * @param Request $request
+     * @param GetBrandRequest $request
      * @return JsonResponse
      */
-    public function index(Request $request): JsonResponse
+    public function index(GetBrandRequest $request): JsonResponse
     {
         try {
-            $search = $request->query('search', '');
-            $limit = min((int) $request->query('limit', 100), 500); // Max 500
+            $filters = $request->getFilters();
+            $pagination = $request->getPagination();
 
-            $query = Brand::query();
+            $result = $this->brandService->getBrands($filters, $pagination);
 
-            // Apply search filter if provided
-            if ($search) {
-                $query->where('name', 'LIKE', "%{$search}%");
-            }
-
-            // Order by name and limit results
-            $brands = $query->orderBy('name')
-                           ->limit($limit)
-                           ->get();
-
-            return response()->json([
-                'data' => $brands
-            ]);
+            return response()->json($result);
 
         } catch (\Exception $e) {
             Log::error('Failed to fetch brands', [
                 'error' => $e->getMessage(),
-                'search' => $request->query('search'),
-                'trace' => $e->getTraceAsString()
+                'filters' => $request->getFilters(),
+                'trace' => $e->getTrace()
             ]);
 
-            return response()->json([
-                'error' => 'Failed to fetch brands',
-                'message' => app()->environment('local') ? $e->getMessage() : 'An error occurred'
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            $error = JsonApiErrorResponse::internalError(
+                app()->environment('local') ? $e->getMessage() : 'Failed to fetch brands'
+            );
+            return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -62,11 +58,14 @@ class BrandController extends Controller
     public function show(int $id): JsonResponse
     {
         try {
-            $brand = Brand::findOrFail($id);
+            $result = $this->brandService->findBrand($id);
 
-            return response()->json([
-                'data' => $brand
-            ]);
+            if (!$result) {
+                $error = JsonApiErrorResponse::notFound('brand', $id);
+                return response()->json($error, Response::HTTP_NOT_FOUND);
+            }
+
+            return response()->json($result);
 
         } catch (\Exception $e) {
             Log::error('Failed to fetch brand', [
@@ -74,9 +73,10 @@ class BrandController extends Controller
                 'id' => $id
             ]);
 
-            return response()->json([
-                'error' => 'Brand not found'
-            ], Response::HTTP_NOT_FOUND);
+            $error = JsonApiErrorResponse::internalError(
+                app()->environment('local') ? $e->getMessage() : 'Failed to fetch brand'
+            );
+            return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 }

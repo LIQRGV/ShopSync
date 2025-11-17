@@ -3,59 +3,49 @@
 namespace TheDiamondBox\ShopSync\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
-use TheDiamondBox\ShopSync\Models\Supplier;
 use Symfony\Component\HttpFoundation\Response;
+use TheDiamondBox\ShopSync\Helpers\JsonApiErrorResponse;
+use TheDiamondBox\ShopSync\Http\Requests\GetSupplierRequest;
+use TheDiamondBox\ShopSync\Services\SupplierService;
 
 class SupplierController extends Controller
 {
+    protected $supplierService;
+
+    public function __construct(SupplierService $supplierService)
+    {
+        $this->supplierService = $supplierService;
+    }
+
     /**
      * Display a listing of suppliers
      *
-     * @param Request $request
+     * @param GetSupplierRequest $request
      * @return JsonResponse
      */
-    public function index(Request $request): JsonResponse
+    public function index(GetSupplierRequest $request): JsonResponse
     {
         try {
-            $search = $request->query('search', '');
-            $limit = min((int) $request->query('limit', 100), 500); // Max 500
+            $filters = $request->getFilters();
+            $pagination = $request->getPagination();
 
-            $query = Supplier::query();
+            $result = $this->supplierService->getSuppliers($filters, $pagination);
 
-            // Apply search filter if provided
-            // Search across company_name, first_name, and last_name
-            if ($search) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('company_name', 'LIKE', "%{$search}%")
-                      ->orWhere('first_name', 'LIKE', "%{$search}%")
-                      ->orWhere('last_name', 'LIKE', "%{$search}%");
-                });
-            }
-
-            // Order by company_name, then first_name and limit results
-            $suppliers = $query->orderBy('company_name')
-                              ->orderBy('first_name')
-                              ->limit($limit)
-                              ->get();
-
-            return response()->json([
-                'data' => $suppliers
-            ]);
+            return response()->json($result);
 
         } catch (\Exception $e) {
             Log::error('Failed to fetch suppliers', [
                 'error' => $e->getMessage(),
-                'search' => $request->query('search'),
-                'trace' => $e->getTraceAsString()
+                'filters' => $request->getFilters(),
+                'trace' => $e->getTrace()
             ]);
 
-            return response()->json([
-                'error' => 'Failed to fetch suppliers',
-                'message' => app()->environment('local') ? $e->getMessage() : 'An error occurred'
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            $error = JsonApiErrorResponse::internalError(
+                app()->environment('local') ? $e->getMessage() : 'Failed to fetch suppliers'
+            );
+            return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -68,11 +58,14 @@ class SupplierController extends Controller
     public function show(int $id): JsonResponse
     {
         try {
-            $supplier = Supplier::findOrFail($id);
+            $result = $this->supplierService->findSupplier($id);
 
-            return response()->json([
-                'data' => $supplier
-            ]);
+            if (!$result) {
+                $error = JsonApiErrorResponse::notFound('supplier', $id);
+                return response()->json($error, Response::HTTP_NOT_FOUND);
+            }
+
+            return response()->json($result);
 
         } catch (\Exception $e) {
             Log::error('Failed to fetch supplier', [
@@ -80,9 +73,10 @@ class SupplierController extends Controller
                 'id' => $id
             ]);
 
-            return response()->json([
-                'error' => 'Supplier not found'
-            ], Response::HTTP_NOT_FOUND);
+            $error = JsonApiErrorResponse::internalError(
+                app()->environment('local') ? $e->getMessage() : 'Failed to fetch supplier'
+            );
+            return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 }
