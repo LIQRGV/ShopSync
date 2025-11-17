@@ -314,6 +314,38 @@ export class ProductSyncGrid {
         const fieldName = colDef.field;
 
         try {
+            // Check if this is a relationship update (category, brand, supplier)
+            if (data._relationshipUpdate) {
+                const { field, value } = data._relationshipUpdate;
+
+                // Update relationship via API
+                const result = await this.apiClient.updateProductRelationship(
+                    productId,
+                    field,
+                    value
+                );
+
+                // Update local data with response
+                if (result.data) {
+                    const updatedFields = result.data.attributes || result.data;
+                    Object.keys(updatedFields).forEach(key => {
+                        this.dataAdapter.setValue(data, key, updatedFields[key]);
+                    });
+                }
+
+                // Clear temp data
+                delete data._relationshipUpdate;
+
+                // Refresh the cell
+                this.gridApi.refreshCells({
+                    rowNodes: [event.node],
+                    force: true
+                });
+
+                this.showNotification('success', 'Relationship updated successfully');
+                return;
+            }
+
             // Check if this is an attribute update
             if (colDef.field.startsWith('attribute_') && data._attributeUpdate) {
                 const { attributeId, newValue: actualNewValue } = data._attributeUpdate;

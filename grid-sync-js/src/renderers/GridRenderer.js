@@ -3,6 +3,7 @@
  * Supports both nested and flat data structures via GridDataAdapter
  */
 import { ProductGridConstants } from '../constants/ProductGridConstants.js';
+import { SearchableSelectEditor } from '../editors/SearchableSelectEditor.js';
 
 export class GridRenderer {
     /**
@@ -613,10 +614,25 @@ export class GridRenderer {
                     width: ProductGridConstants.COLUMN_WIDTHS.category,
                     sortable: true,
                     filter: 'agSetColumnFilter',
-                    editable: false,
+                    editable: true,
+                    cellEditor: SearchableSelectEditor,
+                    cellEditorPopup: false,
+                    cellEditorParams: {
+                        fetchMethod: 'fetchCategories',
+                        valueField: 'id',
+                        displayField: 'name',
+                        relationshipIdField: 'category_id',
+                        placeholder: 'Search categories...'
+                    },
                     valueGetter: (params) => this.getCategoryName(params),
-                    cellClass: 'read-only-cell',
-                    cellStyle: (params) => this.getCellStyle(params)
+                    valueSetter: (params) => {
+                        // Store the relationship ID for update
+                        params.data._relationshipUpdate = {
+                            field: 'category_id',
+                            value: params.newValue
+                        };
+                        return true;
+                    }
                 },
                 {
                     colId: 'brandName',
@@ -625,10 +641,25 @@ export class GridRenderer {
                     width: ProductGridConstants.COLUMN_WIDTHS.brand,
                     sortable: true,
                     filter: 'agSetColumnFilter',
-                    editable: false,
+                    editable: true,
+                    cellEditor: SearchableSelectEditor,
+                    cellEditorPopup: false,
+                    cellEditorParams: {
+                        fetchMethod: 'fetchBrands',
+                        valueField: 'id',
+                        displayField: 'name',
+                        relationshipIdField: 'brand_id',
+                        placeholder: 'Search brands...'
+                    },
                     valueGetter: (params) => this.getBrandName(params),
-                    cellClass: 'read-only-cell',
-                    cellStyle: (params) => this.getCellStyle(params)
+                    valueSetter: (params) => {
+                        // Store the relationship ID for update
+                        params.data._relationshipUpdate = {
+                            field: 'brand_id',
+                            value: params.newValue
+                        };
+                        return true;
+                    }
                 },
                 {
                     colId: 'supplierName',
@@ -637,10 +668,25 @@ export class GridRenderer {
                     width: ProductGridConstants.COLUMN_WIDTHS.supplier,
                     sortable: true,
                     filter: 'agSetColumnFilter',
-                    editable: false,
+                    editable: true,
+                    cellEditor: SearchableSelectEditor,
+                    cellEditorPopup: false,
+                    cellEditorParams: {
+                        fetchMethod: 'fetchSuppliers',
+                        valueField: 'id',
+                        displayField: 'name',
+                        relationshipIdField: 'supplier_id',
+                        placeholder: 'Search suppliers...'
+                    },
                     valueGetter: (params) => this.getSupplierName(params),
-                    cellClass: 'read-only-cell',
-                    cellStyle: (params) => this.getCellStyle(params)
+                    valueSetter: (params) => {
+                        // Store the relationship ID for update
+                        params.data._relationshipUpdate = {
+                            field: 'supplier_id',
+                            value: params.newValue
+                        };
+                        return true;
+                    }
                 }
             ] : []),
 

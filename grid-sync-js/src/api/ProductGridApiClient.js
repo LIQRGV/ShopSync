@@ -616,6 +616,116 @@ export class ProductGridApiClient {
 
         return new Error(`${context} failed: ${error.message}`);
     }
+
+    /**
+     * Fetch categories with optional search
+     * @param {string} search - Search query
+     * @param {number} limit - Maximum number of results
+     * @returns {Promise<Array>} Categories array
+     */
+    async fetchCategories(search = '', limit = 100) {
+        try {
+            const params = new URLSearchParams();
+            if (search) params.append('search', search);
+            if (limit) params.append('limit', limit);
+
+            const url = `${this.baseUrl.replace('/products', '')}/categories?${params.toString()}`;
+
+            const response = await fetch(url, {
+                method: ProductGridConstants.API_CONFIG.METHODS.GET,
+                headers: this.getHeaders()
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            return result.data || [];
+
+        } catch (error) {
+            throw new Error(`Failed to fetch categories: ${error.message}`);
+        }
+    }
+
+    /**
+     * Fetch brands with optional search
+     * @param {string} search - Search query
+     * @param {number} limit - Maximum number of results
+     * @returns {Promise<Array>} Brands array
+     */
+    async fetchBrands(search = '', limit = 100) {
+        try {
+            const params = new URLSearchParams();
+            if (search) params.append('search', search);
+            if (limit) params.append('limit', limit);
+
+            const url = `${this.baseUrl.replace('/products', '')}/brands?${params.toString()}`;
+
+            const response = await fetch(url, {
+                method: ProductGridConstants.API_CONFIG.METHODS.GET,
+                headers: this.getHeaders()
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            return result.data || [];
+
+        } catch (error) {
+            throw new Error(`Failed to fetch brands: ${error.message}`);
+        }
+    }
+
+    /**
+     * Fetch suppliers with optional search
+     * @param {string} search - Search query
+     * @param {number} limit - Maximum number of results
+     * @returns {Promise<Array>} Suppliers array
+     */
+    async fetchSuppliers(search = '', limit = 100) {
+        try {
+            const params = new URLSearchParams();
+            if (search) params.append('search', search);
+            if (limit) params.append('limit', limit);
+
+            const url = `${this.baseUrl.replace('/products', '')}/suppliers?${params.toString()}`;
+
+            const response = await fetch(url, {
+                method: ProductGridConstants.API_CONFIG.METHODS.GET,
+                headers: this.getHeaders()
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            return result.data || [];
+
+        } catch (error) {
+            throw new Error(`Failed to fetch suppliers: ${error.message}`);
+        }
+    }
+
+    /**
+     * Update product relationship (category, brand, supplier)
+     * @param {number} productId - Product ID
+     * @param {string} relationshipField - Field name (category_id, brand_id, supplier_id)
+     * @param {number|null} relationshipId - Relationship ID or null to clear
+     * @returns {Promise<Object>} Update result
+     */
+    async updateProductRelationship(productId, relationshipField, relationshipId) {
+        try {
+            // Use the standard updateProduct method with relationship field
+            return await this.updateProduct(productId, relationshipField, relationshipId);
+
+        } catch (error) {
+            throw new Error(`Failed to update relationship: ${error.message}`);
+        }
+    }
 }
 
 // Export for CommonJS compatibility

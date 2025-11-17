@@ -4,6 +4,9 @@ use Illuminate\Support\Facades\Route;
 use TheDiamondBox\ShopSync\Http\Controllers\ProductController;
 use TheDiamondBox\ShopSync\Http\Controllers\SseController;
 use TheDiamondBox\ShopSync\Http\Controllers\ShopInfoController;
+use TheDiamondBox\ShopSync\Http\Controllers\CategoryController;
+use TheDiamondBox\ShopSync\Http\Controllers\BrandController;
+use TheDiamondBox\ShopSync\Http\Controllers\SupplierController;
 
 /*
 |--------------------------------------------------------------------------
@@ -38,6 +41,28 @@ Route::patch('/shop-info', [ShopInfoController::class, 'updatePartial'])
 // Upload shop info image endpoint
 Route::post('/shop-info/images', [ShopInfoController::class, 'uploadImage'])
     ->name('shop-info.upload-image');
+
+// Resource endpoints for relationships
+Route::get('/categories', [CategoryController::class, 'index'])
+    ->name('categories.index');
+
+Route::get('/categories/{id}', [CategoryController::class, 'show'])
+    ->name('categories.show')
+    ->where('id', '[0-9]+');
+
+Route::get('/brands', [BrandController::class, 'index'])
+    ->name('brands.index');
+
+Route::get('/brands/{id}', [BrandController::class, 'show'])
+    ->name('brands.show')
+    ->where('id', '[0-9]+');
+
+Route::get('/suppliers', [SupplierController::class, 'index'])
+    ->name('suppliers.index');
+
+Route::get('/suppliers/{id}', [SupplierController::class, 'show'])
+    ->name('suppliers.show')
+    ->where('id', '[0-9]+');
 
 // Package status endpoint (if enabled)
 if (config('products-package.features.status_endpoint', true)) {
