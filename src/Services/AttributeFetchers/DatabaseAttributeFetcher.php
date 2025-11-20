@@ -2,6 +2,7 @@
 
 namespace TheDiamondBox\ShopSync\Services\AttributeFetchers;
 
+use TheDiamondBox\ShopSync\Models\Attribute;
 use TheDiamondBox\ShopSync\Services\Contracts\AttributeFetcherInterface;
 
 /**
@@ -18,7 +19,7 @@ class DatabaseAttributeFetcher implements AttributeFetcherInterface
      */
     public function getAll(): array
     {
-        $attributes = \TheDiamondBox\ShopSync\Models\Attribute::where('enabled_on_dropship', true)
+        $attributes = Attribute::where('enabled_on_dropship', true)
             ->with('inputTypeValues:id,attribute_id,value,sortby')
             ->orderBy('sortby')
             ->orderBy('name')

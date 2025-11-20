@@ -2,6 +2,7 @@
 
 namespace TheDiamondBox\ShopSync\Services\SupplierFetchers;
 
+use TheDiamondBox\ShopSync\Models\Supplier;
 use TheDiamondBox\ShopSync\Services\Contracts\SupplierFetcherInterface;
 
 /**
@@ -18,7 +19,7 @@ class DatabaseSupplierFetcher implements SupplierFetcherInterface
      */
     public function getAll()
     {
-        $supplierModel = config('products-package.models.supplier', \App\Supplier::class);
+        $supplierModel = Supplier::class;
 
         return $supplierModel::whereNull('deleted_at')
             ->orderBy('company_name')

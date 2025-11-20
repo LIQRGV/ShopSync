@@ -3,7 +3,6 @@
 namespace TheDiamondBox\ShopSync\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
@@ -11,29 +10,25 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class Brand extends Model
 {
-    use SoftDeletes;
 
-    protected $table = 'brands';
-
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array
+     */
     protected $fillable = [
+        'store_id',
         'name',
-        'slug',
-        'description',
-        'logo',
-        'website',
-        'is_active',
-        'sort_order',
-        'meta_title',
-        'meta_description',
-        'meta_keywords',
-    ];
-
-    protected $casts = [
-        'is_active' => 'boolean',
-        'sort_order' => 'integer',
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
-        'deleted_at' => 'datetime',
+        'category_id',
+        'sub_category_id',
+        'status',
+        'sortby',
+        'seo_title',
+        'seo_description',
+        'seo_keywords',
+        'created_by',
+        'updated_by',
+        'deleted_by',
     ];
 
     /**
@@ -57,7 +52,7 @@ class Brand extends Model
      */
     public function scopeActive($query)
     {
-        return $query->where('is_active', true);
+        return $query->where('status', 1);
     }
 
     /**
@@ -65,7 +60,7 @@ class Brand extends Model
      */
     public function scopeOrdered($query)
     {
-        return $query->orderBy('sort_order')->orderBy('name');
+        return $query->orderBy('sortby')->orderBy('name');
     }
 
     /**
@@ -91,11 +86,11 @@ class Brand extends Model
     }
 
     /**
-     * Get logo URL
+     * Get logo URL (compatibility method)
      */
     public function getLogoUrlAttribute(): ?string
     {
-        return $this->logo;
+        return $this->logo ?? null;
     }
 
     /**

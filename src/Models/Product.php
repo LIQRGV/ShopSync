@@ -68,7 +68,7 @@ class Product extends Model
      */
     public function category(): BelongsTo
     {
-        $categoryModel = config('products-package.models.category', \App\Category::class);
+        $categoryModel = Category::class;
         return $this->belongsTo($categoryModel, 'category_id');
     }
 
@@ -78,7 +78,7 @@ class Product extends Model
      */
     public function categories()
     {
-        $categoryModel = config('products-package.models.category', \App\Category::class);
+        $categoryModel = Category::class;
 
         $categoryIds = [];
 
@@ -110,7 +110,7 @@ class Product extends Model
      */
     public function brand(): BelongsTo
     {
-        $brandModel = config('products-package.models.brand', \App\Brand::class);
+        $brandModel = Brand::class;
         return $this->belongsTo($brandModel, 'brand_id');
     }
 
@@ -119,7 +119,7 @@ class Product extends Model
      */
     public function location(): BelongsTo
     {
-        $locationModel = config('products-package.models.location', \App\Location::class);
+        $locationModel = Location::class;
         return $this->belongsTo($locationModel, 'location_id');
     }
 
@@ -128,7 +128,7 @@ class Product extends Model
      */
     public function supplier(): BelongsTo
     {
-        $supplierModel = config('products-package.models.supplier', \App\Supplier::class);
+        $supplierModel = Supplier::class;
         return $this->belongsTo($supplierModel, 'supplier_id');
     }
 

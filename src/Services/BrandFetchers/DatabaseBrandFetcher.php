@@ -2,6 +2,7 @@
 
 namespace TheDiamondBox\ShopSync\Services\BrandFetchers;
 
+use TheDiamondBox\ShopSync\Models\Brand;
 use TheDiamondBox\ShopSync\Services\Contracts\BrandFetcherInterface;
 
 /**
@@ -18,7 +19,7 @@ class DatabaseBrandFetcher implements BrandFetcherInterface
      */
     public function getAll()
     {
-        $brandModel = config('products-package.models.brand', \App\Brand::class);
+        $brandModel = Brand::class;
 
         return $brandModel::whereNull('deleted_at')
             ->orderBy('name')

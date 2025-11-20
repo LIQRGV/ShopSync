@@ -124,22 +124,6 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Model Configuration
-    |--------------------------------------------------------------------------
-    |
-    | Configure which models to use for relationships.
-    | This allows the package to work with the host application's models.
-    |
-    */
-    'models' => [
-        'category' => \App\Category::class,
-        'brand' => \App\Brand::class,
-        'location' => \App\Location::class,
-        'supplier' => \App\Supplier::class,
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
     | JSON API Configuration
     |--------------------------------------------------------------------------
     |

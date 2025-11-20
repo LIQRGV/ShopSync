@@ -2,6 +2,7 @@
 
 namespace TheDiamondBox\ShopSync\Services\CategoryFetchers;
 
+use TheDiamondBox\ShopSync\Models\Category;
 use TheDiamondBox\ShopSync\Services\Contracts\CategoryFetcherInterface;
 
 /**
@@ -18,7 +19,7 @@ class DatabaseCategoryFetcher implements CategoryFetcherInterface
      */
     public function getAll()
     {
-        $categoryModel = config('products-package.models.category', \App\Category::class);
+        $categoryModel = Category::class;
 
         return $categoryModel::where('status', 1)
             ->whereNull('deleted_at')
