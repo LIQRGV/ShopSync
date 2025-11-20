@@ -70,9 +70,7 @@ export class ProductGridApiClient {
             }
 
             // Add includes for JSON:API relationships
-            // Only include category (for product-specific categories) and attributes (for dynamic columns)
-            // Brands and suppliers are now fetched separately via dedicated endpoints
-            url += '&include=category,attributes';
+            url += '&include=category,brand,supplier,attributes';
 
             const response = await fetch(url, {
                 method: ProductGridConstants.API_CONFIG.METHODS.GET,
