@@ -1,6 +1,6 @@
 <?php
 
-namespace TheDiamondBox\ShopSync\Services\ProductFetchers;
+namespace TheDiamondBox\ShopSync\Services\Fetchers\Product;
 
 use TheDiamondBox\ShopSync\Observers\ProductObserver;
 use TheDiamondBox\ShopSync\Services\Contracts\ProductFetcherInterface;
@@ -578,46 +578,4 @@ class DatabaseProductFetcher implements ProductFetcherInterface
         }
     }
 
-    /**
-     * Get all enabled attributes with their options
-     * Used for grid column rendering in WL mode
-     *
-     * @return array
-     */
-    public function getAllEnabledAttributes(): array
-    {
-        $attributes = \TheDiamondBox\ShopSync\Models\Attribute::where('enabled_on_dropship', true)
-            ->with('inputTypeValues:id,attribute_id,value,sortby')
-            ->orderBy('sortby')
-            ->orderBy('name')
-            ->get();
-
-        \Log::info('DatabaseProductFetcher::getAllEnabledAttributes', [
-            'count' => $attributes->count(),
-            'first_3_ids' => $attributes->take(3)->pluck('id')->toArray()
-        ]);
-
-        // Transform to array format matching API response
-        $result = $attributes->map(function ($attr) {
-            $data = $attr->toArray();
-
-            // Transform input_type_values to options array for frontend
-            if (isset($data['input_type_values']) && is_array($data['input_type_values'])) {
-                $data['options'] = array_map(function ($opt) {
-                    return $opt['value'];
-                }, $data['input_type_values']);
-            } else {
-                $data['options'] = [];
-            }
-
-            return $data;
-        })->toArray();
-
-        \Log::info('DatabaseProductFetcher::getAllEnabledAttributes result', [
-            'result_count' => count($result),
-            'first_result_id' => !empty($result) ? $result[0]['id'] : 'EMPTY'
-        ]);
-
-        return $result;
-    }
 }

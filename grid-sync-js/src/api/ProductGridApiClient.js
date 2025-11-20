@@ -1,12 +1,11 @@
-import {GridDataAdapter} from '../core/GridDataAdapter.js';
-import {ProductGridConstants} from '../constants/ProductGridConstants.js';
+import { GridDataAdapter } from '../core/GridDataAdapter.js';
+import { ProductGridConstants } from '../constants/ProductGridConstants.js';
 
 /**
  * ProductGridApiClient - Unified API client for product grid operations
  *
- * Handles API communications with support for both:
- * - Nested data structure (thediamondbox style)
- * - Flat data structure (marketplace-api style)
+ * Handles API communications using JSON:API format with nested structure.
+ * All responses follow the JSON:API specification with data wrapped in attributes.
  *
  * @class ProductGridApiClient
  */
@@ -16,7 +15,6 @@ export class ProductGridApiClient {
      * @param {string} config.baseUrl - API base URL
      * @param {string} [config.clientId] - Client ID for filtering (optional)
      * @param {string} [config.clientBaseUrl] - Client base URL for assets (optional)
-     * @param {string} [config.dataMode] - Data mode: 'nested', 'flat', or 'auto'
      * @param {GridDataAdapter} [config.dataAdapter] - Custom data adapter instance
      */
     constructor(config) {
@@ -25,8 +23,8 @@ export class ProductGridApiClient {
         this.clientBaseUrl = config.clientBaseUrl || '';
         this.csrfToken = this.getCsrfToken();
 
-        // Initialize data adapter
-        this.dataAdapter = config.dataAdapter || new GridDataAdapter(config.dataMode || 'auto');
+        // Initialize data adapter (always uses nested JSON:API format)
+        this.dataAdapter = config.dataAdapter || new GridDataAdapter();
     }
 
     /**
@@ -71,6 +69,7 @@ export class ProductGridApiClient {
                 url += `&client_id=${this.clientId}`;
             }
 
+            // Add includes for JSON:API relationships
             url += '&include=category,brand,supplier,attributes';
 
             const response = await fetch(url, {
@@ -95,11 +94,6 @@ export class ProductGridApiClient {
                 return item;
             });
 
-            // Auto-detect data mode if in auto mode
-            if (this.dataAdapter.mode === 'auto' && data.data.length > 0) {
-                this.dataAdapter.detectDataMode(data.data[0]);
-            }
-
             return data;
         } catch (error) {
             throw new Error(`Failed to load products: ${error.message}`);
@@ -111,15 +105,13 @@ export class ProductGridApiClient {
      * @param {number} productId - Product ID
      * @param {string} fieldName - Field name to update
      * @param {*} value - New value
+     * @param {string} includes - Optional includes parameter (e.g., 'category' or 'category,brand')
      * @returns {Promise<Object>} Update result
      */
-    async updateProduct(productId, fieldName, value) {
+    async updateProduct(productId, fieldName, value, includes = null) {
         try {
             // Process value based on field type
             const processedValue = this.processFieldValue(fieldName, value);
-
-            // Transform field name and value for API based on data mode
-            const fieldData = this.dataAdapter.transformForApi(fieldName, processedValue);
 
             // Both modes use JSON:API format for updates
             // marketplace-api uses STRICT JSON:API format
@@ -127,12 +119,94 @@ export class ProductGridApiClient {
             const updateData = {
                 data: {
                     type: 'products',
-                    id: String(productId),
-                    attributes: fieldData
+                    id: String(productId)
                 }
             };
 
-            const response = await fetch(`${this.baseUrl}/${productId}`, {
+            // Handle category_id as a relationship for JSON:API compliance
+            if (fieldName === 'category_id') {
+                // Convert category IDs to JSON:API relationship format
+                if (Array.isArray(processedValue) && processedValue.length > 0) {
+                    // Multiple categories: to-many relationship
+                    updateData.data.relationships = {
+                        category: {
+                            data: processedValue.map(id => ({
+                                type: 'categories',
+                                id: String(id)
+                            }))
+                        }
+                    };
+                } else if (processedValue !== null && processedValue !== undefined) {
+                    // Single category: to-one relationship
+                    updateData.data.relationships = {
+                        category: {
+                            data: {
+                                type: 'categories',
+                                id: String(processedValue)
+                            }
+                        }
+                    };
+                } else {
+                    // Null category: clear relationship
+                    updateData.data.relationships = {
+                        category: {
+                            data: null
+                        }
+                    };
+                }
+            } else if (fieldName === 'brand_id') {
+                // Handle brand_id as a relationship for JSON:API compliance
+                if (processedValue !== null && processedValue !== undefined) {
+                    // Single brand: to-one relationship
+                    updateData.data.relationships = {
+                        brand: {
+                            data: {
+                                type: 'brands',
+                                id: String(processedValue)
+                            }
+                        }
+                    };
+                } else {
+                    // Null brand: clear relationship
+                    updateData.data.relationships = {
+                        brand: {
+                            data: null
+                        }
+                    };
+                }
+            } else if (fieldName === 'supplier_id') {
+                // Handle supplier_id as a relationship for JSON:API compliance
+                if (processedValue !== null && processedValue !== undefined) {
+                    // Single supplier: to-one relationship
+                    updateData.data.relationships = {
+                        supplier: {
+                            data: {
+                                type: 'suppliers',
+                                id: String(processedValue)
+                            }
+                        }
+                    };
+                } else {
+                    // Null supplier: clear relationship
+                    updateData.data.relationships = {
+                        supplier: {
+                            data: null
+                        }
+                    };
+                }
+            } else {
+                // Regular attributes
+                const fieldData = this.dataAdapter.transformForApi(fieldName, processedValue);
+                updateData.data.attributes = fieldData;
+            }
+
+            // Build URL with optional includes parameter
+            let url = `${this.baseUrl}/${productId}`;
+            if (includes) {
+                url += `?include=${includes}`;
+            }
+
+            const response = await fetch(url, {
                 method: ProductGridConstants.API_CONFIG.METHODS.PUT,
                 headers: this.getHeaders(),
                 body: JSON.stringify(updateData)
@@ -365,10 +439,9 @@ export class ProductGridApiClient {
                 searchFilters.client_id = this.clientId;
             }
 
-            // Add includes for nested structure
-            if (this.dataAdapter.getCurrentMode() === 'nested' || this.dataAdapter.mode === 'auto') {
-                searchFilters.include = 'category,brand,supplier,attributes';
-            }
+            // Add includes for JSON:API relationships
+            // Only include category and attributes - brands and suppliers loaded separately
+            searchFilters.include = 'category,attributes';
 
             const params = new URLSearchParams(searchFilters);
 
@@ -389,12 +462,23 @@ export class ProductGridApiClient {
 
     /**
      * Fetch enabled attributes for dynamic columns
+     * Uses localStorage caching with TTL to minimize API calls
      * @returns {Promise<Array>} Array of enabled attributes
      */
     async fetchEnabledAttributes() {
         try {
-            // For WTM mode (nested), fetch productAttributes to get enabled attributes
-            const url = `${this.baseUrl}?per_page=1&include=productAttributes`;
+            // Check localStorage cache first
+            const cached = this.getAttributesFromCache();
+            if (cached) {
+                console.log('[fetchEnabledAttributes] Using cached attributes');
+                return cached;
+            }
+
+            // Fetch from /attributes endpoint
+            const baseApiUrl = this.baseUrl.replace('/products', '');
+            const url = `${baseApiUrl}/attributes`;
+
+            console.log('[fetchEnabledAttributes] Fetching from API:', url);
 
             const response = await fetch(url, {
                 method: ProductGridConstants.API_CONFIG.METHODS.GET,
@@ -405,45 +489,79 @@ export class ProductGridApiClient {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const data = await response.json();
+            const responseData = await response.json();
+            const attributes = responseData.data || [];
 
-            // Extract unique attributes from included productAttributes
-            if (data.included && data.included.length > 0) {
-                const attributes = new Map();
+            // Cache attributes with 1 hour TTL
+            this.cacheAttributes(attributes, 3600000);
 
-                // Find all product_attributes in included
-                const productAttributes = data.included.filter(inc => inc.type === 'product_attributes');
+            console.log(`[fetchEnabledAttributes] Fetched ${attributes.length} attributes`);
+            return attributes;
 
-                // Extract unique attributes from productAttributes relationships
-                productAttributes.forEach(prodAttr => {
-                    if (prodAttr.relationships && prodAttr.relationships.attribute && prodAttr.relationships.attribute.data) {
-                        const attrId = prodAttr.relationships.attribute.data.id;
-
-                        // Find the actual attribute in included
-                        const attr = data.included.find(inc =>
-                            inc.type === 'attributes' && inc.id === attrId
-                        );
-
-                        if (attr && !attributes.has(attrId)) {
-                            attributes.set(attrId, {
-                                id: attr.id,
-                                name: attr.attributes.name,
-                                code: attr.attributes.code || `attr_${attr.id}`,
-                                type: attr.attributes.type || 'text',
-                                sort_order: attr.attributes.sort_order || 0
-                            });
-                        }
-                    }
-                });
-
-                const result = Array.from(attributes.values()).sort((a, b) => a.sort_order - b.sort_order);
-                return result;
-            }
-
-            return [];
         } catch (error) {
             console.error('[fetchEnabledAttributes] Error:', error);
             return [];
+        }
+    }
+
+    /**
+     * Get attributes from localStorage cache
+     * @returns {Array|null} Cached attributes or null if expired/missing
+     */
+    getAttributesFromCache() {
+        try {
+            const cacheKey = 'shopsync_attributes_cache';
+            const cached = localStorage.getItem(cacheKey);
+
+            if (!cached) {
+                return null;
+            }
+
+            const { data, expiry } = JSON.parse(cached);
+
+            // Check if expired
+            if (Date.now() > expiry) {
+                localStorage.removeItem(cacheKey);
+                return null;
+            }
+
+            return data;
+        } catch (error) {
+            console.error('[getAttributesFromCache] Error:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Cache attributes in localStorage with TTL
+     * @param {Array} attributes - Attributes to cache
+     * @param {number} ttl - Time to live in milliseconds
+     */
+    cacheAttributes(attributes, ttl) {
+        try {
+            const cacheKey = 'shopsync_attributes_cache';
+            const cacheData = {
+                data: attributes,
+                expiry: Date.now() + ttl
+            };
+
+            localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+        } catch (error) {
+            console.error('[cacheAttributes] Error:', error);
+        }
+    }
+
+    /**
+     * Clear attributes cache
+     * Useful for manual refresh or when attributes are updated
+     */
+    clearAttributesCache() {
+        try {
+            const cacheKey = 'shopsync_attributes_cache';
+            localStorage.removeItem(cacheKey);
+            console.log('[clearAttributesCache] Cache cleared');
+        } catch (error) {
+            console.error('[clearAttributesCache] Error:', error);
         }
     }
 
@@ -536,6 +654,140 @@ export class ProductGridApiClient {
     }
 
     /**
+     * Load all categories for dropdown
+     * @returns {Promise<Array>} Array of categories
+     */
+    async loadCategories() {
+        try {
+            // Extract base URL and replace /products with /categories
+            const baseUrlWithoutProducts = this.baseUrl.replace('/products', '');
+            const url = `${baseUrlWithoutProducts}/categories`;
+
+            const response = await fetch(url, {
+                method: ProductGridConstants.API_CONFIG.METHODS.GET,
+                headers: this.getHeaders()
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // Return the data array (JSON:API format)
+            return data.data || [];
+        } catch (error) {
+            console.error('[loadCategories] Error:', error);
+            throw new Error(`Failed to load categories: ${error.message}`);
+        }
+    }
+
+    /**
+     * Load all brands for dropdown
+     * @returns {Promise<Array>} Array of brands
+     */
+    async loadBrands() {
+        try {
+            // Extract base URL and replace /products with /brands
+            const baseUrlWithoutProducts = this.baseUrl.replace('/products', '');
+            const url = `${baseUrlWithoutProducts}/brands`;
+
+            const response = await fetch(url, {
+                method: ProductGridConstants.API_CONFIG.METHODS.GET,
+                headers: this.getHeaders()
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // Return the data array (JSON:API format)
+            return data.data || [];
+        } catch (error) {
+            console.error('[loadBrands] Error:', error);
+            throw new Error(`Failed to load brands: ${error.message}`);
+        }
+    }
+
+    /**
+     * Load all suppliers for dropdown
+     * @returns {Promise<Array>} Array of suppliers
+     */
+    async loadSuppliers() {
+        try {
+            // Extract base URL and replace /products with /suppliers
+            const baseUrlWithoutProducts = this.baseUrl.replace('/products', '');
+            const url = `${baseUrlWithoutProducts}/suppliers`;
+
+            const response = await fetch(url, {
+                method: ProductGridConstants.API_CONFIG.METHODS.GET,
+                headers: this.getHeaders()
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // Return the data array (JSON:API format)
+            return data.data || [];
+        } catch (error) {
+            console.error('[loadSuppliers] Error:', error);
+            throw new Error(`Failed to load suppliers: ${error.message}`);
+        }
+    }
+
+    /**
+     * Load all dropdown options at once
+     * Caches the results globally for reuse
+     * @returns {Promise<Object>} Object with categories, brands, and suppliers
+     */
+    async loadDropdownOptions() {
+        try {
+            // Check if already cached
+            if (window._cachedDropdownOptions) {
+                console.log('[loadDropdownOptions] Using cached dropdown options');
+                return window._cachedDropdownOptions;
+            }
+
+            console.log('[loadDropdownOptions] Loading dropdown options from API');
+
+            // Load all options in parallel
+            const [categories, brands, suppliers] = await Promise.all([
+                this.loadCategories(),
+                this.loadBrands(),
+                this.loadSuppliers()
+            ]);
+
+            // Cache globally
+            window._cachedDropdownOptions = {
+                categories,
+                brands,
+                suppliers
+            };
+
+            // Also cache individually for backwards compatibility
+            window._cachedCategories = categories;
+            window._cachedBrands = brands;
+            window._cachedSuppliers = suppliers;
+
+            console.log('[loadDropdownOptions] Loaded and cached:', {
+                categoriesCount: categories.length,
+                brandsCount: brands.length,
+                suppliersCount: suppliers.length
+            });
+
+            return window._cachedDropdownOptions;
+        } catch (error) {
+            console.error('[loadDropdownOptions] Error:', error);
+            throw new Error(`Failed to load dropdown options: ${error.message}`);
+        }
+    }
+
+    /**
      * Process field value based on field type for API
      * @param {string} fieldName - Field name
      * @param {*} value - Field value
@@ -608,119 +860,9 @@ export class ProductGridApiClient {
 
         return new Error(`${context} failed: ${error.message}`);
     }
-
-    /**
-     * Fetch categories with optional search
-     * @param {string} search - Search query
-     * @param {number} limit - Maximum number of results
-     * @returns {Promise<Array>} Categories array
-     */
-    async fetchCategories(search = '', limit = 100) {
-        try {
-            const params = new URLSearchParams();
-            if (search) params.append('search', search);
-            if (limit) params.append('limit', limit);
-
-            const url = `${this.baseUrl.replace('/products', '')}/categories?${params.toString()}`;
-
-            const response = await fetch(url, {
-                method: ProductGridConstants.API_CONFIG.METHODS.GET,
-                headers: this.getHeaders()
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const result = await response.json();
-            return result.data || [];
-
-        } catch (error) {
-            throw new Error(`Failed to fetch categories: ${error.message}`);
-        }
-    }
-
-    /**
-     * Fetch brands with optional search
-     * @param {string} search - Search query
-     * @param {number} limit - Maximum number of results
-     * @returns {Promise<Array>} Brands array
-     */
-    async fetchBrands(search = '', limit = 100) {
-        try {
-            const params = new URLSearchParams();
-            if (search) params.append('search', search);
-            if (limit) params.append('limit', limit);
-
-            const url = `${this.baseUrl.replace('/products', '')}/brands?${params.toString()}`;
-
-            const response = await fetch(url, {
-                method: ProductGridConstants.API_CONFIG.METHODS.GET,
-                headers: this.getHeaders()
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const result = await response.json();
-            return result.data || [];
-
-        } catch (error) {
-            throw new Error(`Failed to fetch brands: ${error.message}`);
-        }
-    }
-
-    /**
-     * Fetch suppliers with optional search
-     * @param {string} search - Search query
-     * @param {number} limit - Maximum number of results
-     * @returns {Promise<Array>} Suppliers array
-     */
-    async fetchSuppliers(search = '', limit = 100) {
-        try {
-            const params = new URLSearchParams();
-            if (search) params.append('search', search);
-            if (limit) params.append('limit', limit);
-
-            const url = `${this.baseUrl.replace('/products', '')}/suppliers?${params.toString()}`;
-
-            const response = await fetch(url, {
-                method: ProductGridConstants.API_CONFIG.METHODS.GET,
-                headers: this.getHeaders()
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const result = await response.json();
-            return result.data || [];
-
-        } catch (error) {
-            throw new Error(`Failed to fetch suppliers: ${error.message}`);
-        }
-    }
-
-    /**
-     * Update product relationship (category, brand, supplier)
-     * @param {number} productId - Product ID
-     * @param {string} relationshipField - Field name (category_id, brand_id, supplier_id)
-     * @param {number|null} relationshipId - Relationship ID or null to clear
-     * @returns {Promise<Object>} Update result
-     */
-    async updateProductRelationship(productId, relationshipField, relationshipId) {
-        try {
-            // Use the standard updateProduct method with relationship field
-            return await this.updateProduct(productId, relationshipField, relationshipId);
-
-        } catch (error) {
-            throw new Error(`Failed to update relationship: ${error.message}`);
-        }
-    }
 }
 
 // Export for CommonJS compatibility
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {ProductGridApiClient};
+    module.exports = { ProductGridApiClient };
 }

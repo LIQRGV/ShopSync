@@ -7,9 +7,14 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 use TheDiamondBox\ShopSync\Helpers\JsonApiErrorResponse;
-use TheDiamondBox\ShopSync\Http\Requests\GetSupplierRequest;
 use TheDiamondBox\ShopSync\Services\SupplierService;
 
+/**
+ * Supplier Controller
+ *
+ * Handles HTTP requests for supplier operations.
+ * Provides dropdown options for AG Grid editors.
+ */
 class SupplierController extends Controller
 {
     protected $supplierService;
@@ -20,61 +25,25 @@ class SupplierController extends Controller
     }
 
     /**
-     * Display a listing of suppliers
+     * Get all active suppliers
      *
-     * @param GetSupplierRequest $request
      * @return JsonResponse
      */
-    public function index(GetSupplierRequest $request): JsonResponse
+    public function index(): JsonResponse
     {
         try {
-            $filters = $request->getFilters();
-            $pagination = $request->getPagination();
-
-            $result = $this->supplierService->getSuppliers($filters, $pagination);
+            $result = $this->supplierService->getAllSuppliers();
 
             return response()->json($result);
 
         } catch (\Exception $e) {
             Log::error('Failed to fetch suppliers', [
                 'error' => $e->getMessage(),
-                'filters' => $request->getFilters(),
                 'trace' => $e->getTrace()
             ]);
 
             $error = JsonApiErrorResponse::internalError(
                 app()->environment('local') ? $e->getMessage() : 'Failed to fetch suppliers'
-            );
-            return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    /**
-     * Display the specified supplier
-     *
-     * @param int $id
-     * @return JsonResponse
-     */
-    public function show(int $id): JsonResponse
-    {
-        try {
-            $result = $this->supplierService->findSupplier($id);
-
-            if (!$result) {
-                $error = JsonApiErrorResponse::notFound('supplier', $id);
-                return response()->json($error, Response::HTTP_NOT_FOUND);
-            }
-
-            return response()->json($result);
-
-        } catch (\Exception $e) {
-            Log::error('Failed to fetch supplier', [
-                'error' => $e->getMessage(),
-                'id' => $id
-            ]);
-
-            $error = JsonApiErrorResponse::internalError(
-                app()->environment('local') ? $e->getMessage() : 'Failed to fetch supplier'
             );
             return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
         }

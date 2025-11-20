@@ -1,6 +1,6 @@
 <?php
 
-namespace TheDiamondBox\ShopSync\Services\ProductFetchers;
+namespace TheDiamondBox\ShopSync\Services\Fetchers\Product;
 
 use TheDiamondBox\ShopSync\Services\Contracts\ProductFetcherInterface;
 use TheDiamondBox\ShopSync\Models\Product;
@@ -16,7 +16,6 @@ class ApiProductFetcher implements ProductFetcherInterface
     protected $baseUrl;
     protected $apiKey;
     protected $timeout;
-    protected $originalIncludedData = [];
 
     public function __construct($client)
     {
@@ -122,9 +121,6 @@ class ApiProductFetcher implements ProductFetcherInterface
             return $this->client()->get('/products', $params);
         }, ['data' => []]);
 
-        // Store original included data before conversion
-        $this->originalIncludedData = $response['included'] ?? [];
-
         return $this->convertToProductCollection($response['data'] ?? [], $response['included'] ?? []);
     }
 
@@ -167,9 +163,6 @@ class ApiProductFetcher implements ProductFetcherInterface
             ]
         ]);
 
-        // Store original included data before conversion
-        $this->originalIncludedData = $response['included'] ?? [];
-
         $paginationMeta = $response['meta']['pagination'] ?? null;
 
         if (!$paginationMeta) {
@@ -200,17 +193,6 @@ class ApiProductFetcher implements ProductFetcherInterface
                 'pageName' => 'page'
             ]
         );
-    }
-
-    /**
-     * Get original included data from last API call
-     * This preserves ALL attributes from client shop API response
-     *
-     * @return array
-     */
-    public function getOriginalIncludedData(): array
-    {
-        return $this->originalIncludedData;
     }
 
     /**
@@ -265,21 +247,6 @@ class ApiProductFetcher implements ProductFetcherInterface
         }, null);
 
         return $response ? $this->convertToProduct($response['data'] ?? $response) : null;
-    }
-
-    /**
-     * Update product and return raw API response (no model conversion)
-     * Used for attribute updates in WTM mode to avoid database queries
-     *
-     * @param int|string $id
-     * @param array $data
-     * @return array|null
-     */
-    public function updateRaw($id, array $data)
-    {
-        return $this->handleRequest(function () use ($id, $data) {
-            return $this->client()->put("/products/{$id}", $data);
-        }, null);
     }
 
     public function delete($id)
@@ -705,21 +672,5 @@ class ApiProductFetcher implements ProductFetcherInterface
         ]);
 
         return $response ? $this->convertToProduct($response['data'] ?? $response) : null;
-    }
-
-    /**
-     * Get all enabled attributes from WL API
-     * Used for grid column rendering in WTM mode
-     *
-     * @return array
-     */
-    public function getAllEnabledAttributes(): array
-    {
-        $response = $this->handleRequest(function () {
-            return $this->client()->get('/products/attributes');
-        }, []);
-
-        // Extract data array from response
-        return $response['data'] ?? [];
     }
 }

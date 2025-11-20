@@ -7,9 +7,14 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 use TheDiamondBox\ShopSync\Helpers\JsonApiErrorResponse;
-use TheDiamondBox\ShopSync\Http\Requests\GetBrandRequest;
 use TheDiamondBox\ShopSync\Services\BrandService;
 
+/**
+ * Brand Controller
+ *
+ * Handles HTTP requests for brand operations.
+ * Provides dropdown options for AG Grid editors.
+ */
 class BrandController extends Controller
 {
     protected $brandService;
@@ -20,61 +25,25 @@ class BrandController extends Controller
     }
 
     /**
-     * Display a listing of brands
+     * Get all active brands
      *
-     * @param GetBrandRequest $request
      * @return JsonResponse
      */
-    public function index(GetBrandRequest $request): JsonResponse
+    public function index(): JsonResponse
     {
         try {
-            $filters = $request->getFilters();
-            $pagination = $request->getPagination();
-
-            $result = $this->brandService->getBrands($filters, $pagination);
+            $result = $this->brandService->getAllBrands();
 
             return response()->json($result);
 
         } catch (\Exception $e) {
             Log::error('Failed to fetch brands', [
                 'error' => $e->getMessage(),
-                'filters' => $request->getFilters(),
                 'trace' => $e->getTrace()
             ]);
 
             $error = JsonApiErrorResponse::internalError(
                 app()->environment('local') ? $e->getMessage() : 'Failed to fetch brands'
-            );
-            return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    /**
-     * Display the specified brand
-     *
-     * @param int $id
-     * @return JsonResponse
-     */
-    public function show(int $id): JsonResponse
-    {
-        try {
-            $result = $this->brandService->findBrand($id);
-
-            if (!$result) {
-                $error = JsonApiErrorResponse::notFound('brand', $id);
-                return response()->json($error, Response::HTTP_NOT_FOUND);
-            }
-
-            return response()->json($result);
-
-        } catch (\Exception $e) {
-            Log::error('Failed to fetch brand', [
-                'error' => $e->getMessage(),
-                'id' => $id
-            ]);
-
-            $error = JsonApiErrorResponse::internalError(
-                app()->environment('local') ? $e->getMessage() : 'Failed to fetch brand'
             );
             return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
         }

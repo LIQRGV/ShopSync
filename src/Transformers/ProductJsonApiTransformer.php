@@ -75,11 +75,16 @@ class ProductJsonApiTransformer extends JsonApiTransformer
         $this->setIncludes($includes);
         $result = $this->transformCollection($products, 'products');
 
-        // For WL mode: When include=attributes is requested, add ALL enabled master attributes
+        // When include=attributes is requested, add ALL enabled master attributes
         // This provides the attribute metadata needed to generate dynamic columns in AG Grid
-        $mode = config('products-package.mode', 'wl');
-        if ($mode === 'wl' && in_array('attributes', $includes)) {
+        if (in_array('attributes', $includes)) {
             $this->addMasterAttributesToIncluded($result);
+        }
+
+        // When include=category is requested, add each product's assigned categories
+        // This supports multi-category display (comma-separated category_ids)
+        if (in_array('category', $includes)) {
+            $this->addProductCategoriesToIncluded($result, $products);
         }
 
         return $result;
@@ -118,6 +123,60 @@ class ProductJsonApiTransformer extends JsonApiTransformer
     }
 
     /**
+     * Add each product's assigned categories to included array
+     * Supports multi-category assignment via comma-separated category_ids
+     */
+    protected function addProductCategoriesToIncluded(array &$result, $products): void
+    {
+        // Handle both single product and collection
+        $productCollection = is_iterable($products) ? $products : [$products];
+
+        foreach ($productCollection as $product) {
+            if (!$product) continue;
+
+            // Get all categories for this product (handles comma-separated category_ids)
+            $categories = $product->categories();
+
+            if ($categories && !$categories->isEmpty()) {
+                foreach ($categories as $category) {
+                    $key = 'categories:' . $category->id;
+
+                    // Check if already added to avoid duplicates
+                    if (!isset($this->included[$key])) {
+                        // Load parent category if exists
+                        if ($category->parent_id) {
+                            $category->load('parent_category');
+                        }
+
+                        $this->included[$key] = [
+                            'type' => 'categories',
+                            'id' => (string) $category->id,
+                            'attributes' => $this->getRelatedModelAttributes($category)
+                        ];
+
+                        // Also add parent category to included if exists
+                        if ($category->parent_id && $category->parent_category) {
+                            $parentKey = 'categories:' . $category->parent_id;
+                            if (!isset($this->included[$parentKey])) {
+                                $this->included[$parentKey] = [
+                                    'type' => 'categories',
+                                    'id' => (string) $category->parent_id,
+                                    'attributes' => $this->getRelatedModelAttributes($category->parent_category)
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Update result's included array
+        if (!empty($this->included)) {
+            $result['included'] = array_values($this->included);
+        }
+    }
+
+    /**
      * Get model attributes, customized for Product
      */
     protected function getModelAttributes(Model $model): array
@@ -132,8 +191,9 @@ class ProductJsonApiTransformer extends JsonApiTransformer
         unset($attributes[$model->getKeyName()]);
 
         // Remove foreign keys from attributes (they're in relationships)
+        // EXCEPT category_id which we need for multi-category comma-separated display
         $foreignKeys = [
-            'category_id',
+            // 'category_id', // Keep this for multi-category support (comma-separated values)
             'brand_id',
             'location_id',
             'supplier_id'
@@ -187,6 +247,23 @@ class ProductJsonApiTransformer extends JsonApiTransformer
         $attributes['is_on_sale'] = $product->isOnSale();
         $attributes['has_image'] = $product->hasImage();
         $attributes['image_url'] = $product->image_url;
+
+        // Add brand_name for grid display (flat mode support)
+        if ($product->brand_id && $product->relationLoaded('brand') && $product->brand) {
+            $attributes['brand_name'] = $product->brand->name;
+        } else {
+            $attributes['brand_name'] = null;
+        }
+
+        // Add supplier_name for grid display (flat mode support)
+        // Use company_name, or fallback to first_name + last_name
+        if ($product->supplier_id && $product->relationLoaded('supplier') && $product->supplier) {
+            $supplier = $product->supplier;
+            $attributes['supplier_name'] = $supplier->company_name ?:
+                trim(($supplier->first_name ?? '') . ' ' . ($supplier->last_name ?? '')) ?: null;
+        } else {
+            $attributes['supplier_name'] = null;
+        }
 
         // Remove cost_price if it's hidden (security)
         if (in_array('cost_price', $product->getHidden())) {

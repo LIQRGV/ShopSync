@@ -1,6 +1,6 @@
 <?php
 
-namespace TheDiamondBox\ShopSync\Services\ShopInfoFetchers;
+namespace TheDiamondBox\ShopSync\Services\Fetchers\ShopInfo;
 
 use TheDiamondBox\ShopSync\Services\Contracts\ShopInfoFetcherInterface;
 use TheDiamondBox\ShopSync\Models\ShopInfo;

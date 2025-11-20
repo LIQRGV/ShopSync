@@ -7,9 +7,14 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 use TheDiamondBox\ShopSync\Helpers\JsonApiErrorResponse;
-use TheDiamondBox\ShopSync\Http\Requests\GetCategoryRequest;
 use TheDiamondBox\ShopSync\Services\CategoryService;
 
+/**
+ * Category Controller
+ *
+ * Handles HTTP requests for category operations.
+ * Provides dropdown options for AG Grid editors.
+ */
 class CategoryController extends Controller
 {
     protected $categoryService;
@@ -20,61 +25,25 @@ class CategoryController extends Controller
     }
 
     /**
-     * Display a listing of categories
+     * Get all active categories
      *
-     * @param GetCategoryRequest $request
      * @return JsonResponse
      */
-    public function index(GetCategoryRequest $request): JsonResponse
+    public function index(): JsonResponse
     {
         try {
-            $filters = $request->getFilters();
-            $pagination = $request->getPagination();
-
-            $result = $this->categoryService->getCategories($filters, $pagination);
+            $result = $this->categoryService->getAllCategories();
 
             return response()->json($result);
 
         } catch (\Exception $e) {
             Log::error('Failed to fetch categories', [
                 'error' => $e->getMessage(),
-                'filters' => $request->getFilters(),
                 'trace' => $e->getTrace()
             ]);
 
             $error = JsonApiErrorResponse::internalError(
                 app()->environment('local') ? $e->getMessage() : 'Failed to fetch categories'
-            );
-            return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    /**
-     * Display the specified category
-     *
-     * @param int $id
-     * @return JsonResponse
-     */
-    public function show(int $id): JsonResponse
-    {
-        try {
-            $result = $this->categoryService->findCategory($id);
-
-            if (!$result) {
-                $error = JsonApiErrorResponse::notFound('category', $id);
-                return response()->json($error, Response::HTTP_NOT_FOUND);
-            }
-
-            return response()->json($result);
-
-        } catch (\Exception $e) {
-            Log::error('Failed to fetch category', [
-                'error' => $e->getMessage(),
-                'id' => $id
-            ]);
-
-            $error = JsonApiErrorResponse::internalError(
-                app()->environment('local') ? $e->getMessage() : 'Failed to fetch category'
             );
             return response()->json($error, Response::HTTP_INTERNAL_SERVER_ERROR);
         }

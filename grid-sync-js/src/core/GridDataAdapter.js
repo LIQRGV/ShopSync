@@ -1,49 +1,19 @@
 /**
- * GridDataAdapter - Unified data handling for nested vs flat structures
+ * GridDataAdapter - Data handling for JSON:API nested structure
  *
- * Handles differences between:
- * - Nested structure: { id: 1, attributes: { name: "Product" } }
- * - Flat structure: { id: 1, name: "Product" }
+ * Handles JSON:API format where data is nested inside attributes object:
+ * - { id: 1, type: "products", attributes: { name: "Product", price: 99.99 } }
  *
  * @class GridDataAdapter
  */
 export class GridDataAdapter {
     /**
-     * @param {string} mode - 'nested', 'flat', or 'auto' (default)
+     * Constructor - No configuration needed as we always use JSON:API nested format
      */
-    constructor(mode = 'auto') {
-        this.mode = mode;
-        this.detectedMode = null;
+    constructor() {
+        // JSON:API always uses nested format
     }
 
-    /**
-     * Auto-detect data structure mode from sample data
-     * @param {Object} sampleData - Sample row data
-     * @returns {string} 'nested' or 'flat'
-     */
-    detectDataMode(sampleData) {
-        if (!sampleData) return 'flat';
-
-        // Check if data has 'attributes' property with nested fields
-        if (sampleData.attributes && typeof sampleData.attributes === 'object') {
-            this.detectedMode = 'nested';
-            return 'nested';
-        }
-
-        this.detectedMode = 'flat';
-        return 'flat';
-    }
-
-    /**
-     * Get current mode (detected or manual)
-     * @returns {string}
-     */
-    getCurrentMode() {
-        if (this.mode === 'auto') {
-            return this.detectedMode || 'flat';
-        }
-        return this.mode;
-    }
 
     /**
      * Get field value from data object (universal accessor)
@@ -54,17 +24,9 @@ export class GridDataAdapter {
     getValue(data, fieldPath) {
         if (!data) return null;
 
-        const mode = this.mode === 'auto' ? this.detectDataMode(data) : this.mode;
-
-        if (mode === 'nested') {
-            // Handle nested structure - add attributes prefix if not present
-            const fullPath = fieldPath.startsWith('attributes.') ? fieldPath : 'attributes.' + fieldPath;
-            return this.getNestedValue(data, fullPath);
-        } else {
-            // Handle flat structure - remove 'attributes.' prefix if present
-            const cleanPath = fieldPath.replace(/^attributes\./, '');
-            return this.getNestedValue(data, cleanPath);
-        }
+        // JSON:API nested structure - add attributes prefix if not present
+        const fullPath = fieldPath.startsWith('attributes.') ? fieldPath : 'attributes.' + fieldPath;
+        return this.getNestedValue(data, fullPath);
     }
 
     /**
@@ -76,17 +38,9 @@ export class GridDataAdapter {
     setValue(data, fieldPath, value) {
         if (!data) return;
 
-        const mode = this.mode === 'auto' ? this.detectDataMode(data) : this.mode;
-
-        if (mode === 'nested') {
-            // Handle nested structure - add attributes prefix if not present
-            const fullPath = fieldPath.startsWith('attributes.') ? fieldPath : 'attributes.' + fieldPath;
-            this.setNestedValue(data, fullPath, value);
-        } else {
-            // Handle flat structure - remove 'attributes.' prefix if present
-            const cleanPath = fieldPath.replace(/^attributes\./, '');
-            this.setNestedValue(data, cleanPath, value);
-        }
+        // JSON:API nested structure - add attributes prefix if not present
+        const fullPath = fieldPath.startsWith('attributes.') ? fieldPath : 'attributes.' + fieldPath;
+        this.setNestedValue(data, fullPath, value);
     }
 
     /**
@@ -149,48 +103,15 @@ export class GridDataAdapter {
 
         const dataArray = Array.isArray(apiResponse.data) ? apiResponse.data : [apiResponse.data];
 
-        // Auto-detect mode from first item
-        if (this.mode === 'auto' && dataArray.length > 0) {
-            this.detectDataMode(dataArray[0]);
-        }
-
-        const mode = this.getCurrentMode();
-
-        if (mode === 'flat') {
-            // Flatten nested structures for grid
-            return dataArray.map(item => this.flattenItem(item));
-        } else {
-            // Keep nested structure, ensure ID is at root level
-            return dataArray.map(item => {
-                if (item.id === undefined && item.attributes && item.attributes.id) {
-                    return { id: item.attributes.id, ...item };
-                }
-                return item;
-            });
-        }
+        // Keep JSON:API nested structure, ensure ID is at root level
+        return dataArray.map(item => {
+            if (item.id === undefined && item.attributes && item.attributes.id) {
+                return { id: item.attributes.id, ...item };
+            }
+            return item;
+        });
     }
 
-    /**
-     * Flatten a single data item
-     * @param {Object} item - Data item
-     * @returns {Object} Flattened item
-     */
-    flattenItem(item) {
-        if (!item) return item;
-
-        if (item.attributes && typeof item.attributes === 'object') {
-            // Flatten nested attributes
-            return {
-                id: item.id,
-                type: item.type,
-                ...item.attributes,
-                // Keep relationships if present
-                ...(item.relationships ? { relationships: item.relationships } : {})
-            };
-        }
-
-        return item;
-    }
 
     /**
      * Transform field update for API request
@@ -199,33 +120,24 @@ export class GridDataAdapter {
      * @returns {Object} Update payload for API
      */
     transformForApi(fieldName, value) {
-        const mode = this.getCurrentMode();
-
-        if (mode === 'nested') {
-            // For nested mode, wrap in attributes if not already present
-            if (fieldName.startsWith('attributes.')) {
-                const cleanField = fieldName.replace('attributes.', '');
-                return { [cleanField]: value };
-            }
-            return { [fieldName]: value };
-        } else {
-            // For flat mode, send as-is
-            return { [fieldName]: value };
+        // For JSON:API nested mode, remove attributes prefix if present
+        if (fieldName.startsWith('attributes.')) {
+            const cleanField = fieldName.replace('attributes.', '');
+            return { [cleanField]: value };
         }
+        return { [fieldName]: value };
     }
 
     /**
      * Get field path for column definition
      * @param {string} fieldName - Base field name (e.g., 'name')
-     * @returns {string} Full field path for current mode
+     * @returns {string} Full field path for JSON:API nested format
      */
     getFieldPath(fieldName) {
-        const mode = this.getCurrentMode();
-
-        if (mode === 'nested' && !fieldName.startsWith('attributes.')) {
+        // For JSON:API nested format, add attributes prefix if not present
+        if (!fieldName.startsWith('attributes.')) {
             return `attributes.${fieldName}`;
         }
-
         return fieldName;
     }
 
@@ -238,21 +150,6 @@ export class GridDataAdapter {
         return fieldPath.replace(/^attributes\./, '');
     }
 
-    /**
-     * Check if data structure is nested
-     * @returns {boolean}
-     */
-    isNested() {
-        return this.getCurrentMode() === 'nested';
-    }
-
-    /**
-     * Check if data structure is flat
-     * @returns {boolean}
-     */
-    isFlat() {
-        return this.getCurrentMode() === 'flat';
-    }
 }
 
 // Export for CommonJS compatibility

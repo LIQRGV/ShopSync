@@ -1,9 +1,8 @@
 /**
  * GridRenderer - Unified cell rendering and formatting for Product Grid
- * Supports both nested and flat data structures via GridDataAdapter
+ * Uses JSON:API nested data structure via GridDataAdapter
  */
-import {ProductGridConstants} from '../constants/ProductGridConstants.js';
-import {SearchableSelectEditor} from '../editors/SearchableSelectEditor.js';
+import { ProductGridConstants } from '../constants/ProductGridConstants.js';
 
 export class GridRenderer {
     /**
@@ -12,16 +11,12 @@ export class GridRenderer {
      * @param {GridDataAdapter} config.dataAdapter - Data adapter for field access
      * @param {Object} config.currentData - Current grid data with included relationships
      * @param {Array} config.enabledAttributes - Enabled attributes for dynamic columns
-     * @param {Array} config.masterAttributes - Master attributes data (for flat mode)
      */
     constructor(config) {
         this.baseUrl = config.baseUrl || '';
         this.dataAdapter = config.dataAdapter;
         this.currentData = config.currentData || null;
         this.enabledAttributes = config.enabledAttributes || [];
-        this.masterAttributes = config.masterAttributes || [];
-
-        console.log('[GridRenderer] Constructor: masterAttributes count =', this.masterAttributes.length);
 
         // Inject custom CSS for colored dropdowns and read-only cells
         this.injectStatusDropdownCSS();
@@ -44,33 +39,16 @@ export class GridRenderer {
             return {};
         }
 
-        console.log('[GridRenderer] extractAttributeGroups: dataAdapter.mode =', this.dataAdapter.mode);
-        console.log('[GridRenderer] extractAttributeGroups: currentData keys =', Object.keys(this.currentData));
-        console.log('[GridRenderer] extractAttributeGroups: has included?', !!this.currentData.included);
-        console.log('[GridRenderer] extractAttributeGroups: has attributes?', !!this.currentData.attributes);
-
-        // Log first product structure to see where attributes are
-        if (this.currentData.data && this.currentData.data.length > 0) {
-            const firstProduct = this.currentData.data[0];
-            console.log('[GridRenderer] First product keys:', Object.keys(firstProduct));
-            console.log('[GridRenderer] First product full:', firstProduct);
-        }
-
         const attributeGroups = {};
 
-        // Handle both nested and flat modes: Extract master attributes from included array
-        // For nested mode (WTM): included contains product relationships + master attributes
-        // For flat mode (WL): included contains only master attributes metadata
+        // Extract master attributes from JSON:API included array
+        // The included array contains product relationships + master attributes metadata
         if (this.currentData.included) {
-            console.log('[GridRenderer] Found included array, extracting attributes...');
-
             // Filter attributes that are enabled_on_dropship
             const enabledAttributes = this.currentData.included.filter(item =>
                 item.type === 'attributes' &&
                 item.attributes.enabled_on_dropship === true
             );
-
-            console.log('[GridRenderer] Enabled attributes found:', enabledAttributes.length);
 
             // Group by group_name
             enabledAttributes.forEach(attr => {
@@ -89,98 +67,7 @@ export class GridRenderer {
                     options: attr.attributes.options || []
                 });
             });
-
-            console.log('[GridRenderer] Attribute groups extracted:', Object.keys(attributeGroups));
         }
-
-        // Handle flat mode (master attributes passed from backend)
-        // In flat mode, master attributes are passed via blade template to JavaScript
-        if (this.dataAdapter.mode === 'flat' && this.masterAttributes && this.masterAttributes.length > 0) {
-            console.log('[GridRenderer] Using masterAttributes from blade template, count:', this.masterAttributes.length);
-
-            this.masterAttributes.forEach(attr => {
-                const groupName = attr.group_name || 'Other';
-
-                if (!attributeGroups[groupName]) {
-                    attributeGroups[groupName] = [];
-                }
-
-                attributeGroups[groupName].push({
-                    id: attr.id,
-                    name: attr.name,
-                    code: attr.code || null,
-                    type: attr.input_type || 1
-                });
-            });
-
-            console.log('[GridRenderer] Extracted attribute groups:', Object.keys(attributeGroups));
-        }
-
-        // Alternative: Extract from first product's attributes in flat mode
-        console.log('[GridRenderer] Checking product attributes extraction...');
-        console.log('[GridRenderer] - attributeGroups.length:', Object.keys(attributeGroups).length);
-        console.log('[GridRenderer] - has data?:', !!this.currentData.data);
-        console.log('[GridRenderer] - is array?:', Array.isArray(this.currentData.data));
-        console.log('[GridRenderer] - data.length:', this.currentData.data?.length);
-
-        if (this.dataAdapter.mode === 'flat' &&
-            Object.keys(attributeGroups).length === 0 &&
-            this.currentData.data &&
-            Array.isArray(this.currentData.data) &&
-            this.currentData.data.length > 0) {
-
-            console.log('[GridRenderer] Extracting attributes from products...');
-            console.log('[GridRenderer] First product:', this.currentData.data[0]);
-
-            // Get unique attributes from all products
-            const seenAttributes = new Set();
-
-            this.currentData.data.forEach((product, productIndex) => {
-                // Skip logging after first 3 products to avoid console spam
-                if (productIndex < 3) {
-                    console.log(`[GridRenderer] Product ${productIndex} keys:`, Object.keys(product));
-                    console.log(`[GridRenderer] Product ${productIndex} attributes type:`, typeof product.attributes);
-                    console.log(`[GridRenderer] Product ${productIndex} attributes isArray:`, Array.isArray(product.attributes));
-
-                    // Check for other potential attribute fields
-                    if (product.product_attributes) console.log(`[GridRenderer] Product ${productIndex} has product_attributes:`, product.product_attributes);
-                    if (product.attribute_values) console.log(`[GridRenderer] Product ${productIndex} has attribute_values:`, product.attribute_values);
-                    if (product.pivot_attributes) console.log(`[GridRenderer] Product ${productIndex} has pivot_attributes:`, product.pivot_attributes);
-                }
-
-                if (product.attributes && Array.isArray(product.attributes)) {
-                    if (productIndex < 3) {
-                        console.log(`[GridRenderer] Product ${productIndex} has ${product.attributes.length} attributes`);
-                    }
-
-                    product.attributes.forEach((attr, attrIndex) => {
-                        console.log(`[GridRenderer] - Attribute ${attrIndex}:`, attr);
-                        const attrKey = String(attr.id);
-
-                        if (!seenAttributes.has(attrKey) && attr.enabled_on_dropship === true) {
-                            console.log(`[GridRenderer] - Adding attribute ${attr.name} (${attr.id})`);
-                            seenAttributes.add(attrKey);
-
-                            const groupName = attr.group_name || 'Other';
-
-                            if (!attributeGroups[groupName]) {
-                                attributeGroups[groupName] = [];
-                            }
-
-                            attributeGroups[groupName].push({
-                                id: attr.id,
-                                name: attr.name,
-                                code: attr.code,
-                                type: attr.type
-                            });
-                        }
-                    });
-                }
-            });
-        }
-
-        console.log('[GridRenderer] Final attributeGroups:', attributeGroups);
-        console.log('[GridRenderer] Total attribute groups found:', Object.keys(attributeGroups).length);
 
         return attributeGroups;
     }
@@ -222,7 +109,7 @@ export class GridRenderer {
                     editable: !isOptionWithoutValues, // Non-editable if option type has no options
                     cellEditor: inputType === 1 ? 'agTextCellEditor' : this.getAutoOpenSelectEditor(),
                     cellEditorPopup: inputType !== 1,
-                    cellEditorParams: inputType === 1 ? {} : {values: editorOptions},
+                    cellEditorParams: inputType === 1 ? {} : { values: editorOptions },
                     cellStyle: (params) => {
                         const baseStyle = this.getCellStyle(params);
                         // Add gray italic style for placeholder text
@@ -604,116 +491,240 @@ export class GridRenderer {
                 editable: true,
                 cellRenderer: (params) => this.truncatedTextRenderer(params)
             },
-            {
-                colId: 'categoryName',
-                headerName: 'Category',
-                field: 'category_name',
-                width: ProductGridConstants.COLUMN_WIDTHS.category,
-                sortable: true,
-                filter: 'agSetColumnFilter',
-                editable: true,
-                cellEditor: SearchableSelectEditor,
-                cellEditorPopup: false,
-                cellEditorParams: {
-                    fetchMethod: 'fetchCategories',
-                    valueField: 'id',
-                    displayField: 'name',
-                    relationshipIdField: 'category_id',
-                    placeholder: 'Search categories...'
+
+            // Relations Group (only for flat/WL mode with relationships)
+            ...(this.dataAdapter.mode === 'flat' ? [
+                {
+                    colId: 'categoryName',
+                    headerName: 'Category',
+                    field: 'category_name',
+                    width: ProductGridConstants.COLUMN_WIDTHS.category,
+                    sortable: true,
+                    filter: 'agSetColumnFilter',
+                    editable: (params) => {
+                        return params.data ? true : false;
+                    },
+                    cellRenderer: (params) => {
+                        // Display category name from relationship if available, otherwise from field
+                        if (!params.data) return '';
+                        const categoryName = this.getCategoryName(params);
+                        const displayValue = categoryName || params.value || '';
+                        // Add dropdown icon to indicate this is a dropdown field
+                        return displayValue ? `${displayValue} <span style="color: #999; margin-left: 4px;">▼</span>` : '<span style="color: #999;">Select Category ▼</span>';
+                    },
+                    cellEditor: this.getCategoryEditor(),
+                    cellEditorPopup: true,
+                    cellEditorParams: {},
+                    // Simple value getter/setter that reads/writes directly to category_name field
+                    valueGetter: (params) => {
+                        if (!params.data) return '';
+                        // Try to get from relationship first, otherwise from field
+                        const categoryFromRelationship = this.getCategoryName(params);
+                        return categoryFromRelationship || params.data.category_name || '';
+                    },
+                    valueSetter: (params) => {
+                        if (!params.data) return false;
+
+                        // newValue is comma-separated string from CategoryEditor.getValue()
+                        const newCategoryValue = params.newValue;
+
+                        // Parse newValue to array for comparison
+                        const newCategoryIds = newCategoryValue && newCategoryValue !== ''
+                            ? newCategoryValue.split(',').map(id => parseInt(id.trim()))
+                            : [];
+
+                        // Parse oldValue from BOTH category_id (parents) AND sub_category_id (children)
+                        const oldCategoryIds = [];
+
+                        if (params.data.category_id) {
+                            const parentIds = String(params.data.category_id)
+                                .split(',')
+                                .map(id => parseInt(id.trim()))
+                                .filter(id => !isNaN(id));
+                            oldCategoryIds.push(...parentIds);
+                        }
+
+                        if (params.data.sub_category_id) {
+                            const subIds = String(params.data.sub_category_id)
+                                .split(',')
+                                .map(id => parseInt(id.trim()))
+                                .filter(id => !isNaN(id));
+                            oldCategoryIds.push(...subIds);
+                        }
+
+                        // Compare arrays - no change if same IDs
+                        if (JSON.stringify(newCategoryIds.sort()) === JSON.stringify(oldCategoryIds.sort())) {
+                            return false;
+                        }
+
+                        // Update category_id in row data (store as comma-separated for display)
+                        params.data.category_id = newCategoryValue;
+
+                        // Update category_name for display (hierarchical comma-separated)
+                        params.data.category_name = this.buildCategoryNamesFromIds(newCategoryIds);
+
+                        // Set flag for handleCellEdit - send as array for JSON:API
+                        params.data._categoryUpdate = {
+                            categoryId: newCategoryIds.length > 0 ? newCategoryIds : null
+                        };
+
+                        return true;
+                    },
+                    cellClass: (params) => params.data ? 'editable-cell' : 'read-only-cell',
+                    cellStyle: (params) => this.getCellStyle(params)
                 },
-                valueGetter: (params) => this.getCategoryName(params),
-                valueSetter: (params) => {
-                    // Store the relationship ID for update
-                    params.data._relationshipUpdate = {
-                        field: 'category_id',
-                        value: params.newValue
-                    };
-                    return true;
-                }
-            },
-            {
-                colId: 'brandName',
-                headerName: 'Brand',
-                field: 'brand_name',
-                width: ProductGridConstants.COLUMN_WIDTHS.brand,
-                sortable: true,
-                filter: 'agSetColumnFilter',
-                editable: true,
-                cellEditor: SearchableSelectEditor,
-                cellEditorPopup: false,
-                cellEditorParams: {
-                    fetchMethod: 'fetchBrands',
-                    valueField: 'id',
-                    displayField: 'name',
-                    relationshipIdField: 'brand_id',
-                    placeholder: 'Search brands...'
+                {
+                    colId: 'brandName',
+                    headerName: 'Brand',
+                    field: 'brand_name',
+                    width: ProductGridConstants.COLUMN_WIDTHS.brand,
+                    sortable: true,
+                    filter: 'agSetColumnFilter',
+                    editable: true,
+                    cellRenderer: (params) => {
+                        if (!params.data) return '';
+                        const brandName = this.getBrandName(params) || params.data.brand_name || '';
+                        // Add dropdown icon to indicate this is a dropdown field
+                        return brandName ? `${brandName} <span style="color: #999; margin-left: 4px;">▼</span>` : '<span style="color: #999;">Select Brand ▼</span>';
+                    },
+                    cellEditor: this.getBrandEditor(),
+                    cellEditorPopup: true,
+                    cellEditorParams: {},
+                    valueGetter: (params) => {
+                        if (!params.data) return '';
+                        const brandFromRelationship = this.getBrandName(params);
+                        return brandFromRelationship || params.data.brand_name || '';
+                    },
+                    valueSetter: (params) => {
+                        if (!params.data) return false;
+
+                        const newBrandId = params.newValue;
+                        const oldBrandId = params.data.brand_id;
+
+                        // No change if same brand
+                        if (newBrandId === oldBrandId) {
+                            return false;
+                        }
+
+                        // Update brand_id in row data
+                        params.data.brand_id = newBrandId;
+
+                        // Update brand_name for display - get from cached brands
+                        if (newBrandId) {
+                            // Try to get brand name from cached brands (set by BrandEditor)
+                            if (window._cachedBrands && Array.isArray(window._cachedBrands)) {
+                                const brand = window._cachedBrands.find(b => b.value === parseInt(newBrandId));
+                                params.data.brand_name = brand ? brand.label : '';
+                            } else {
+                                params.data.brand_name = '';
+                            }
+                        } else {
+                            params.data.brand_name = '';
+                        }
+
+                        // Set flag for handleCellEdit
+                        params.data._brandUpdate = {
+                            brandId: newBrandId
+                        };
+
+                        return true;
+                    },
+                    cellClass: (params) => params.data ? 'editable-cell' : 'read-only-cell',
+                    cellStyle: (params) => this.getCellStyle(params)
                 },
-                valueGetter: (params) => this.getBrandName(params),
-                valueSetter: (params) => {
-                    // Store the relationship ID for update
-                    params.data._relationshipUpdate = {
-                        field: 'brand_id',
-                        value: params.newValue
-                    };
-                    return true;
+                {
+                    colId: 'supplierName',
+                    headerName: 'Supplier',
+                    field: 'supplier_name',
+                    width: ProductGridConstants.COLUMN_WIDTHS.supplier,
+                    sortable: true,
+                    filter: 'agSetColumnFilter',
+                    editable: true,
+                    cellRenderer: (params) => {
+                        if (!params.data) return '';
+                        const supplierName = this.getSupplierName(params) || params.data.supplier_name || '';
+                        // Add dropdown icon to indicate this is a dropdown field
+                        return supplierName ? `${supplierName} <span style="color: #999; margin-left: 4px;">▼</span>` : '<span style="color: #999;">Select Supplier ▼</span>';
+                    },
+                    cellEditor: this.getSupplierEditor(),
+                    cellEditorPopup: true,
+                    cellEditorParams: {},
+                    valueGetter: (params) => {
+                        if (!params.data) return '';
+                        const supplierFromRelationship = this.getSupplierName(params);
+                        return supplierFromRelationship || params.data.supplier_name || '';
+                    },
+                    valueSetter: (params) => {
+                        if (!params.data) return false;
+
+                        const newSupplierId = params.newValue;
+                        const oldSupplierId = params.data.supplier_id;
+
+                        // No change if same supplier
+                        if (newSupplierId === oldSupplierId) {
+                            return false;
+                        }
+
+                        // Update supplier_id in row data
+                        params.data.supplier_id = newSupplierId;
+
+                        // Update supplier_name for display - get from cached suppliers
+                        if (newSupplierId) {
+                            // Try to get supplier name from cached suppliers (set by SupplierEditor)
+                            if (window._cachedSuppliers && Array.isArray(window._cachedSuppliers)) {
+                                const supplier = window._cachedSuppliers.find(s => s.value === parseInt(newSupplierId));
+                                params.data.supplier_name = supplier ? supplier.label : '';
+                            } else {
+                                params.data.supplier_name = '';
+                            }
+                        } else {
+                            params.data.supplier_name = '';
+                        }
+
+                        // Set flag for handleCellEdit
+                        params.data._supplierUpdate = {
+                            supplierId: newSupplierId
+                        };
+
+                        return true;
+                    },
+                    cellClass: (params) => params.data ? 'editable-cell' : 'read-only-cell',
+                    cellStyle: (params) => this.getCellStyle(params)
                 }
-            },
-            {
-                colId: 'supplierName',
-                headerName: 'Supplier',
-                field: 'supplier_name',
-                width: ProductGridConstants.COLUMN_WIDTHS.supplier,
-                sortable: true,
-                filter: 'agSetColumnFilter',
-                editable: true,
-                cellEditor: SearchableSelectEditor,
-                cellEditorPopup: false,
-                cellEditorParams: {
-                    fetchMethod: 'fetchSuppliers',
-                    valueField: 'id',
-                    displayField: 'name',
-                    relationshipIdField: 'supplier_id',
-                    placeholder: 'Search suppliers...'
+            ] : []),
+
+            // SEO Group (only for flat/WL mode - thediamondbox specific)
+            ...(this.dataAdapter.mode === 'flat' ? [
+                {
+                    colId: 'seoTitle',
+                    headerName: 'SEO Title',
+                    field: this.dataAdapter.getFieldPath('seo_title'),
+                    width: ProductGridConstants.COLUMN_WIDTHS.seoTitle,
+                    sortable: true,
+                    filter: 'agTextColumnFilter',
+                    editable: true,
+                    cellRenderer: (params) => this.truncatedTextRenderer(params)
                 },
-                valueGetter: (params) => this.getSupplierName(params),
-                valueSetter: (params) => {
-                    // Store the relationship ID for update
-                    params.data._relationshipUpdate = {
-                        field: 'supplier_id',
-                        value: params.newValue
-                    };
-                    return true;
+                {
+                    colId: 'seoKeywords',
+                    headerName: 'SEO Keywords',
+                    field: this.dataAdapter.getFieldPath('seo_keywords'),
+                    width: ProductGridConstants.COLUMN_WIDTHS.seoKeywords,
+                    sortable: true,
+                    filter: 'agTextColumnFilter',
+                    editable: true
+                },
+                {
+                    colId: 'seoDescription',
+                    headerName: 'SEO Description',
+                    field: this.dataAdapter.getFieldPath('seo_description'),
+                    width: ProductGridConstants.COLUMN_WIDTHS.seoDescription,
+                    sortable: true,
+                    filter: 'agTextColumnFilter',
+                    editable: true,
+                    cellRenderer: (params) => this.truncatedTextRenderer(params)
                 }
-            },
-            {
-                colId: 'seoTitle',
-                headerName: 'SEO Title',
-                field: this.dataAdapter.getFieldPath('seo_title'),
-                width: ProductGridConstants.COLUMN_WIDTHS.seoTitle,
-                sortable: true,
-                filter: 'agTextColumnFilter',
-                editable: true,
-                cellRenderer: (params) => this.truncatedTextRenderer(params)
-            },
-            {
-                colId: 'seoKeywords',
-                headerName: 'SEO Keywords',
-                field: this.dataAdapter.getFieldPath('seo_keywords'),
-                width: ProductGridConstants.COLUMN_WIDTHS.seoKeywords,
-                sortable: true,
-                filter: 'agTextColumnFilter',
-                editable: true
-            },
-            {
-                colId: 'seoDescription',
-                headerName: 'SEO Description',
-                field: this.dataAdapter.getFieldPath('seo_description'),
-                width: ProductGridConstants.COLUMN_WIDTHS.seoDescription,
-                sortable: true,
-                filter: 'agTextColumnFilter',
-                editable: true,
-                cellRenderer: (params) => this.truncatedTextRenderer(params)
-            },
+            ] : []),
 
             // Dynamic Attribute Column Groups will be added after data loads (see ProductSyncGrid.loadProducts)
             // Removed from initial column defs to prevent empty columns
@@ -751,8 +762,8 @@ export class GridRenderer {
     imageCellRenderer(params) {
         const imageUrl = this.dataAdapter.getValue(params.data, 'image');
         const baseUrl = (window.ShopProductGridConfig && window.ShopProductGridConfig.clientBaseUrl) ||
-            (window.ProductGridConfig && window.ProductGridConfig.baseUrl) ||
-            this.baseUrl;
+                       (window.ProductGridConfig && window.ProductGridConfig.baseUrl) ||
+                       this.baseUrl;
 
         if (imageUrl && imageUrl !== 'null') {
             // Check if imageUrl is already a full URL
@@ -782,8 +793,8 @@ export class GridRenderer {
         const productId = params.data.id;
         const name = this.dataAdapter.getValue(params.data, 'name') || 'Unnamed Product';
         const baseUrl = (window.ShopProductGridConfig && window.ShopProductGridConfig.baseUrl) ||
-            (window.ProductGridConfig && window.ProductGridConfig.baseUrl) ||
-            this.baseUrl;
+                       (window.ProductGridConfig && window.ProductGridConfig.baseUrl) ||
+                       this.baseUrl;
         return `<a href="${baseUrl}/admin/products/${productId}" target="_blank" class="text-decoration-none" title="${name}" style="color: #727cf5;">${name}</a>`;
     }
 
@@ -796,16 +807,16 @@ export class GridRenderer {
 
         // Use the same color mapping as dropdown options for consistency
         const colorMap = {
-            'In Stock': {bg: '#d4edda', text: '#155724'},
-            'Out Of Stock': {bg: '#f8d7da', text: '#721c24'},
-            'Out Of Stock & Hide': {bg: '#fff3cd', text: '#856404'},
-            'Repair': {bg: '#d1ecf1', text: '#0c5460'},
-            'Coming Soon': {bg: '#e2e3e5', text: '#383d41'},
-            'In Stock & Hide': {bg: '#fff3cd', text: '#856404'},
-            'Unlisted': {bg: '#f8d7da', text: '#721c24'}
+            'In Stock': { bg: '#d4edda', text: '#155724' },
+            'Out Of Stock': { bg: '#f8d7da', text: '#721c24' },
+            'Out Of Stock & Hide': { bg: '#fff3cd', text: '#856404' },
+            'Repair': { bg: '#d1ecf1', text: '#0c5460' },
+            'Coming Soon': { bg: '#e2e3e5', text: '#383d41' },
+            'In Stock & Hide': { bg: '#fff3cd', text: '#856404' },
+            'Unlisted': { bg: '#f8d7da', text: '#721c24' }
         };
 
-        const colors = colorMap[statusText] || {bg: '#e2e3e5', text: '#383d41'};
+        const colors = colorMap[statusText] || { bg: '#e2e3e5', text: '#383d41' };
 
         return `<span class="status-badge" style="padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; background-color: ${colors.bg}; color: ${colors.text};">${statusText}</span>`;
     }
@@ -819,12 +830,12 @@ export class GridRenderer {
 
         // Define color mappings for sell status using text-based mapping for consistency
         const colorMap = {
-            'Sell as Standard': {bg: '#d4edda', text: '#155724'},
-            'Oversell': {bg: '#fff3cd', text: '#856404'},
-            'Unknown': {bg: '#f8d7da', text: '#721c24'}
+            'Sell as Standard': { bg: '#d4edda', text: '#155724' },
+            'Oversell': { bg: '#fff3cd', text: '#856404' },
+            'Unknown': { bg: '#f8d7da', text: '#721c24' }
         };
 
-        const colors = colorMap[statusText] || {bg: '#e2e3e5', text: '#383d41'};
+        const colors = colorMap[statusText] || { bg: '#e2e3e5', text: '#383d41' };
 
         return `<span class="sell-status-badge" style="padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; background-color: ${colors.bg}; color: ${colors.text};">${statusText}</span>`;
     }
@@ -838,14 +849,14 @@ export class GridRenderer {
 
         // Define color mappings for VAT scheme using text-based mapping for consistency
         const colorMap = {
-            'Standard Rate': {bg: '#d1ecf1', text: '#0c5460'},
-            'Reduced Rate': {bg: '#fff3cd', text: '#856404'},
-            'Zero Rate': {bg: '#d4edda', text: '#155724'},
-            'Exempt': {bg: '#f8d7da', text: '#721c24'},
-            'None': {bg: '#e2e3e5', text: '#383d41'}
+            'Standard Rate': { bg: '#d1ecf1', text: '#0c5460' },
+            'Reduced Rate': { bg: '#fff3cd', text: '#856404' },
+            'Zero Rate': { bg: '#d4edda', text: '#155724' },
+            'Exempt': { bg: '#f8d7da', text: '#721c24' },
+            'None': { bg: '#e2e3e5', text: '#383d41' }
         };
 
-        const colors = colorMap[schemeText] || {bg: '#e2e3e5', text: '#383d41'};
+        const colors = colorMap[schemeText] || { bg: '#e2e3e5', text: '#383d41' };
 
         return `<span class="vat-scheme-badge" style="padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; background-color: ${colors.bg}; color: ${colors.text};">${schemeText}</span>`;
     }
@@ -899,11 +910,191 @@ export class GridRenderer {
     }
 
     /**
-     * Get category name from included data (nested mode only)
+     * Get category name from included data (supports both nested and flat modes + multi-category)
      */
     getCategoryName(params) {
-        const categoryData = this.findIncluded(params.data, 'categories', 'category');
-        return categoryData ? this.dataAdapter.getValue(categoryData, 'name') : '';
+        if (!params.data || !this.currentData?.included) {
+            return '';
+        }
+
+        // For WL mode (flat), prioritize direct category_id/sub_category_id fields over relationships
+        // This is because WL mode uses flat data structure but still has empty relationships object
+        const hasDirectCategoryFields = params.data?.category_id || params.data?.sub_category_id;
+
+        if (hasDirectCategoryFields) {
+            // Handle flat mode (WL) - supports comma-separated category_ids
+            // Combine both category_id (parents) and sub_category_id (children)
+            const allCategoryIds = [];
+
+            if (params.data?.category_id) {
+                const parentIds = String(params.data.category_id)
+                    .split(',')
+                    .map(id => id.trim())
+                    .filter(Boolean)
+                    .map(id => parseInt(id));
+                allCategoryIds.push(...parentIds);
+            }
+
+            if (params.data?.sub_category_id) {
+                const subIds = String(params.data.sub_category_id)
+                    .split(',')
+                    .map(id => id.trim())
+                    .filter(Boolean)
+                    .map(id => parseInt(id));
+                allCategoryIds.push(...subIds);
+            }
+
+            if (allCategoryIds.length === 0) {
+                return '';
+            }
+
+            // Use grouped display format
+            const result = this.buildCategoryNamesFromIds(allCategoryIds);
+
+            return result;
+        }
+
+        // Handle nested mode (WTM) - uses relationships (only if no direct fields)
+        if (params.data?.relationships?.category) {
+            const categoryData = this.findIncluded(params.data, 'categories', 'category');
+            if (categoryData && categoryData.attributes) {
+                return this.buildHierarchicalCategoryName(categoryData);
+            }
+            return '';
+        }
+
+        // No category data found
+        return '';
+    }
+
+    /**
+     * Build hierarchical category name (Parent > Child)
+     */
+    buildHierarchicalCategoryName(categoryData) {
+        if (!categoryData || !categoryData.attributes) {
+            return '';
+        }
+
+        const categoryName = categoryData.attributes.name || '';
+        const parentId = categoryData.attributes.parent_id;
+
+        // If has parent, find and prepend parent name
+        if (parentId && this.currentData?.included) {
+            const parentData = this.currentData.included.find(item =>
+                item.type === 'categories' && String(item.id) === String(parentId)
+            );
+
+            if (parentData && parentData.attributes && parentData.attributes.name) {
+                return `${parentData.attributes.name} > ${categoryName}`;
+            }
+        }
+
+        // No parent or parent not found, return just the category name
+        return categoryName;
+    }
+
+    /**
+     * Build category names from array of IDs (for display after editor closes)
+     * Groups subcategories by parent: "Jewellery > [Rings, Necklaces], Watches > Chronograph"
+     */
+    buildCategoryNamesFromIds(categoryIds) {
+        if (!categoryIds || categoryIds.length === 0 || !this.currentData?.included) {
+            return '';
+        }
+
+        // Group categories by parent
+        const grouped = {};
+        const standalone = []; // Categories without parent (root categories)
+
+        categoryIds.forEach(categoryId => {
+            const categoryData = this.currentData.included.find(item =>
+                item.type === 'categories' && String(item.id) === String(categoryId)
+            );
+
+            if (categoryData && categoryData.attributes) {
+                const parentId = categoryData.attributes.parent_id;
+                const categoryName = categoryData.attributes.name || '';
+
+                if (parentId && parentId !== 0) {
+                    // Has parent - group by parent
+                    const parentData = this.currentData.included.find(item =>
+                        item.type === 'categories' && String(item.id) === String(parentId)
+                    );
+
+                    const parentName = parentData?.attributes?.name || 'Unknown';
+
+                    if (!grouped[parentName]) {
+                        grouped[parentName] = [];
+                    }
+                    grouped[parentName].push(categoryName);
+                } else {
+                    // Root category (no parent)
+                    standalone.push(categoryName);
+                }
+            }
+        });
+
+        // Build display string
+        const parts = [];
+
+        // Add grouped categories (parent with children)
+        Object.entries(grouped).forEach(([parentName, children]) => {
+            if (children.length === 1) {
+                // Single child: "Parent > Child"
+                parts.push(`${parentName} > ${children[0]}`);
+            } else {
+                // Multiple children: "Parent > [Child1, Child2]"
+                parts.push(`${parentName} > [${children.join(', ')}]`);
+            }
+        });
+
+        // Add standalone root categories (but exclude parents that already have children shown)
+        // This prevents showing "Jewellery, Watches" at the end when they're already shown with children
+        const parentNamesWithChildren = Object.keys(grouped);
+        const trulyStandalone = standalone.filter(name => !parentNamesWithChildren.includes(name));
+
+        if (trulyStandalone.length > 0) {
+            parts.push(...trulyStandalone);
+        }
+
+        return parts.join(', ');
+    }
+
+    /**
+     * Set category value when editor closes
+     * @param {Object} params - AG Grid value setter params
+     * @returns {boolean} - True if value changed
+     */
+    setCategoryValue(params) {
+        const newCategoryId = params.newValue;
+        const oldCategoryId = params.data.category_id;
+
+        // No change - use loose equality to handle string/number comparison
+        if (newCategoryId == oldCategoryId) {
+            return false;
+        }
+
+        // Update category_id in row data
+        params.data.category_id = newCategoryId;
+
+        // Update category_name for display
+        if (newCategoryId && window._cachedCategories) {
+            const category = window._cachedCategories.find(c => c.value == newCategoryId);
+            params.data.category_name = category ? category.label : '';
+        } else {
+            params.data.category_name = '';
+        }
+
+        // Set flag for handleCellEdit to know this is a category update
+        // Similar to _attributeUpdate pattern
+        params.data._categoryUpdate = {
+            categoryId: newCategoryId
+        };
+
+        // Return true to indicate value was set successfully
+        // AG Grid will automatically fire onCellValueChanged event
+        // which triggers handleCellEdit to update the backend
+        return true;
     }
 
     /**
@@ -1194,8 +1385,6 @@ export class GridRenderer {
 
             init(params) {
                 this.params = params;
-                this.cancelBeforeStart = false;
-                this.cancelAfterEnd = false;
 
                 // Create container
                 this.eGui = document.createElement('div');
@@ -1238,24 +1427,9 @@ export class GridRenderer {
                 this.applySelectColors(this.eSelect, this.eSelect.value);
 
                 // Handle value changes to update colors
-                this.handleChange = () => {
+                this.eSelect.addEventListener('change', () => {
                     this.applySelectColors(this.eSelect, this.eSelect.value);
-                };
-                this.eSelect.addEventListener('change', this.handleChange);
-
-                // ESC key handler to cancel editing
-                this.handleKeyDown = (e) => {
-                    if (e.key === 'Escape' || e.keyCode === 27) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        this.cancelAfterEnd = true;
-                        // Stop editing via AG Grid API
-                        if (this.params.api && this.params.stopEditing) {
-                            this.params.stopEditing(true); // true = cancel
-                        }
-                    }
-                };
-                this.eSelect.addEventListener('keydown', this.handleKeyDown);
+                });
 
                 this.eGui.appendChild(this.eSelect);
 
@@ -1269,14 +1443,13 @@ export class GridRenderer {
                         this.eSelect.click();
 
                         // Listen for selection and close
-                        this.handleClick = (e) => {
+                        this.eSelect.addEventListener('click', (e) => {
                             setTimeout(() => {
                                 if (!this.isDestroyed) {
                                     this.eSelect.size = 1; // Collapse back to single selection
                                 }
                             }, 100);
-                        };
-                        this.eSelect.addEventListener('click', this.handleClick);
+                        });
                     }
                 }, 10);
             }
@@ -1284,27 +1457,27 @@ export class GridRenderer {
             applyOptionColors(option, value) {
                 // Apply colors based on the type of dropdown
                 const productStatusColorMap = {
-                    'In Stock': {bg: '#d4edda', text: '#155724'},
-                    'Out Of Stock': {bg: '#f8d7da', text: '#721c24'},
-                    'Out Of Stock & Hide': {bg: '#fff3cd', text: '#856404'},
-                    'Repair': {bg: '#d1ecf1', text: '#0c5460'},
-                    'Coming Soon': {bg: '#e2e3e5', text: '#383d41'},
-                    'In Stock & Hide': {bg: '#fff3cd', text: '#856404'},
-                    'Unlisted': {bg: '#f8d7da', text: '#721c24'}
+                    'In Stock': { bg: '#d4edda', text: '#155724' },
+                    'Out Of Stock': { bg: '#f8d7da', text: '#721c24' },
+                    'Out Of Stock & Hide': { bg: '#fff3cd', text: '#856404' },
+                    'Repair': { bg: '#d1ecf1', text: '#0c5460' },
+                    'Coming Soon': { bg: '#e2e3e5', text: '#383d41' },
+                    'In Stock & Hide': { bg: '#fff3cd', text: '#856404' },
+                    'Unlisted': { bg: '#f8d7da', text: '#721c24' }
                 };
 
                 const sellStatusColorMap = {
-                    'Sell as Standard': {bg: '#d4edda', text: '#155724'},
-                    'Oversell': {bg: '#fff3cd', text: '#856404'},
-                    'Unknown': {bg: '#f8d7da', text: '#721c24'}
+                    'Sell as Standard': { bg: '#d4edda', text: '#155724' },
+                    'Oversell': { bg: '#fff3cd', text: '#856404' },
+                    'Unknown': { bg: '#f8d7da', text: '#721c24' }
                 };
 
                 const vatSchemeColorMap = {
-                    'Standard Rate': {bg: '#d1ecf1', text: '#0c5460'},
-                    'Reduced Rate': {bg: '#fff3cd', text: '#856404'},
-                    'Zero Rate': {bg: '#d4edda', text: '#155724'},
-                    'Exempt': {bg: '#f8d7da', text: '#721c24'},
-                    'None': {bg: '#e2e3e5', text: '#383d41'}
+                    'Standard Rate': { bg: '#d1ecf1', text: '#0c5460' },
+                    'Reduced Rate': { bg: '#fff3cd', text: '#856404' },
+                    'Zero Rate': { bg: '#d4edda', text: '#155724' },
+                    'Exempt': { bg: '#f8d7da', text: '#721c24' },
+                    'None': { bg: '#e2e3e5', text: '#383d41' }
                 };
 
                 // Determine which color map to use based on the option values
@@ -1315,7 +1488,7 @@ export class GridRenderer {
                     colorMap = vatSchemeColorMap;
                 }
 
-                const colors = colorMap[value] || {bg: '#e2e3e5', text: '#383d41'};
+                const colors = colorMap[value] || { bg: '#e2e3e5', text: '#383d41' };
                 option.style.backgroundColor = colors.bg;
                 option.style.color = colors.text;
                 option.style.padding = '8px 12px';
@@ -1325,27 +1498,27 @@ export class GridRenderer {
             applySelectColors(select, value) {
                 // Apply colors to the select element itself
                 const productStatusColorMap = {
-                    'In Stock': {bg: '#d4edda', text: '#155724'},
-                    'Out Of Stock': {bg: '#f8d7da', text: '#721c24'},
-                    'Out Of Stock & Hide': {bg: '#fff3cd', text: '#856404'},
-                    'Repair': {bg: '#d1ecf1', text: '#0c5460'},
-                    'Coming Soon': {bg: '#e2e3e5', text: '#383d41'},
-                    'In Stock & Hide': {bg: '#fff3cd', text: '#856404'},
-                    'Unlisted': {bg: '#f8d7da', text: '#721c24'}
+                    'In Stock': { bg: '#d4edda', text: '#155724' },
+                    'Out Of Stock': { bg: '#f8d7da', text: '#721c24' },
+                    'Out Of Stock & Hide': { bg: '#fff3cd', text: '#856404' },
+                    'Repair': { bg: '#d1ecf1', text: '#0c5460' },
+                    'Coming Soon': { bg: '#e2e3e5', text: '#383d41' },
+                    'In Stock & Hide': { bg: '#fff3cd', text: '#856404' },
+                    'Unlisted': { bg: '#f8d7da', text: '#721c24' }
                 };
 
                 const sellStatusColorMap = {
-                    'Sell as Standard': {bg: '#d4edda', text: '#155724'},
-                    'Oversell': {bg: '#fff3cd', text: '#856404'},
-                    'Unknown': {bg: '#f8d7da', text: '#721c24'}
+                    'Sell as Standard': { bg: '#d4edda', text: '#155724' },
+                    'Oversell': { bg: '#fff3cd', text: '#856404' },
+                    'Unknown': { bg: '#f8d7da', text: '#721c24' }
                 };
 
                 const vatSchemeColorMap = {
-                    'Standard Rate': {bg: '#d1ecf1', text: '#0c5460'},
-                    'Reduced Rate': {bg: '#fff3cd', text: '#856404'},
-                    'Zero Rate': {bg: '#d4edda', text: '#155724'},
-                    'Exempt': {bg: '#f8d7da', text: '#721c24'},
-                    'None': {bg: '#e2e3e5', text: '#383d41'}
+                    'Standard Rate': { bg: '#d1ecf1', text: '#0c5460' },
+                    'Reduced Rate': { bg: '#fff3cd', text: '#856404' },
+                    'Zero Rate': { bg: '#d4edda', text: '#155724' },
+                    'Exempt': { bg: '#f8d7da', text: '#721c24' },
+                    'None': { bg: '#e2e3e5', text: '#383d41' }
                 };
 
                 // Determine which color map to use based on the option values
@@ -1356,7 +1529,7 @@ export class GridRenderer {
                     colorMap = vatSchemeColorMap;
                 }
 
-                const colors = colorMap[value] || {bg: '#e2e3e5', text: '#383d41'};
+                const colors = colorMap[value] || { bg: '#e2e3e5', text: '#383d41' };
                 select.style.backgroundColor = colors.bg;
                 select.style.color = colors.text;
             }
@@ -1371,26 +1544,18 @@ export class GridRenderer {
 
             destroy() {
                 this.isDestroyed = true;
-
                 if (this.eSelect) {
-                    if (this.handleChange) {
-                        this.eSelect.removeEventListener('change', this.handleChange);
-                    }
-                    if (this.handleClick) {
-                        this.eSelect.removeEventListener('click', this.handleClick);
-                    }
-                    if (this.handleKeyDown) {
-                        this.eSelect.removeEventListener('keydown', this.handleKeyDown);
-                    }
+                    this.eSelect.removeEventListener('change', this.handleChange);
+                    this.eSelect.removeEventListener('click', this.handleClick);
                 }
             }
 
             isCancelBeforeStart() {
-                return this.cancelBeforeStart;
+                return false;
             }
 
             isCancelAfterEnd() {
-                return this.cancelAfterEnd;
+                return false;
             }
 
             focusIn() {
@@ -1408,9 +1573,1178 @@ export class GridRenderer {
 
         return AutoOpenSelectCellEditor;
     }
+
+    /**
+     * Get category editor class for multi-select category dropdown
+     * Supports comma-separated category IDs for multi-category assignment
+     */
+    getCategoryEditor() {
+        class CategoryEditor {
+            constructor() {
+                this.eGui = null;
+                this.eContainer = null;
+                this.categories = [];
+                this.selectedIds = new Set();
+                this.checkboxes = [];
+                this.searchInput = null;
+                this.isDestroyed = false;
+            }
+
+            async init(params) {
+                this.params = params;
+
+                // Load categories from cache or fetch from API
+                await this.loadCategories();
+
+                // Parse existing category IDs from BOTH category_id (parents) and sub_category_id (children)
+                let currentCategoryIds = params.data.category_id;
+                let currentSubCategoryIds = params.data.sub_category_id;
+
+                // If not in category_id, try to read from relationships (nested mode)
+                if (!currentCategoryIds && params.data.relationships && params.data.relationships.category) {
+                    const catRel = params.data.relationships.category.data;
+                    if (Array.isArray(catRel)) {
+                        // To-many relationship
+                        currentCategoryIds = catRel.map(c => c.id).join(',');
+                    } else if (catRel && catRel.id) {
+                        // To-one relationship
+                        currentCategoryIds = catRel.id;
+                    }
+                }
+
+                // Handle different formats: string with comma, single number, array, or empty
+                let categoryIdsArray = [];
+
+                // Parse parent categories from category_id
+                if (currentCategoryIds) {
+                    if (Array.isArray(currentCategoryIds)) {
+                        categoryIdsArray = currentCategoryIds.map(id => String(id).trim()).filter(Boolean);
+                    } else if (typeof currentCategoryIds === 'string' && currentCategoryIds.includes(',')) {
+                        categoryIdsArray = currentCategoryIds.split(',').map(id => id.trim()).filter(Boolean);
+                    } else if (currentCategoryIds) {
+                        categoryIdsArray = [String(currentCategoryIds).trim()];
+                    }
+                }
+
+                // Parse subcategories from sub_category_id and add to the array
+                if (currentSubCategoryIds) {
+                    let subCategoryIdsArray = [];
+                    if (Array.isArray(currentSubCategoryIds)) {
+                        subCategoryIdsArray = currentSubCategoryIds.map(id => String(id).trim()).filter(Boolean);
+                    } else if (typeof currentSubCategoryIds === 'string' && currentSubCategoryIds.includes(',')) {
+                        subCategoryIdsArray = currentSubCategoryIds.split(',').map(id => id.trim()).filter(Boolean);
+                    } else if (currentSubCategoryIds) {
+                        subCategoryIdsArray = [String(currentSubCategoryIds).trim()];
+                    }
+                    // Combine parent and subcategory IDs
+                    categoryIdsArray = categoryIdsArray.concat(subCategoryIdsArray);
+                }
+
+                this.selectedIds = new Set(categoryIdsArray.map(id => parseInt(id)));
+
+                // Auto-select parent categories for any selected child categories
+                const selectedIdsArray = Array.from(this.selectedIds);
+                selectedIdsArray.forEach(categoryId => {
+                    const category = this.categories.find(c => c.value === categoryId);
+                    if (category && category.parent_id && category.parent_id !== 0) {
+                        this.selectedIds.add(category.parent_id);
+                    }
+                });
+
+                // Create container
+                this.eGui = document.createElement('div');
+                this.eGui.style.position = 'relative';
+                this.eGui.style.width = '320px';
+                this.eGui.style.maxHeight = '400px';
+                this.eGui.style.backgroundColor = 'white';
+                this.eGui.style.border = '2px solid #4CAF50';
+                this.eGui.style.borderRadius = '6px';
+                this.eGui.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                this.eGui.style.display = 'flex';
+                this.eGui.style.flexDirection = 'column';
+
+                // Header with title and buttons
+                const header = document.createElement('div');
+                header.style.padding = '10px 12px';
+                header.style.borderBottom = '1px solid #dee2e6';
+                header.style.backgroundColor = '#f8f9fa';
+                header.style.display = 'flex';
+                header.style.justifyContent = 'space-between';
+                header.style.alignItems = 'center';
+                header.style.borderTopLeftRadius = '4px';
+                header.style.borderTopRightRadius = '4px';
+
+                const title = document.createElement('span');
+                title.textContent = 'Select Categories (multi-select)';
+                title.style.fontWeight = '600';
+                title.style.fontSize = '13px';
+                title.style.color = '#495057';
+                header.appendChild(title);
+
+                const buttonContainer = document.createElement('div');
+                buttonContainer.style.display = 'flex';
+                buttonContainer.style.gap = '6px';
+
+                // Clear All button
+                const clearBtn = document.createElement('button');
+                clearBtn.textContent = 'Clear';
+                clearBtn.style.padding = '4px 8px';
+                clearBtn.style.fontSize = '11px';
+                clearBtn.style.border = '1px solid #dc3545';
+                clearBtn.style.backgroundColor = '#fff';
+                clearBtn.style.color = '#dc3545';
+                clearBtn.style.borderRadius = '4px';
+                clearBtn.style.cursor = 'pointer';
+                clearBtn.style.fontWeight = '500';
+                clearBtn.addEventListener('click', () => this.clearAll());
+                buttonContainer.appendChild(clearBtn);
+
+                // Done button
+                const doneBtn = document.createElement('button');
+                doneBtn.textContent = 'Done';
+                doneBtn.style.padding = '4px 12px';
+                doneBtn.style.fontSize = '11px';
+                doneBtn.style.border = 'none';
+                doneBtn.style.backgroundColor = '#4CAF50';
+                doneBtn.style.color = 'white';
+                doneBtn.style.borderRadius = '4px';
+                doneBtn.style.cursor = 'pointer';
+                doneBtn.style.fontWeight = '500';
+                doneBtn.addEventListener('click', () => {
+                    params.stopEditing();
+                });
+                buttonContainer.appendChild(doneBtn);
+
+                header.appendChild(buttonContainer);
+                this.eGui.appendChild(header);
+
+                // Search box
+                const searchContainer = document.createElement('div');
+                searchContainer.style.padding = '8px 12px';
+                searchContainer.style.borderBottom = '1px solid #dee2e6';
+
+                this.searchInput = document.createElement('input');
+                this.searchInput.type = 'text';
+                this.searchInput.placeholder = 'Search categories...';
+                this.searchInput.style.width = '100%';
+                this.searchInput.style.padding = '6px 8px';
+                this.searchInput.style.fontSize = '12px';
+                this.searchInput.style.border = '1px solid #ced4da';
+                this.searchInput.style.borderRadius = '4px';
+                this.searchInput.style.boxSizing = 'border-box';
+                this.searchInput.addEventListener('input', () => this.filterCategories());
+                searchContainer.appendChild(this.searchInput);
+                this.eGui.appendChild(searchContainer);
+
+                // Scrollable container for checkboxes
+                this.eContainer = document.createElement('div');
+                this.eContainer.style.padding = '8px';
+                this.eContainer.style.maxHeight = '280px';
+                this.eContainer.style.overflowY = 'auto';
+                this.eContainer.style.overflowX = 'hidden';
+
+                // Populate checkboxes
+                this.populateCheckboxes();
+
+                this.eGui.appendChild(this.eContainer);
+
+                // Status bar showing selection count
+                const statusBar = document.createElement('div');
+                statusBar.style.padding = '8px 12px';
+                statusBar.style.borderTop = '1px solid #dee2e6';
+                statusBar.style.backgroundColor = '#f8f9fa';
+                statusBar.style.fontSize = '11px';
+                statusBar.style.color = '#6c757d';
+                statusBar.style.borderBottomLeftRadius = '4px';
+                statusBar.style.borderBottomRightRadius = '4px';
+                statusBar.id = 'category-status-bar';
+                this.updateStatusBar(statusBar);
+                this.eGui.appendChild(statusBar);
+            }
+
+            async loadCategories() {
+                // Check if categories already cached globally
+                if (window._cachedCategories && Array.isArray(window._cachedCategories)) {
+                    // Check if cache is in JSON:API format (needs transformation)
+                    if (window._cachedCategories.length > 0 && window._cachedCategories[0].type === 'categories') {
+                        // Transform from JSON:API format to editor format
+                        const categoriesMap = new Map();
+                        window._cachedCategories.forEach(cat => {
+                            const catData = cat.attributes || cat;
+                            categoriesMap.set(cat.id, {
+                                value: parseInt(cat.id),
+                                label: catData.name,
+                                parent_id: catData.parent_id || 0
+                            });
+                        });
+                        this.categories = Array.from(categoriesMap.values())
+                            .sort((a, b) => a.label.localeCompare(b.label));
+                    } else {
+                        // Already in transformed format
+                        this.categories = window._cachedCategories;
+                    }
+                    return;
+                }
+
+                // Try to read from currentData.included (fallback for backwards compatibility)
+                try {
+                    const currentData = this.params.context?.gridInstance?.currentData;
+
+                    if (currentData && currentData.included && Array.isArray(currentData.included)) {
+                        // Extract unique categories from included data
+                        const categoriesMap = new Map();
+                        currentData.included
+                            .filter(item => item.type === 'categories')
+                            .forEach(cat => {
+                                const catData = cat.attributes || cat;
+                                categoriesMap.set(cat.id, {
+                                    value: parseInt(cat.id),
+                                    label: catData.name,
+                                    parent_id: catData.parent_id || 0
+                                });
+                            });
+
+                        this.categories = Array.from(categoriesMap.values())
+                            .sort((a, b) => a.label.localeCompare(b.label));
+
+                        return;
+                    }
+
+                    console.warn('[CategoryEditor] No categories data available, will use empty list');
+                    this.categories = [];
+                } catch (error) {
+                    console.error('[CategoryEditor] Failed to load categories:', error);
+                    this.categories = [];
+                }
+            }
+
+            populateCheckboxes(filterText = '') {
+                // Clear existing checkboxes
+                this.eContainer.innerHTML = '';
+                this.checkboxes = [];
+
+                if (this.categories.length === 0) {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.textContent = 'No categories available';
+                    emptyMsg.style.padding = '12px';
+                    emptyMsg.style.color = '#6c757d';
+                    emptyMsg.style.fontStyle = 'italic';
+                    emptyMsg.style.fontSize = '12px';
+                    this.eContainer.appendChild(emptyMsg);
+                    return;
+                }
+
+                // Filter categories based on search text
+                const searchLower = filterText.toLowerCase();
+                const filteredCategories = filterText
+                    ? this.categories.filter(c => c.label.toLowerCase().includes(searchLower))
+                    : this.categories;
+
+                if (filteredCategories.length === 0) {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.textContent = 'No matching categories';
+                    emptyMsg.style.padding = '12px';
+                    emptyMsg.style.color = '#6c757d';
+                    emptyMsg.style.fontStyle = 'italic';
+                    emptyMsg.style.fontSize = '12px';
+                    this.eContainer.appendChild(emptyMsg);
+                    return;
+                }
+
+                // Separate parents and children from filtered results
+                const parents = filteredCategories.filter(c => !c.parent_id || c.parent_id === 0);
+                const children = filteredCategories.filter(c => c.parent_id && c.parent_id !== 0);
+
+                // Add parent categories and their children
+                parents.forEach(parent => {
+                    // Add parent checkbox
+                    this.addCheckbox(parent, false);
+
+                    // Add children as indented checkboxes
+                    const parentChildren = children.filter(c => c.parent_id === parent.value);
+                    parentChildren.forEach(child => {
+                        this.addCheckbox(child, true);
+                    });
+                });
+
+                // If filtering and a child matches, also show parent even if parent doesn't match
+                if (filterText) {
+                    const childrenWithoutParents = children.filter(child => {
+                        return !parents.some(p => p.value === child.parent_id);
+                    });
+
+                    childrenWithoutParents.forEach(child => {
+                        const parent = this.categories.find(c => c.value === child.parent_id);
+                        if (parent && !filteredCategories.includes(parent)) {
+                            this.addCheckbox(parent, false);
+                        }
+                        this.addCheckbox(child, true);
+                    });
+                }
+            }
+
+            filterCategories() {
+                const filterText = this.searchInput ? this.searchInput.value : '';
+                this.populateCheckboxes(filterText);
+            }
+
+            addCheckbox(category, isChild) {
+                const checkboxContainer = document.createElement('label');
+                checkboxContainer.style.display = 'flex';
+                checkboxContainer.style.alignItems = 'center';
+                checkboxContainer.style.padding = '6px 8px';
+                checkboxContainer.style.cursor = 'pointer';
+                checkboxContainer.style.borderRadius = '4px';
+                checkboxContainer.style.marginBottom = '2px';
+                checkboxContainer.style.transition = 'background-color 0.15s';
+                checkboxContainer.style.paddingLeft = isChild ? '28px' : '8px';
+
+                checkboxContainer.addEventListener('mouseenter', () => {
+                    checkboxContainer.style.backgroundColor = '#f8f9fa';
+                });
+                checkboxContainer.addEventListener('mouseleave', () => {
+                    checkboxContainer.style.backgroundColor = 'transparent';
+                });
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = category.value;
+                checkbox.checked = this.selectedIds.has(category.value);
+                checkbox.style.marginRight = '8px';
+                checkbox.style.cursor = 'pointer';
+                checkbox.addEventListener('change', () => this.handleCheckboxChange(category.value, checkbox.checked));
+
+                const label = document.createElement('span');
+                label.textContent = isChild ? '└─ ' + category.label : category.label;
+                label.style.fontSize = '12px';
+                label.style.fontWeight = isChild ? 'normal' : '600';
+                label.style.color = isChild ? '#495057' : '#212529';
+                label.style.userSelect = 'none';
+
+                checkboxContainer.appendChild(checkbox);
+                checkboxContainer.appendChild(label);
+                this.eContainer.appendChild(checkboxContainer);
+
+                this.checkboxes.push({ checkbox, categoryId: category.value });
+            }
+
+            handleCheckboxChange(categoryId, checked) {
+                if (checked) {
+                    // Add this category
+                    this.selectedIds.add(categoryId);
+
+                    // Auto-select parent if this is a child category
+                    const category = this.categories.find(c => c.value === categoryId);
+                    if (category && category.parent_id && category.parent_id !== 0) {
+                        this.selectedIds.add(category.parent_id);
+
+                        // Update parent checkbox to checked
+                        const parentCheckbox = this.checkboxes.find(cb => cb.categoryId === category.parent_id);
+                        if (parentCheckbox) {
+                            parentCheckbox.checkbox.checked = true;
+                        }
+                    }
+                } else {
+                    // Remove this category
+                    this.selectedIds.delete(categoryId);
+
+                    // Auto-deselect children if this is a parent category
+                    const children = this.categories.filter(c => c.parent_id === categoryId);
+                    if (children.length > 0) {
+                        children.forEach(child => {
+                            this.selectedIds.delete(child.value);
+
+                            // Update child checkbox to unchecked
+                            const childCheckbox = this.checkboxes.find(cb => cb.categoryId === child.value);
+                            if (childCheckbox) {
+                                childCheckbox.checkbox.checked = false;
+                            }
+                        });
+                    }
+                }
+
+                // Update status bar
+                const statusBar = this.eGui.querySelector('#category-status-bar');
+                if (statusBar) {
+                    this.updateStatusBar(statusBar);
+                }
+            }
+
+            updateStatusBar(statusBar) {
+                const count = this.selectedIds.size;
+                statusBar.textContent = count === 0
+                    ? 'No categories selected'
+                    : `${count} categor${count === 1 ? 'y' : 'ies'} selected`;
+            }
+
+            clearAll() {
+                this.selectedIds.clear();
+                this.checkboxes.forEach(({ checkbox }) => {
+                    checkbox.checked = false;
+                });
+
+                // Update status bar
+                const statusBar = this.eGui.querySelector('#category-status-bar');
+                if (statusBar) {
+                    this.updateStatusBar(statusBar);
+                }
+            }
+
+            getGui() {
+                return this.eGui;
+            }
+
+            getValue() {
+                // Return comma-separated category IDs
+                const value = Array.from(this.selectedIds).sort((a, b) => a - b).join(',');
+                return value || null;
+            }
+
+            destroy() {
+                this.isDestroyed = true;
+            }
+
+            isPopup() {
+                return true;
+            }
+
+            isCancelBeforeStart() {
+                return false;
+            }
+
+            isCancelAfterEnd() {
+                return false;
+            }
+
+            focusIn() {
+                // Focus on first checkbox
+                if (this.checkboxes.length > 0 && !this.isDestroyed) {
+                    this.checkboxes[0].checkbox.focus();
+                }
+            }
+
+            focusOut() {
+                // Nothing to do
+            }
+        }
+
+        return CategoryEditor;
+    }
+
+    getBrandEditor() {
+        class BrandEditor {
+            constructor() {
+                this.eGui = null;
+                this.eContainer = null;
+                this.brands = [];
+                this.selectedId = null;
+                this.searchInput = null;
+                this.isDestroyed = false;
+            }
+
+            async init(params) {
+                this.params = params;
+
+                // Load brands from cache or fetch from API
+                await this.loadBrands();
+
+                // Parse existing brand ID
+                let currentBrandId = params.data.brand_id;
+
+                // If not in brand_id, try to read from relationships (nested mode)
+                if (!currentBrandId && params.data.relationships && params.data.relationships.brand) {
+                    const brandRel = params.data.relationships.brand.data;
+                    if (brandRel && brandRel.id) {
+                        currentBrandId = brandRel.id;
+                    }
+                }
+
+                this.selectedId = currentBrandId ? parseInt(currentBrandId) : null;
+
+                // Create container
+                this.eGui = document.createElement('div');
+                this.eGui.style.position = 'relative';
+                this.eGui.style.width = '280px';
+                this.eGui.style.maxHeight = '400px';
+                this.eGui.style.backgroundColor = 'white';
+                this.eGui.style.border = '2px solid #4CAF50';
+                this.eGui.style.borderRadius = '6px';
+                this.eGui.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                this.eGui.style.display = 'flex';
+                this.eGui.style.flexDirection = 'column';
+
+                // Header with title and buttons
+                const header = document.createElement('div');
+                header.style.padding = '10px 12px';
+                header.style.borderBottom = '1px solid #dee2e6';
+                header.style.backgroundColor = '#f8f9fa';
+                header.style.display = 'flex';
+                header.style.justifyContent = 'space-between';
+                header.style.alignItems = 'center';
+                header.style.borderTopLeftRadius = '4px';
+                header.style.borderTopRightRadius = '4px';
+
+                const title = document.createElement('span');
+                title.textContent = 'Select Brand';
+                title.style.fontWeight = '600';
+                title.style.fontSize = '13px';
+                title.style.color = '#495057';
+                header.appendChild(title);
+
+                const buttonContainer = document.createElement('div');
+                buttonContainer.style.display = 'flex';
+                buttonContainer.style.gap = '6px';
+
+                // Clear button
+                const clearBtn = document.createElement('button');
+                clearBtn.textContent = 'Clear';
+                clearBtn.style.padding = '4px 8px';
+                clearBtn.style.fontSize = '11px';
+                clearBtn.style.border = '1px solid #dc3545';
+                clearBtn.style.backgroundColor = '#fff';
+                clearBtn.style.color = '#dc3545';
+                clearBtn.style.borderRadius = '4px';
+                clearBtn.style.cursor = 'pointer';
+                clearBtn.style.fontWeight = '500';
+                clearBtn.addEventListener('click', () => this.clearSelection());
+                buttonContainer.appendChild(clearBtn);
+
+                // Done button
+                const doneBtn = document.createElement('button');
+                doneBtn.textContent = 'Done';
+                doneBtn.style.padding = '4px 12px';
+                doneBtn.style.fontSize = '11px';
+                doneBtn.style.border = 'none';
+                doneBtn.style.backgroundColor = '#4CAF50';
+                doneBtn.style.color = 'white';
+                doneBtn.style.borderRadius = '4px';
+                doneBtn.style.cursor = 'pointer';
+                doneBtn.style.fontWeight = '500';
+                doneBtn.addEventListener('click', () => {
+                    params.stopEditing();
+                });
+                buttonContainer.appendChild(doneBtn);
+
+                header.appendChild(buttonContainer);
+                this.eGui.appendChild(header);
+
+                // Search box
+                const searchContainer = document.createElement('div');
+                searchContainer.style.padding = '8px 12px';
+                searchContainer.style.borderBottom = '1px solid #dee2e6';
+
+                this.searchInput = document.createElement('input');
+                this.searchInput.type = 'text';
+                this.searchInput.placeholder = 'Search brands...';
+                this.searchInput.style.width = '100%';
+                this.searchInput.style.padding = '6px 8px';
+                this.searchInput.style.fontSize = '12px';
+                this.searchInput.style.border = '1px solid #ced4da';
+                this.searchInput.style.borderRadius = '4px';
+                this.searchInput.style.boxSizing = 'border-box';
+                this.searchInput.addEventListener('input', () => this.filterBrands());
+                searchContainer.appendChild(this.searchInput);
+                this.eGui.appendChild(searchContainer);
+
+                // Scrollable container for options
+                this.eContainer = document.createElement('div');
+                this.eContainer.style.padding = '4px';
+                this.eContainer.style.maxHeight = '280px';
+                this.eContainer.style.overflowY = 'auto';
+                this.eContainer.style.overflowX = 'hidden';
+
+                // Populate options
+                this.populateOptions();
+
+                this.eGui.appendChild(this.eContainer);
+
+                // Status bar showing selection
+                const statusBar = document.createElement('div');
+                statusBar.style.padding = '8px 12px';
+                statusBar.style.borderTop = '1px solid #dee2e6';
+                statusBar.style.backgroundColor = '#f8f9fa';
+                statusBar.style.fontSize = '11px';
+                statusBar.style.color = '#6c757d';
+                statusBar.style.borderBottomLeftRadius = '4px';
+                statusBar.style.borderBottomRightRadius = '4px';
+                statusBar.id = 'brand-status-bar';
+                this.updateStatusBar(statusBar);
+                this.eGui.appendChild(statusBar);
+            }
+
+            async loadBrands() {
+                // Check if brands already cached globally
+                if (window._cachedBrands && Array.isArray(window._cachedBrands)) {
+                    // Check if cache is in JSON:API format (needs transformation)
+                    if (window._cachedBrands.length > 0 && window._cachedBrands[0].type === 'brands') {
+                        // Transform from JSON:API format to editor format
+                        const brandsMap = new Map();
+                        window._cachedBrands.forEach(brand => {
+                            const brandData = brand.attributes || brand;
+                            brandsMap.set(brand.id, {
+                                value: parseInt(brand.id),
+                                label: brandData.name
+                            });
+                        });
+                        this.brands = Array.from(brandsMap.values())
+                            .sort((a, b) => a.label.localeCompare(b.label));
+                    } else {
+                        // Already in transformed format
+                        this.brands = window._cachedBrands;
+                    }
+                    return;
+                }
+
+                // Try to read from currentData.included (fallback for backwards compatibility)
+                try {
+                    const currentData = this.params.context?.gridInstance?.currentData;
+
+                    if (currentData && currentData.included && Array.isArray(currentData.included)) {
+                        // Extract unique brands from included data
+                        const brandsMap = new Map();
+                        currentData.included
+                            .filter(item => item.type === 'brands')
+                            .forEach(brand => {
+                                const brandData = brand.attributes || brand;
+                                brandsMap.set(brand.id, {
+                                    value: parseInt(brand.id),
+                                    label: brandData.name
+                                });
+                            });
+
+                        this.brands = Array.from(brandsMap.values())
+                            .sort((a, b) => a.label.localeCompare(b.label));
+
+                        return;
+                    }
+
+                    console.warn('[BrandEditor] No brands data available, will use empty list');
+                    this.brands = [];
+                } catch (error) {
+                    console.error('[BrandEditor] Failed to load brands:', error);
+                    this.brands = [];
+                }
+            }
+
+            populateOptions(filterText = '') {
+                this.eContainer.innerHTML = '';
+
+                if (this.brands.length === 0) {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.textContent = 'No brands available';
+                    emptyMsg.style.padding = '12px';
+                    emptyMsg.style.color = '#6c757d';
+                    emptyMsg.style.fontStyle = 'italic';
+                    emptyMsg.style.fontSize = '12px';
+                    this.eContainer.appendChild(emptyMsg);
+                    return;
+                }
+
+                // Filter brands based on search
+                const filteredBrands = filterText
+                    ? this.brands.filter(b => b.label.toLowerCase().includes(filterText.toLowerCase()))
+                    : this.brands;
+
+                if (filteredBrands.length === 0) {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.textContent = 'No matching brands';
+                    emptyMsg.style.padding = '12px';
+                    emptyMsg.style.color = '#6c757d';
+                    emptyMsg.style.fontStyle = 'italic';
+                    emptyMsg.style.fontSize = '12px';
+                    this.eContainer.appendChild(emptyMsg);
+                    return;
+                }
+
+                // Add brand options
+                filteredBrands.forEach(brand => {
+                    this.addOption(brand);
+                });
+            }
+
+            addOption(brand) {
+                const optionContainer = document.createElement('div');
+                optionContainer.style.display = 'flex';
+                optionContainer.style.alignItems = 'center';
+                optionContainer.style.padding = '8px 10px';
+                optionContainer.style.cursor = 'pointer';
+                optionContainer.style.borderRadius = '4px';
+                optionContainer.style.marginBottom = '2px';
+                optionContainer.style.transition = 'background-color 0.15s';
+                optionContainer.style.fontSize = '12px';
+                optionContainer.style.fontWeight = '500';
+
+                const isSelected = this.selectedId === brand.value;
+                if (isSelected) {
+                    optionContainer.style.backgroundColor = '#e3f2fd';
+                    optionContainer.style.borderLeft = '3px solid #2196F3';
+                    optionContainer.style.paddingLeft = '7px';
+                }
+
+                optionContainer.addEventListener('mouseenter', () => {
+                    if (!isSelected) {
+                        optionContainer.style.backgroundColor = '#f8f9fa';
+                    }
+                });
+                optionContainer.addEventListener('mouseleave', () => {
+                    if (!isSelected) {
+                        optionContainer.style.backgroundColor = 'transparent';
+                    }
+                });
+
+                optionContainer.addEventListener('click', () => this.selectBrand(brand.value));
+
+                const label = document.createElement('span');
+                label.textContent = brand.label;
+                label.style.userSelect = 'none';
+
+                optionContainer.appendChild(label);
+                this.eContainer.appendChild(optionContainer);
+            }
+
+            selectBrand(brandId) {
+                this.selectedId = brandId;
+
+                // Re-populate to update visual selection
+                const filterText = this.searchInput ? this.searchInput.value : '';
+                this.populateOptions(filterText);
+
+                // Update status bar
+                const statusBar = this.eGui.querySelector('#brand-status-bar');
+                if (statusBar) {
+                    this.updateStatusBar(statusBar);
+                }
+            }
+
+            clearSelection() {
+                this.selectedId = null;
+
+                // Re-populate to update visual selection
+                const filterText = this.searchInput ? this.searchInput.value : '';
+                this.populateOptions(filterText);
+
+                // Update status bar
+                const statusBar = this.eGui.querySelector('#brand-status-bar');
+                if (statusBar) {
+                    this.updateStatusBar(statusBar);
+                }
+            }
+
+            filterBrands() {
+                const filterText = this.searchInput.value;
+                this.populateOptions(filterText);
+            }
+
+            updateStatusBar(statusBar) {
+                if (this.selectedId) {
+                    const brand = this.brands.find(b => b.value === this.selectedId);
+                    statusBar.textContent = brand ? `Selected: ${brand.label}` : 'No brand selected';
+                } else {
+                    statusBar.textContent = 'No brand selected';
+                }
+            }
+
+            getGui() {
+                return this.eGui;
+            }
+
+            getValue() {
+                return this.selectedId;
+            }
+
+            destroy() {
+                this.isDestroyed = true;
+            }
+
+            isPopup() {
+                return true;
+            }
+
+            isCancelBeforeStart() {
+                return false;
+            }
+
+            isCancelAfterEnd() {
+                return false;
+            }
+
+            focusIn() {
+                // Focus on search input
+                if (this.searchInput && !this.isDestroyed) {
+                    this.searchInput.focus();
+                }
+            }
+
+            focusOut() {
+                // Nothing to do
+            }
+        }
+
+        return BrandEditor;
+    }
+
+    getSupplierEditor() {
+        class SupplierEditor {
+            constructor() {
+                this.eGui = null;
+                this.eContainer = null;
+                this.suppliers = [];
+                this.selectedId = null;
+                this.searchInput = null;
+                this.isDestroyed = false;
+            }
+
+            async init(params) {
+                this.params = params;
+
+                // Load suppliers from cache or fetch from API
+                await this.loadSuppliers();
+
+                // Parse existing supplier ID
+                let currentSupplierId = params.data.supplier_id;
+
+                // If not in supplier_id, try to read from relationships (nested mode)
+                if (!currentSupplierId && params.data.relationships && params.data.relationships.supplier) {
+                    const supplierRel = params.data.relationships.supplier.data;
+                    if (supplierRel && supplierRel.id) {
+                        currentSupplierId = supplierRel.id;
+                    }
+                }
+
+                this.selectedId = currentSupplierId ? parseInt(currentSupplierId) : null;
+
+                // Create container
+                this.eGui = document.createElement('div');
+                this.eGui.style.position = 'relative';
+                this.eGui.style.width = '280px';
+                this.eGui.style.maxHeight = '400px';
+                this.eGui.style.backgroundColor = 'white';
+                this.eGui.style.border = '2px solid #4CAF50';
+                this.eGui.style.borderRadius = '6px';
+                this.eGui.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                this.eGui.style.display = 'flex';
+                this.eGui.style.flexDirection = 'column';
+
+                // Header with title and buttons
+                const header = document.createElement('div');
+                header.style.padding = '10px 12px';
+                header.style.borderBottom = '1px solid #dee2e6';
+                header.style.backgroundColor = '#f8f9fa';
+                header.style.display = 'flex';
+                header.style.justifyContent = 'space-between';
+                header.style.alignItems = 'center';
+                header.style.borderTopLeftRadius = '4px';
+                header.style.borderTopRightRadius = '4px';
+
+                const title = document.createElement('span');
+                title.textContent = 'Select Supplier';
+                title.style.fontWeight = '600';
+                title.style.fontSize = '13px';
+                title.style.color = '#495057';
+                header.appendChild(title);
+
+                const buttonContainer = document.createElement('div');
+                buttonContainer.style.display = 'flex';
+                buttonContainer.style.gap = '6px';
+
+                // Clear button
+                const clearBtn = document.createElement('button');
+                clearBtn.textContent = 'Clear';
+                clearBtn.style.padding = '4px 8px';
+                clearBtn.style.fontSize = '11px';
+                clearBtn.style.border = '1px solid #dc3545';
+                clearBtn.style.backgroundColor = '#fff';
+                clearBtn.style.color = '#dc3545';
+                clearBtn.style.borderRadius = '4px';
+                clearBtn.style.cursor = 'pointer';
+                clearBtn.style.fontWeight = '500';
+                clearBtn.addEventListener('click', () => this.clearSelection());
+                buttonContainer.appendChild(clearBtn);
+
+                // Done button
+                const doneBtn = document.createElement('button');
+                doneBtn.textContent = 'Done';
+                doneBtn.style.padding = '4px 12px';
+                doneBtn.style.fontSize = '11px';
+                doneBtn.style.border = 'none';
+                doneBtn.style.backgroundColor = '#4CAF50';
+                doneBtn.style.color = 'white';
+                doneBtn.style.borderRadius = '4px';
+                doneBtn.style.cursor = 'pointer';
+                doneBtn.style.fontWeight = '500';
+                doneBtn.addEventListener('click', () => {
+                    params.stopEditing();
+                });
+                buttonContainer.appendChild(doneBtn);
+
+                header.appendChild(buttonContainer);
+                this.eGui.appendChild(header);
+
+                // Search box
+                const searchContainer = document.createElement('div');
+                searchContainer.style.padding = '8px 12px';
+                searchContainer.style.borderBottom = '1px solid #dee2e6';
+
+                this.searchInput = document.createElement('input');
+                this.searchInput.type = 'text';
+                this.searchInput.placeholder = 'Search suppliers...';
+                this.searchInput.style.width = '100%';
+                this.searchInput.style.padding = '6px 8px';
+                this.searchInput.style.fontSize = '12px';
+                this.searchInput.style.border = '1px solid #ced4da';
+                this.searchInput.style.borderRadius = '4px';
+                this.searchInput.style.boxSizing = 'border-box';
+                this.searchInput.addEventListener('input', () => this.filterSuppliers());
+                searchContainer.appendChild(this.searchInput);
+                this.eGui.appendChild(searchContainer);
+
+                // Scrollable container for options
+                this.eContainer = document.createElement('div');
+                this.eContainer.style.padding = '4px';
+                this.eContainer.style.maxHeight = '280px';
+                this.eContainer.style.overflowY = 'auto';
+                this.eContainer.style.overflowX = 'hidden';
+
+                // Populate options
+                this.populateOptions();
+
+                this.eGui.appendChild(this.eContainer);
+
+                // Status bar showing selection
+                const statusBar = document.createElement('div');
+                statusBar.style.padding = '8px 12px';
+                statusBar.style.borderTop = '1px solid #dee2e6';
+                statusBar.style.backgroundColor = '#f8f9fa';
+                statusBar.style.fontSize = '11px';
+                statusBar.style.color = '#6c757d';
+                statusBar.style.borderBottomLeftRadius = '4px';
+                statusBar.style.borderBottomRightRadius = '4px';
+                statusBar.id = 'supplier-status-bar';
+                this.updateStatusBar(statusBar);
+                this.eGui.appendChild(statusBar);
+            }
+
+            async loadSuppliers() {
+                // Check if suppliers already cached globally
+                if (window._cachedSuppliers && Array.isArray(window._cachedSuppliers)) {
+                    // Check if cache is in JSON:API format (needs transformation)
+                    if (window._cachedSuppliers.length > 0 && window._cachedSuppliers[0].type === 'suppliers') {
+                        // Transform from JSON:API format to editor format
+                        const suppliersMap = new Map();
+                        window._cachedSuppliers.forEach(supplier => {
+                            const supplierData = supplier.attributes || supplier;
+                            // Use company_name, or fallback to first_name + last_name
+                            const supplierName = supplierData.company_name ||
+                                `${supplierData.first_name || ''} ${supplierData.last_name || ''}`.trim() ||
+                                'Unnamed Supplier';
+                            suppliersMap.set(supplier.id, {
+                                value: parseInt(supplier.id),
+                                label: supplierName
+                            });
+                        });
+                        this.suppliers = Array.from(suppliersMap.values())
+                            .sort((a, b) => a.label.localeCompare(b.label));
+                    } else {
+                        // Already in transformed format
+                        this.suppliers = window._cachedSuppliers;
+                    }
+                    return;
+                }
+
+                // Try to read from currentData.included (fallback for backwards compatibility)
+                try {
+                    const currentData = this.params.context?.gridInstance?.currentData;
+
+                    if (currentData && currentData.included && Array.isArray(currentData.included)) {
+                        // Extract unique suppliers from included data
+                        const suppliersMap = new Map();
+                        currentData.included
+                            .filter(item => item.type === 'suppliers')
+                            .forEach(supplier => {
+                                const supplierData = supplier.attributes || supplier;
+                                // Use company_name, or fallback to first_name + last_name
+                                const supplierName = supplierData.company_name ||
+                                    `${supplierData.first_name || ''} ${supplierData.last_name || ''}`.trim() ||
+                                    'Unnamed Supplier';
+                                suppliersMap.set(supplier.id, {
+                                    value: parseInt(supplier.id),
+                                    label: supplierName
+                                });
+                            });
+
+                        this.suppliers = Array.from(suppliersMap.values())
+                            .sort((a, b) => a.label.localeCompare(b.label));
+
+                        return;
+                    }
+
+                    console.warn('[SupplierEditor] No suppliers data available, will use empty list');
+                    this.suppliers = [];
+                } catch (error) {
+                    console.error('[SupplierEditor] Failed to load suppliers:', error);
+                    this.suppliers = [];
+                }
+            }
+
+            populateOptions(filterText = '') {
+                this.eContainer.innerHTML = '';
+
+                if (this.suppliers.length === 0) {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.textContent = 'No suppliers available';
+                    emptyMsg.style.padding = '12px';
+                    emptyMsg.style.color = '#6c757d';
+                    emptyMsg.style.fontStyle = 'italic';
+                    emptyMsg.style.fontSize = '12px';
+                    this.eContainer.appendChild(emptyMsg);
+                    return;
+                }
+
+                // Filter suppliers based on search
+                const filteredSuppliers = filterText
+                    ? this.suppliers.filter(s => s.label.toLowerCase().includes(filterText.toLowerCase()))
+                    : this.suppliers;
+
+                if (filteredSuppliers.length === 0) {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.textContent = 'No matching suppliers';
+                    emptyMsg.style.padding = '12px';
+                    emptyMsg.style.color = '#6c757d';
+                    emptyMsg.style.fontStyle = 'italic';
+                    emptyMsg.style.fontSize = '12px';
+                    this.eContainer.appendChild(emptyMsg);
+                    return;
+                }
+
+                // Add supplier options
+                filteredSuppliers.forEach(supplier => {
+                    this.addOption(supplier);
+                });
+            }
+
+            addOption(supplier) {
+                const optionContainer = document.createElement('div');
+                optionContainer.style.display = 'flex';
+                optionContainer.style.alignItems = 'center';
+                optionContainer.style.padding = '8px 10px';
+                optionContainer.style.cursor = 'pointer';
+                optionContainer.style.borderRadius = '4px';
+                optionContainer.style.marginBottom = '2px';
+                optionContainer.style.transition = 'background-color 0.15s';
+                optionContainer.style.fontSize = '12px';
+                optionContainer.style.fontWeight = '500';
+
+                const isSelected = this.selectedId === supplier.value;
+                if (isSelected) {
+                    optionContainer.style.backgroundColor = '#e3f2fd';
+                    optionContainer.style.borderLeft = '3px solid #2196F3';
+                    optionContainer.style.paddingLeft = '7px';
+                }
+
+                optionContainer.addEventListener('mouseenter', () => {
+                    if (!isSelected) {
+                        optionContainer.style.backgroundColor = '#f8f9fa';
+                    }
+                });
+                optionContainer.addEventListener('mouseleave', () => {
+                    if (!isSelected) {
+                        optionContainer.style.backgroundColor = 'transparent';
+                    }
+                });
+
+                optionContainer.addEventListener('click', () => this.selectSupplier(supplier.value));
+
+                const label = document.createElement('span');
+                label.textContent = supplier.label;
+                label.style.userSelect = 'none';
+
+                optionContainer.appendChild(label);
+                this.eContainer.appendChild(optionContainer);
+            }
+
+            selectSupplier(supplierId) {
+                this.selectedId = supplierId;
+
+                // Re-populate to update visual selection
+                const filterText = this.searchInput ? this.searchInput.value : '';
+                this.populateOptions(filterText);
+
+                // Update status bar
+                const statusBar = this.eGui.querySelector('#supplier-status-bar');
+                if (statusBar) {
+                    this.updateStatusBar(statusBar);
+                }
+            }
+
+            clearSelection() {
+                this.selectedId = null;
+
+                // Re-populate to update visual selection
+                const filterText = this.searchInput ? this.searchInput.value : '';
+                this.populateOptions(filterText);
+
+                // Update status bar
+                const statusBar = this.eGui.querySelector('#supplier-status-bar');
+                if (statusBar) {
+                    this.updateStatusBar(statusBar);
+                }
+            }
+
+            filterSuppliers() {
+                const filterText = this.searchInput.value;
+                this.populateOptions(filterText);
+            }
+
+            updateStatusBar(statusBar) {
+                if (this.selectedId) {
+                    const supplier = this.suppliers.find(s => s.value === this.selectedId);
+                    statusBar.textContent = supplier ? `Selected: ${supplier.label}` : 'No supplier selected';
+                } else {
+                    statusBar.textContent = 'No supplier selected';
+                }
+            }
+
+            getGui() {
+                return this.eGui;
+            }
+
+            getValue() {
+                return this.selectedId;
+            }
+
+            destroy() {
+                this.isDestroyed = true;
+            }
+
+            isPopup() {
+                return true;
+            }
+
+            isCancelBeforeStart() {
+                return false;
+            }
+
+            isCancelAfterEnd() {
+                return false;
+            }
+
+            focusIn() {
+                // Focus on search input
+                if (this.searchInput && !this.isDestroyed) {
+                    this.searchInput.focus();
+                }
+            }
+
+            focusOut() {
+                // Nothing to do
+            }
+        }
+
+        return SupplierEditor;
+    }
 }
 
 // CommonJS compatibility
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {GridRenderer};
+    module.exports = { GridRenderer };
 }

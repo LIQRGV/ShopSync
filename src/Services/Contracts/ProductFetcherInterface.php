@@ -109,13 +109,4 @@ interface ProductFetcherInterface
      * @return mixed Updated product or null
      */
     public function uploadProductImage($id, $file);
-
-    /**
-     * Get all enabled attributes
-     * WTM: fetch from WL API
-     * WL: query database directly
-     *
-     * @return array
-     */
-    public function getAllEnabledAttributes(): array;
 }

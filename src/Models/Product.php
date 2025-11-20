@@ -38,6 +38,7 @@ class Product extends Model
         'seo_description',
         'related_products',
         'category_id',
+        'sub_category_id',
         'brand_id',
         'location_id',
         'supplier_id',
@@ -49,7 +50,7 @@ class Product extends Model
         'sale_price' => 'decimal:2',
         'trade_price' => 'decimal:2',
         'related_products' => 'array',
-        'category_id' => 'integer',
+        // category_id removed from casts to support comma-separated IDs (multi-category)
         'brand_id' => 'integer',
         'location_id' => 'integer',
         'supplier_id' => 'integer',
@@ -63,11 +64,45 @@ class Product extends Model
     ];
 
     /**
-     * Get the category that owns the product
+     * Get the category that owns the product (primary category)
      */
     public function category(): BelongsTo
     {
-        return $this->belongsTo(Category::class, 'category_id');
+        $categoryModel = Category::class;
+        return $this->belongsTo($categoryModel, 'category_id');
+    }
+
+    /**
+     * Get all categories for the product (supports comma-separated category_ids)
+     * Returns a collection combining both category_id (parents) and sub_category_id (children)
+     */
+    public function categories()
+    {
+        $categoryModel = Category::class;
+
+        $categoryIds = [];
+
+        // Get parent category IDs from category_id field
+        if (!empty($this->category_id)) {
+            $parentIds = is_string($this->category_id)
+                ? array_filter(explode(',', $this->category_id))
+                : [$this->category_id];
+            $categoryIds = array_merge($categoryIds, $parentIds);
+        }
+
+        // Get subcategory IDs from sub_category_id field
+        if (!empty($this->sub_category_id)) {
+            $subIds = is_string($this->sub_category_id)
+                ? array_filter(explode(',', $this->sub_category_id))
+                : [$this->sub_category_id];
+            $categoryIds = array_merge($categoryIds, $subIds);
+        }
+
+        if (empty($categoryIds)) {
+            return collect([]);
+        }
+
+        return $categoryModel::whereIn('id', $categoryIds)->get();
     }
 
     /**
@@ -75,7 +110,8 @@ class Product extends Model
      */
     public function brand(): BelongsTo
     {
-        return $this->belongsTo(Brand::class, 'brand_id');
+        $brandModel = Brand::class;
+        return $this->belongsTo($brandModel, 'brand_id');
     }
 
     /**
@@ -83,7 +119,8 @@ class Product extends Model
      */
     public function location(): BelongsTo
     {
-        return $this->belongsTo(Location::class, 'location_id');
+        $locationModel = Location::class;
+        return $this->belongsTo($locationModel, 'location_id');
     }
 
     /**
@@ -91,7 +128,8 @@ class Product extends Model
      */
     public function supplier(): BelongsTo
     {
-        return $this->belongsTo(Supplier::class, 'supplier_id');
+        $supplierModel = Supplier::class;
+        return $this->belongsTo($supplierModel, 'supplier_id');
     }
 
     /**

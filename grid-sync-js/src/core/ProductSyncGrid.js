@@ -1,6 +1,6 @@
 /**
  * ProductSyncGrid - Unified AG Grid orchestrator for product synchronization
- * Supports both nested and flat data structures via GridDataAdapter
+ * Uses JSON:API nested data structure via GridDataAdapter
  *
  * @module ProductSyncGrid
  */
@@ -17,26 +17,22 @@ export class ProductSyncGrid {
     /**
      * @param {Object} config - Configuration object
      * @param {string} config.apiEndpoint - API endpoint URL
-     * @param {string} [config.dataMode='auto'] - Data structure mode: 'nested', 'flat', or 'auto'
      * @param {string} [config.gridElementId='#productGrid'] - Grid container selector
      * @param {string} [config.clientId] - Client ID for multi-tenant filtering
      * @param {string} [config.clientBaseUrl=''] - Base URL for client assets
      * @param {boolean} [config.enableSSE=true] - Enable Server-Sent Events
      * @param {string} [config.sseEndpoint='/api/v1/sse/events'] - SSE endpoint URL
      * @param {string} [config.csvExportPrefix='products'] - Prefix for CSV export filename
-     * @param {Array} [config.masterAttributes=[]] - Master attributes data (for flat mode)
      */
     constructor(config) {
         // Configuration
         this.config = {
-            dataMode: 'auto',
             gridElementId: '#productGrid',
             enableSSE: true,
             sseEndpoint: '/api/v1/sse/events',
             clientId: null,
             clientBaseUrl: '',
             csvExportPrefix: 'products',
-            masterAttributes: [],
             ...config
         };
 
@@ -77,16 +73,15 @@ export class ProductSyncGrid {
      * Initialize all modular components
      */
     initializeComponents() {
-        // Initialize data adapter first
-        this.dataAdapter = new GridDataAdapter(this.config.dataMode);
+        // Initialize data adapter (always uses JSON:API nested format)
+        this.dataAdapter = new GridDataAdapter();
 
         // Initialize API client with data adapter
         this.apiClient = new ProductGridApiClient({
             baseUrl: this.config.apiEndpoint,
             clientId: this.config.clientId,
             clientBaseUrl: this.config.clientBaseUrl,
-            dataAdapter: this.dataAdapter,
-            dataMode: this.config.dataMode
+            dataAdapter: this.dataAdapter
         });
 
         // Initialize grid renderer with data adapter
@@ -94,8 +89,7 @@ export class ProductSyncGrid {
             baseUrl: this.config.clientBaseUrl || this.config.apiEndpoint,
             dataAdapter: this.dataAdapter,
             currentData: null,
-            enabledAttributes: this.enabledAttributes,
-            masterAttributes: this.config.masterAttributes
+            enabledAttributes: this.enabledAttributes
         });
 
         // Initialize SSE if enabled
@@ -114,6 +108,15 @@ export class ProductSyncGrid {
             return;
         }
 
+        // Load dropdown options FIRST (categories, brands, suppliers)
+        // This caches them globally for use in cell editors
+        try {
+            await this.apiClient.loadDropdownOptions();
+            console.log('ProductSync: Dropdown options loaded and cached');
+        } catch (error) {
+            console.warn('ProductSync: Failed to load dropdown options, will try again later', error);
+        }
+
         // Pre-load data to get attribute groups BEFORE initializing grid (both modes)
         let initialColumnDefs = this.gridRenderer.getColumnDefs();
 
@@ -127,19 +130,10 @@ export class ProductSyncGrid {
                 const attributeColumnGroups = this.gridRenderer.generateAttributeColumnGroups();
 
                 if (attributeColumnGroups.length > 0) {
-                    const urlSlugIndex = initialColumnDefs.findIndex(col =>
-                        col.headerName === 'URL Slug' || col.field === 'slug' || col.field === this.dataAdapter.getFieldPath('slug')
-                    );
-
                     const newColumnDefs = [];
-                    if (urlSlugIndex > -1) {
-                        newColumnDefs.push(...initialColumnDefs.slice(0, urlSlugIndex));
-                        newColumnDefs.push(...attributeColumnGroups);
-                        newColumnDefs.push(...initialColumnDefs.slice(urlSlugIndex));
-                    } else {
-                        newColumnDefs.push(...initialColumnDefs);
-                        newColumnDefs.push(...attributeColumnGroups);
-                    }
+
+                    newColumnDefs.push(...initialColumnDefs);
+                    newColumnDefs.push(...attributeColumnGroups);
 
                     initialColumnDefs = newColumnDefs;
                 }
@@ -310,38 +304,187 @@ export class ProductSyncGrid {
         const fieldName = colDef.field;
 
         try {
-            // Check if this is a relationship update (category, brand, supplier)
-            // IMPORTANT: Check _relationshipUpdate BEFORE comparing newValue/oldValue
-            // because valueSetter sets _relationshipUpdate but doesn't modify the data,
-            // so valueGetter returns the same value causing newValue === oldValue
-            if (data._relationshipUpdate) {
-                const { field, value } = data._relationshipUpdate;
+            // Check if this is a category update (before checking value equality)
+            if (data._categoryUpdate) {
+                const { categoryId } = data._categoryUpdate;
 
-                // Update relationship via API
-                const result = await this.apiClient.updateProductRelationship(
+                const result = await this.apiClient.updateProduct(
                     productId,
-                    field,
-                    value
+                    'category_id',
+                    categoryId,
+                    'category' // Include category relationship in response
                 );
 
-                // Update local data with response
+                // Update local data with server response
                 if (result.data) {
                     const updatedFields = result.data.attributes || result.data;
                     Object.keys(updatedFields).forEach(key => {
                         this.dataAdapter.setValue(data, key, updatedFields[key]);
                     });
+
+                    // Update category relationship if included
+                    if (result.data.relationships && result.data.relationships.category) {
+                        data.relationships = data.relationships || {};
+                        data.relationships.category = result.data.relationships.category;
+                    }
+
+                    // Update included categories if present
+                    if (result.included && this.currentData && this.currentData.included) {
+                        result.included.forEach(includedItem => {
+                            if (includedItem.type === 'categories') {
+                                const existingIndex = this.currentData.included.findIndex(
+                                    item => item.type === 'categories' && item.id === includedItem.id
+                                );
+
+                                if (existingIndex >= 0) {
+                                    this.currentData.included[existingIndex] = includedItem;
+                                } else {
+                                    this.currentData.included.push(includedItem);
+                                }
+                            }
+                        });
+                    }
                 }
 
                 // Clear temp data
-                delete data._relationshipUpdate;
+                delete data._categoryUpdate;
 
-                // Refresh the cell
+                // Show success notification
+                this.showNotification('success', 'Category updated successfully');
+
+                // Refresh the cell to show updated category name
                 this.gridApi.refreshCells({
                     rowNodes: [event.node],
+                    columns: ['categoryName'],
                     force: true
                 });
 
-                this.showNotification('success', 'Relationship updated successfully');
+                return;
+            }
+
+            // Check if this is a brand update
+            if (data._brandUpdate) {
+                const { brandId } = data._brandUpdate;
+
+                const result = await this.apiClient.updateProduct(
+                    productId,
+                    'brand_id',
+                    brandId,
+                    'brand,supplier' // Include both brand and supplier to preserve supplier display
+                );
+
+                // Update local data with server response
+                if (result.data) {
+                    const updatedFields = result.data.attributes || result.data;
+                    // Preserve existing values for display fields if new value is null/undefined
+                    const preservedFields = ['supplier_name', 'category_name'];
+                    Object.keys(updatedFields).forEach(key => {
+                        // Only update if not a preserved field, or if the new value is not null/undefined
+                        if (!preservedFields.includes(key) || updatedFields[key] != null) {
+                            this.dataAdapter.setValue(data, key, updatedFields[key]);
+                        }
+                    });
+
+                    // Update brand relationship if included
+                    if (result.data.relationships && result.data.relationships.brand) {
+                        data.relationships = data.relationships || {};
+                        data.relationships.brand = result.data.relationships.brand;
+                    }
+
+                    // Update included brands if present
+                    if (result.included && this.currentData && this.currentData.included) {
+                        result.included.forEach(includedItem => {
+                            if (includedItem.type === 'brands') {
+                                const existingIndex = this.currentData.included.findIndex(
+                                    item => item.type === 'brands' && item.id === includedItem.id
+                                );
+
+                                if (existingIndex >= 0) {
+                                    this.currentData.included[existingIndex] = includedItem;
+                                } else {
+                                    this.currentData.included.push(includedItem);
+                                }
+                            }
+                        });
+                    }
+                }
+
+                // Clear temp data
+                delete data._brandUpdate;
+
+                // Show success notification
+                this.showNotification('success', 'Brand updated successfully');
+
+                // Refresh the cell to show updated brand name
+                this.gridApi.refreshCells({
+                    rowNodes: [event.node],
+                    columns: ['brandName'],
+                    force: true
+                });
+
+                return;
+            }
+
+            // Check if this is a supplier update
+            if (data._supplierUpdate) {
+                const { supplierId } = data._supplierUpdate;
+
+                const result = await this.apiClient.updateProduct(
+                    productId,
+                    'supplier_id',
+                    supplierId,
+                    'supplier,brand' // Include both supplier and brand to preserve brand display
+                );
+
+                // Update local data with server response
+                if (result.data) {
+                    const updatedFields = result.data.attributes || result.data;
+                    // Preserve existing values for display fields if new value is null/undefined
+                    const preservedFields = ['brand_name', 'category_name'];
+                    Object.keys(updatedFields).forEach(key => {
+                        // Only update if not a preserved field, or if the new value is not null/undefined
+                        if (!preservedFields.includes(key) || updatedFields[key] != null) {
+                            this.dataAdapter.setValue(data, key, updatedFields[key]);
+                        }
+                    });
+
+                    // Update supplier relationship if included
+                    if (result.data.relationships && result.data.relationships.supplier) {
+                        data.relationships = data.relationships || {};
+                        data.relationships.supplier = result.data.relationships.supplier;
+                    }
+
+                    // Update included suppliers if present
+                    if (result.included && this.currentData && this.currentData.included) {
+                        result.included.forEach(includedItem => {
+                            if (includedItem.type === 'suppliers') {
+                                const existingIndex = this.currentData.included.findIndex(
+                                    item => item.type === 'suppliers' && item.id === includedItem.id
+                                );
+
+                                if (existingIndex >= 0) {
+                                    this.currentData.included[existingIndex] = includedItem;
+                                } else {
+                                    this.currentData.included.push(includedItem);
+                                }
+                            }
+                        });
+                    }
+                }
+
+                // Clear temp data
+                delete data._supplierUpdate;
+
+                // Show success notification
+                this.showNotification('success', 'Supplier updated successfully');
+
+                // Refresh the cell to show updated supplier name
+                this.gridApi.refreshCells({
+                    rowNodes: [event.node],
+                    columns: ['supplierName'],
+                    force: true
+                });
+
                 return;
             }
 
@@ -431,7 +574,7 @@ export class ProductSyncGrid {
             } else {
                 // Regular field update
 
-                // Skip update if value hasn't changed
+                // Skip if no actual value change
                 if (newValue === oldValue) {
                     return;
                 }
@@ -1094,9 +1237,6 @@ export class ProductSyncGrid {
             if (oldestToast.updateInterval) {
                 clearInterval(oldestToast.updateInterval);
             }
-            if (oldestToast.autoCloseTimeout) {
-                clearTimeout(oldestToast.autoCloseTimeout);
-            }
             oldestToast.remove();
             this.repositionNotifications();
         }
@@ -1129,9 +1269,6 @@ export class ProductSyncGrid {
             if (toast.updateInterval) {
                 clearInterval(toast.updateInterval);
             }
-            if (toast.autoCloseTimeout) {
-                clearTimeout(toast.autoCloseTimeout);
-            }
             toast.remove();
             this.repositionNotifications();
         });
@@ -1143,14 +1280,6 @@ export class ProductSyncGrid {
             const elapsed = Date.now() - toast.createdAt;
             timestampElement.textContent = this.formatElapsedTime(elapsed);
         }, 10000);
-
-        toast.autoCloseTimeout = setTimeout(() => {
-            if (toast.updateInterval) {
-                clearInterval(toast.updateInterval);
-            }
-            toast.remove();
-            this.repositionNotifications();
-        }, 3000);
     }
 
     /**
@@ -1550,17 +1679,12 @@ export class ProductSyncGrid {
     handleSSEConnectionChange(state, data) {
         this.updateSSEStatusIndicator(state);
 
-        // Issue #250: Disabled toast notifications for normal connect/disconnect events
-        // Visual status indicator is sufficient for connection state changes
-        // Only show notifications for actual errors that require user attention
         switch (state) {
             case 'connected':
-                // this.showNotification('success', 'Real-time sync connected');
-                // Disabled per issue #250 - visual indicator is sufficient
+                this.showNotification('success', 'Real-time sync connected');
                 break;
             case 'disconnected':
-                // this.showNotification('warning', 'Real-time sync disconnected');
-                // Disabled per issue #250 - visual indicator is sufficient
+                this.showNotification('warning', 'Real-time sync disconnected');
                 break;
             case 'failed':
                 this.showNotification('error', 'Real-time sync connection failed');

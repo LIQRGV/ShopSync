@@ -2,113 +2,37 @@
 
 namespace TheDiamondBox\ShopSync\Services;
 
+use TheDiamondBox\ShopSync\Services\Fetchers\Supplier\SupplierFetcherFactory;
+use TheDiamondBox\ShopSync\Transformers\SupplierTransformer;
 use Illuminate\Http\Request;
-use TheDiamondBox\ShopSync\Services\SupplierFetchers\SupplierFetcherFactory;
-use TheDiamondBox\ShopSync\Services\Contracts\SupplierFetcherInterface;
-use TheDiamondBox\ShopSync\Transformers\SupplierJsonApiTransformer;
 
+/**
+ * Supplier Service
+ *
+ * Handles business logic for supplier operations.
+ * Follows the same pattern as ProductService with fetcher and transformer.
+ */
 class SupplierService
 {
     protected $supplierFetcher;
     protected $transformer;
 
-    public function __construct(SupplierJsonApiTransformer $transformer = null, Request $request = null)
+    public function __construct(SupplierTransformer $transformer = null, Request $request = null)
     {
         $this->supplierFetcher = SupplierFetcherFactory::makeFromConfig($request);
-        $this->transformer = $transformer ?? new SupplierJsonApiTransformer();
+        $this->transformer = $transformer ?? new SupplierTransformer();
     }
 
     /**
-     * Get suppliers with optional pagination
+     * Get all active suppliers with JSON API transformation
      *
-     * @param array $filters
-     * @param array $pagination
      * @return array
      */
-    public function getSuppliers(array $filters = [], array $pagination = [])
+    public function getAllSuppliers(): array
     {
-        $paginate = $pagination['paginate'] ?? false;
-        $perPage = $pagination['per_page'] ?? 100;
+        $suppliers = $this->supplierFetcher->getAll();
 
-        if ($paginate) {
-            $result = $this->supplierFetcher->paginate($perPage, $filters, []);
-
-            // Handle both Eloquent pagination and API array response
-            if (is_array($result)) {
-                // WTM mode - already formatted
-                return $result;
-            }
-
-            // WL mode - Eloquent paginator
-            return $this->transformer->transformSuppliers(
-                $result->items(),
-                $result->total(),
-                $result->perPage(),
-                $result->currentPage()
-            );
-        }
-
-        $suppliers = $this->supplierFetcher->getAll($filters, []);
-
+        // Transform to JSON API format
         return $this->transformer->transformSuppliers($suppliers);
-    }
-
-    /**
-     * Find supplier by ID
-     *
-     * @param mixed $id
-     * @return array|null
-     */
-    public function findSupplier($id)
-    {
-        $supplier = $this->supplierFetcher->find($id);
-
-        if (!$supplier) {
-            return null;
-        }
-
-        return $this->transformer->transformSupplier($supplier);
-    }
-
-    /**
-     * Create new supplier
-     *
-     * @param array $data
-     * @return array
-     */
-    public function createSupplier(array $data)
-    {
-        $supplier = $this->supplierFetcher->create($data);
-
-        return $this->transformer->transformSupplier($supplier);
-    }
-
-    /**
-     * Update supplier
-     *
-     * @param mixed $id
-     * @param array $data
-     * @return array|null
-     */
-    public function updateSupplier($id, array $data)
-    {
-        $supplier = $this->supplierFetcher->update($id, $data);
-
-        if (!$supplier) {
-            return null;
-        }
-
-        return $this->transformer->transformSupplier($supplier);
-    }
-
-    /**
-     * Delete supplier
-     *
-     * @param mixed $id
-     * @return bool
-     */
-    public function deleteSupplier($id)
-    {
-        return $this->supplierFetcher->delete($id);
     }
 }
