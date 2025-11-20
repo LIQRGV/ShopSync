@@ -117,32 +117,39 @@ export class ProductSyncGrid {
             console.warn('ProductSync: Failed to load dropdown options, will try again later', error);
         }
 
-        // Pre-load data to get attribute groups BEFORE initializing grid (both modes)
+        // Fetch enabled attributes BEFORE initializing grid (cached with 1-hour TTL)
+        // This separates attribute metadata from product data for better performance
+        try {
+            const attributes = await this.apiClient.fetchEnabledAttributes();
+            this.gridRenderer.updateEnabledAttributes(attributes);
+            console.log('ProductSync: Enabled attributes loaded and cached');
+        } catch (error) {
+            console.warn('ProductSync: Failed to load attributes, will use default columns', error);
+        }
+
+        // Pre-load data to get initial products and generate attribute columns
         let initialColumnDefs = this.gridRenderer.getColumnDefs();
 
-        // Pre-load data for both nested and flat modes to get attribute columns
-        if (this.dataAdapter.mode === 'nested' || this.dataAdapter.mode === 'flat') {
-            try {
-                const response = await this.apiClient.loadProducts(1, ProductGridConstants.GRID_CONFIG.PAGINATION_SIZE);
-                this.gridRenderer.updateCurrentData(response);
+        try {
+            const response = await this.apiClient.loadProducts(1, ProductGridConstants.GRID_CONFIG.PAGINATION_SIZE);
+            this.gridRenderer.updateCurrentData(response);
 
-                // Generate attribute columns from loaded data
-                const attributeColumnGroups = this.gridRenderer.generateAttributeColumnGroups();
+            // Generate attribute columns from separately-fetched attributes
+            const attributeColumnGroups = this.gridRenderer.generateAttributeColumnGroups();
 
-                if (attributeColumnGroups.length > 0) {
-                    const newColumnDefs = [];
+            if (attributeColumnGroups.length > 0) {
+                const newColumnDefs = [];
 
-                    newColumnDefs.push(...initialColumnDefs);
-                    newColumnDefs.push(...attributeColumnGroups);
+                newColumnDefs.push(...initialColumnDefs);
+                newColumnDefs.push(...attributeColumnGroups);
 
-                    initialColumnDefs = newColumnDefs;
-                }
-
-                // Store the response to use in onGridReady
-                this.initialData = response;
-            } catch (error) {
-                console.warn('ProductSync: Failed to pre-load attribute columns, will use default columns', error);
+                initialColumnDefs = newColumnDefs;
             }
+
+            // Store the response to use in onGridReady
+            this.initialData = response;
+        } catch (error) {
+            console.warn('ProductSync: Failed to pre-load attribute columns, will use default columns', error);
         }
 
         const gridOptions = {
@@ -1681,10 +1688,12 @@ export class ProductSyncGrid {
 
         switch (state) {
             case 'connected':
-                this.showNotification('success', 'Real-time sync connected');
+                // disabled for now
+                // this.showNotification('success', 'Real-time sync connected');
                 break;
             case 'disconnected':
-                this.showNotification('warning', 'Real-time sync disconnected');
+                // disabled for now
+                // this.showNotification('warning', 'Real-time sync disconnected');
                 break;
             case 'failed':
                 this.showNotification('error', 'Real-time sync connection failed');

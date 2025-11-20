@@ -30,44 +30,46 @@ export class GridRenderer {
     }
 
     /**
+     * Update enabled attributes for dynamic column generation
+     */
+    updateEnabledAttributes(attributes) {
+        this.enabledAttributes = attributes;
+    }
+
+    /**
      * Extract attribute groups from current data
      * Returns grouped attributes with group_name as key
      */
     extractAttributeGroups() {
-        if (!this.currentData) {
-            console.warn('[GridRenderer] extractAttributeGroups: No currentData');
+        if (!this.enabledAttributes || this.enabledAttributes.length === 0) {
+            console.warn('[GridRenderer] extractAttributeGroups: No enabledAttributes');
             return {};
         }
 
         const attributeGroups = {};
 
-        // Extract master attributes from JSON:API included array
-        // The included array contains product relationships + master attributes metadata
-        if (this.currentData.included) {
-            // Filter attributes that are enabled_on_dropship
-            const enabledAttributes = this.currentData.included.filter(item =>
-                item.type === 'attributes' &&
-                item.attributes.enabled_on_dropship === true
-            );
+        // Group enabled attributes by group_name
+        // enabledAttributes is fetched separately via /attributes endpoint and cached
+        this.enabledAttributes.forEach(attr => {
+            // Handle both JSON:API format and direct format
+            const attrData = attr.attributes || attr;
+            const attrId = attr.id || attrData.id;
 
-            // Group by group_name
-            enabledAttributes.forEach(attr => {
-                const groupName = attr.attributes.group_name || 'Other';
+            const groupName = attrData.group_name || 'Other';
 
-                if (!attributeGroups[groupName]) {
-                    attributeGroups[groupName] = [];
-                }
+            if (!attributeGroups[groupName]) {
+                attributeGroups[groupName] = [];
+            }
 
-                attributeGroups[groupName].push({
-                    id: attr.id,
-                    name: attr.attributes.name,
-                    code: attr.attributes.code,
-                    type: attr.attributes.type,
-                    input_type: attr.attributes.input_type || 1,
-                    options: attr.attributes.options || []
-                });
+            attributeGroups[groupName].push({
+                id: attrId,
+                name: attrData.name,
+                code: attrData.code,
+                type: attrData.type,
+                input_type: attrData.input_type || 1,
+                options: attrData.options || []
             });
-        }
+        });
 
         return attributeGroups;
     }
@@ -178,47 +180,6 @@ export class GridRenderer {
                                     // This was causing all products to show same value!
                                     // If _productValues doesn't have value for this product, it means empty
                                 }
-                            }
-                        }
-
-                        // Handle flat mode (direct attributes array or object)
-                        if (dataAdapter.mode === 'flat') {
-                            // Get product ID for filtering
-                            const productId = String(params.data.id);
-
-                            // Check if data has attributes as array (with pivot)
-                            if (params.data.attributes && Array.isArray(params.data.attributes)) {
-                                const attr = params.data.attributes.find(a => String(a.id) === attrId);
-                                if (attr && attr.pivot) {
-                                    return attr.pivot.value || '';
-                                }
-                            }
-
-                            // Check if data has attribute values in included
-                            // Pivot is now an array of objects, find the one for this product
-                            if (currentData && currentData.included) {
-                                const includedAttr = currentData.included.find(inc =>
-                                    inc.type === 'attributes' &&
-                                    String(inc.id) === attrId
-                                );
-
-                                if (includedAttr && includedAttr.attributes && includedAttr.attributes.pivot) {
-                                    // Pivot is now an array - find the pivot for this product
-                                    const pivots = Array.isArray(includedAttr.attributes.pivot)
-                                        ? includedAttr.attributes.pivot
-                                        : [includedAttr.attributes.pivot];
-
-                                    const productPivot = pivots.find(p => String(p.product_id) === productId);
-
-                                    if (productPivot) {
-                                        return productPivot.value || '';
-                                    }
-                                }
-                            }
-
-                            // Fallback: check direct field attribute_X
-                            if (params.data[`attribute_${attrId}`]) {
-                                return params.data[`attribute_${attrId}`];
                             }
                         }
 
