@@ -75,11 +75,9 @@ class ProductJsonApiTransformer extends JsonApiTransformer
         $this->setIncludes($includes);
         $result = $this->transformCollection($products, 'products');
 
-        // When include=attributes is requested, add ALL enabled master attributes
-        // This provides the attribute metadata needed to generate dynamic columns in AG Grid
-        if (in_array('attributes', $includes)) {
-            $this->addMasterAttributesToIncluded($result);
-        }
+        // Note: Master attributes metadata is now fetched separately via /attributes endpoint
+        // and cached on the frontend. The include=attributes parameter now only includes
+        // product-specific attribute values (relationship data), not master attributes.
 
         // When include=category is requested, add each product's assigned categories
         // This supports multi-category display (comma-separated category_ids)
@@ -88,38 +86,6 @@ class ProductJsonApiTransformer extends JsonApiTransformer
         }
 
         return $result;
-    }
-
-    /**
-     * Add all enabled master attributes to included array (for WL mode)
-     * This provides the metadata for dynamic grid column generation
-     */
-    protected function addMasterAttributesToIncluded(array &$result): void
-    {
-        $masterAttributes = \TheDiamondBox\ShopSync\Models\Attribute::enabledOnDropship()
-            ->whereNull('deleted_at')
-            ->orderBy('group_name')
-            ->orderBy('sortby')
-            ->orderBy('name')
-            ->get();
-
-        foreach ($masterAttributes as $attribute) {
-            $key = 'attributes:' . $attribute->id;
-
-            // Check if already added to avoid duplicates
-            if (!isset($this->included[$key])) {
-                $this->included[$key] = [
-                    'type' => 'attributes',
-                    'id' => (string) $attribute->id,
-                    'attributes' => $this->getRelatedModelAttributes($attribute)
-                ];
-            }
-        }
-
-        // Update result's included array
-        if (!empty($this->included)) {
-            $result['included'] = array_values($this->included);
-        }
     }
 
     /**
