@@ -1765,11 +1765,28 @@ export class GridRenderer {
             async loadCategories() {
                 // Check if categories already cached globally
                 if (window._cachedCategories && Array.isArray(window._cachedCategories)) {
-                    this.categories = window._cachedCategories;
+                    // Check if cache is in JSON:API format (needs transformation)
+                    if (window._cachedCategories.length > 0 && window._cachedCategories[0].type === 'categories') {
+                        // Transform from JSON:API format to editor format
+                        const categoriesMap = new Map();
+                        window._cachedCategories.forEach(cat => {
+                            const catData = cat.attributes || cat;
+                            categoriesMap.set(cat.id, {
+                                value: parseInt(cat.id),
+                                label: catData.name,
+                                parent_id: catData.parent_id || 0
+                            });
+                        });
+                        this.categories = Array.from(categoriesMap.values())
+                            .sort((a, b) => a.label.localeCompare(b.label));
+                    } else {
+                        // Already in transformed format
+                        this.categories = window._cachedCategories;
+                    }
                     return;
                 }
 
-                // Try to read from currentData.included (same pattern as attributes)
+                // Try to read from currentData.included (fallback for backwards compatibility)
                 try {
                     const currentData = this.params.context?.gridInstance?.currentData;
 
@@ -1790,13 +1807,10 @@ export class GridRenderer {
                         this.categories = Array.from(categoriesMap.values())
                             .sort((a, b) => a.label.localeCompare(b.label));
 
-                        // Cache globally for reuse
-                        window._cachedCategories = this.categories;
-
                         return;
                     }
 
-                    console.warn('[CategoryEditor] No included data available, categories list may be empty');
+                    console.warn('[CategoryEditor] No categories data available, will use empty list');
                     this.categories = [];
                 } catch (error) {
                     console.error('[CategoryEditor] Failed to load categories:', error);
@@ -2161,11 +2175,27 @@ export class GridRenderer {
             async loadBrands() {
                 // Check if brands already cached globally
                 if (window._cachedBrands && Array.isArray(window._cachedBrands)) {
-                    this.brands = window._cachedBrands;
+                    // Check if cache is in JSON:API format (needs transformation)
+                    if (window._cachedBrands.length > 0 && window._cachedBrands[0].type === 'brands') {
+                        // Transform from JSON:API format to editor format
+                        const brandsMap = new Map();
+                        window._cachedBrands.forEach(brand => {
+                            const brandData = brand.attributes || brand;
+                            brandsMap.set(brand.id, {
+                                value: parseInt(brand.id),
+                                label: brandData.name
+                            });
+                        });
+                        this.brands = Array.from(brandsMap.values())
+                            .sort((a, b) => a.label.localeCompare(b.label));
+                    } else {
+                        // Already in transformed format
+                        this.brands = window._cachedBrands;
+                    }
                     return;
                 }
 
-                // Try to read from currentData.included
+                // Try to read from currentData.included (fallback for backwards compatibility)
                 try {
                     const currentData = this.params.context?.gridInstance?.currentData;
 
@@ -2185,13 +2215,10 @@ export class GridRenderer {
                         this.brands = Array.from(brandsMap.values())
                             .sort((a, b) => a.label.localeCompare(b.label));
 
-                        // Cache globally for reuse
-                        window._cachedBrands = this.brands;
-
                         return;
                     }
 
-                    console.warn('[BrandEditor] No included data available, brands list may be empty');
+                    console.warn('[BrandEditor] No brands data available, will use empty list');
                     this.brands = [];
                 } catch (error) {
                     console.error('[BrandEditor] Failed to load brands:', error);
@@ -2500,11 +2527,31 @@ export class GridRenderer {
             async loadSuppliers() {
                 // Check if suppliers already cached globally
                 if (window._cachedSuppliers && Array.isArray(window._cachedSuppliers)) {
-                    this.suppliers = window._cachedSuppliers;
+                    // Check if cache is in JSON:API format (needs transformation)
+                    if (window._cachedSuppliers.length > 0 && window._cachedSuppliers[0].type === 'suppliers') {
+                        // Transform from JSON:API format to editor format
+                        const suppliersMap = new Map();
+                        window._cachedSuppliers.forEach(supplier => {
+                            const supplierData = supplier.attributes || supplier;
+                            // Use company_name, or fallback to first_name + last_name
+                            const supplierName = supplierData.company_name ||
+                                `${supplierData.first_name || ''} ${supplierData.last_name || ''}`.trim() ||
+                                'Unnamed Supplier';
+                            suppliersMap.set(supplier.id, {
+                                value: parseInt(supplier.id),
+                                label: supplierName
+                            });
+                        });
+                        this.suppliers = Array.from(suppliersMap.values())
+                            .sort((a, b) => a.label.localeCompare(b.label));
+                    } else {
+                        // Already in transformed format
+                        this.suppliers = window._cachedSuppliers;
+                    }
                     return;
                 }
 
-                // Try to read from currentData.included
+                // Try to read from currentData.included (fallback for backwards compatibility)
                 try {
                     const currentData = this.params.context?.gridInstance?.currentData;
 
@@ -2528,12 +2575,10 @@ export class GridRenderer {
                         this.suppliers = Array.from(suppliersMap.values())
                             .sort((a, b) => a.label.localeCompare(b.label));
 
-                        // Cache globally for reuse
-                        window._cachedSuppliers = this.suppliers;
-
                         return;
                     }
 
+                    console.warn('[SupplierEditor] No suppliers data available, will use empty list');
                     this.suppliers = [];
                 } catch (error) {
                     console.error('[SupplierEditor] Failed to load suppliers:', error);

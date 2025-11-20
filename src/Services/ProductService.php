@@ -25,6 +25,9 @@ use Illuminate\Pagination\LengthAwarePaginator;
  */
 class ProductService
 {
+    /***
+     * @var ProductFetcherInterface
+     */
     protected $productFetcher;
     protected $transformer;
 

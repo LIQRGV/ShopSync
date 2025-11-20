@@ -75,32 +75,13 @@ class ProductJsonApiTransformer extends JsonApiTransformer
         $this->setIncludes($includes);
         $result = $this->transformCollection($products, 'products');
 
-        // For WL mode: When include=attributes is requested, add ALL enabled master attributes
+        // When include=attributes is requested, add ALL enabled master attributes
         // This provides the attribute metadata needed to generate dynamic columns in AG Grid
-        $mode = config('products-package.mode', 'wl');
-        if ($mode === 'wl' && in_array('attributes', $includes)) {
+        if (in_array('attributes', $includes)) {
             $this->addMasterAttributesToIncluded($result);
         }
 
-        // For WL mode: When include=category is requested, add ALL active categories
-        // This provides all available categories for the category dropdown in AG Grid
-        if ($mode === 'wl' && in_array('category', $includes)) {
-            $this->addAllCategoriesToIncluded($result);
-        }
-
-        // For WL mode: When include=brand is requested, add ALL active brands
-        // This provides all available brands for the brand dropdown in AG Grid
-        if ($mode === 'wl' && in_array('brand', $includes)) {
-            $this->addAllBrandsToIncluded($result);
-        }
-
-        // For WL mode: When include=supplier is requested, add ALL active suppliers
-        // This provides all available suppliers for the supplier dropdown in AG Grid
-        if ($mode === 'wl' && in_array('supplier', $includes)) {
-            $this->addAllSuppliersToIncluded($result);
-        }
-
-        // For all modes: When include=category is requested, add each product's assigned categories
+        // When include=category is requested, add each product's assigned categories
         // This supports multi-category display (comma-separated category_ids)
         if (in_array('category', $includes)) {
             $this->addProductCategoriesToIncluded($result, $products);
@@ -131,106 +112,6 @@ class ProductJsonApiTransformer extends JsonApiTransformer
                     'type' => 'attributes',
                     'id' => (string) $attribute->id,
                     'attributes' => $this->getRelatedModelAttributes($attribute)
-                ];
-            }
-        }
-
-        // Update result's included array
-        if (!empty($this->included)) {
-            $result['included'] = array_values($this->included);
-        }
-    }
-
-    /**
-     * Add all active categories to included array (for WL mode)
-     * This provides all available categories for the category dropdown in AG Grid
-     */
-    protected function addAllCategoriesToIncluded(array &$result): void
-    {
-        // Get Category model class
-        $categoryModel = config('products-package.models.category', \App\Category::class);
-
-        // Query all active categories (both parent and subcategories)
-        $categories = $categoryModel::where('status', 1)
-            ->whereNull('deleted_at')
-            ->orderBy('name')
-            ->get();
-
-        foreach ($categories as $category) {
-            $key = 'categories:' . $category->id;
-
-            // Check if already added to avoid duplicates
-            if (!isset($this->included[$key])) {
-                $this->included[$key] = [
-                    'type' => 'categories',
-                    'id' => (string) $category->id,
-                    'attributes' => $this->getRelatedModelAttributes($category)
-                ];
-            }
-        }
-
-        // Update result's included array
-        if (!empty($this->included)) {
-            $result['included'] = array_values($this->included);
-        }
-    }
-
-    /**
-     * Add all active brands to included array (for WL mode)
-     * This provides all available brands for the brand dropdown in AG Grid
-     */
-    protected function addAllBrandsToIncluded(array &$result): void
-    {
-        // Get Brand model class
-        $brandModel = config('products-package.models.brand', \App\Brand::class);
-
-        // Query all active brands
-        $brands = $brandModel::whereNull('deleted_at')
-            ->orderBy('name')
-            ->get();
-
-        foreach ($brands as $brand) {
-            $key = 'brands:' . $brand->id;
-
-            // Check if already added to avoid duplicates
-            if (!isset($this->included[$key])) {
-                $this->included[$key] = [
-                    'type' => 'brands',
-                    'id' => (string) $brand->id,
-                    'attributes' => $this->getRelatedModelAttributes($brand)
-                ];
-            }
-        }
-
-        // Update result's included array
-        if (!empty($this->included)) {
-            $result['included'] = array_values($this->included);
-        }
-    }
-
-    /**
-     * Add all active suppliers to included array (for WL mode)
-     * This provides all available suppliers for the supplier dropdown in AG Grid
-     */
-    protected function addAllSuppliersToIncluded(array &$result): void
-    {
-        // Get Supplier model class
-        $supplierModel = config('products-package.models.supplier', \App\Supplier::class);
-
-        // Query all active suppliers
-        $suppliers = $supplierModel::whereNull('deleted_at')
-            ->orderBy('company_name')
-            ->get();
-
-        foreach ($suppliers as $supplier) {
-            $key = 'suppliers:' . $supplier->id;
-
-            // Check if already added to avoid duplicates
-            if (!isset($this->included[$key])) {
-                $this->included[$key] = [
-                    'type' => 'suppliers',
-                    'id' => (string) $supplier->id,
-                    'attributes' => $this->getRelatedModelAttributes($supplier)
                 ];
             }
         }

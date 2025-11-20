@@ -108,6 +108,15 @@ export class ProductSyncGrid {
             return;
         }
 
+        // Load dropdown options FIRST (categories, brands, suppliers)
+        // This caches them globally for use in cell editors
+        try {
+            await this.apiClient.loadDropdownOptions();
+            console.log('ProductSync: Dropdown options loaded and cached');
+        } catch (error) {
+            console.warn('ProductSync: Failed to load dropdown options, will try again later', error);
+        }
+
         // Pre-load data to get attribute groups BEFORE initializing grid (both modes)
         let initialColumnDefs = this.gridRenderer.getColumnDefs();
 

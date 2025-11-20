@@ -70,8 +70,9 @@ export class ProductGridApiClient {
             }
 
             // Add includes for JSON:API relationships
-            // Includes category, brand, supplier, attributes for dropdowns and dynamic columns
-            url += '&include=category,brand,supplier,attributes';
+            // Only include category (for product-specific categories) and attributes (for dynamic columns)
+            // Brands and suppliers are now fetched separately via dedicated endpoints
+            url += '&include=category,attributes';
 
             const response = await fetch(url, {
                 method: ProductGridConstants.API_CONFIG.METHODS.GET,
@@ -441,7 +442,8 @@ export class ProductGridApiClient {
             }
 
             // Add includes for JSON:API relationships
-            searchFilters.include = 'category,brand,supplier,attributes';
+            // Only include category and attributes - brands and suppliers loaded separately
+            searchFilters.include = 'category,attributes';
 
             const params = new URLSearchParams(searchFilters);
 
@@ -605,6 +607,140 @@ export class ProductGridApiClient {
             return await response.json();
         } catch (error) {
             throw new Error(`Failed to get product status: ${error.message}`);
+        }
+    }
+
+    /**
+     * Load all categories for dropdown
+     * @returns {Promise<Array>} Array of categories
+     */
+    async loadCategories() {
+        try {
+            // Extract base URL and replace /products with /categories
+            const baseUrlWithoutProducts = this.baseUrl.replace('/products', '');
+            const url = `${baseUrlWithoutProducts}/categories`;
+
+            const response = await fetch(url, {
+                method: ProductGridConstants.API_CONFIG.METHODS.GET,
+                headers: this.getHeaders()
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // Return the data array (JSON:API format)
+            return data.data || [];
+        } catch (error) {
+            console.error('[loadCategories] Error:', error);
+            throw new Error(`Failed to load categories: ${error.message}`);
+        }
+    }
+
+    /**
+     * Load all brands for dropdown
+     * @returns {Promise<Array>} Array of brands
+     */
+    async loadBrands() {
+        try {
+            // Extract base URL and replace /products with /brands
+            const baseUrlWithoutProducts = this.baseUrl.replace('/products', '');
+            const url = `${baseUrlWithoutProducts}/brands`;
+
+            const response = await fetch(url, {
+                method: ProductGridConstants.API_CONFIG.METHODS.GET,
+                headers: this.getHeaders()
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // Return the data array (JSON:API format)
+            return data.data || [];
+        } catch (error) {
+            console.error('[loadBrands] Error:', error);
+            throw new Error(`Failed to load brands: ${error.message}`);
+        }
+    }
+
+    /**
+     * Load all suppliers for dropdown
+     * @returns {Promise<Array>} Array of suppliers
+     */
+    async loadSuppliers() {
+        try {
+            // Extract base URL and replace /products with /suppliers
+            const baseUrlWithoutProducts = this.baseUrl.replace('/products', '');
+            const url = `${baseUrlWithoutProducts}/suppliers`;
+
+            const response = await fetch(url, {
+                method: ProductGridConstants.API_CONFIG.METHODS.GET,
+                headers: this.getHeaders()
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // Return the data array (JSON:API format)
+            return data.data || [];
+        } catch (error) {
+            console.error('[loadSuppliers] Error:', error);
+            throw new Error(`Failed to load suppliers: ${error.message}`);
+        }
+    }
+
+    /**
+     * Load all dropdown options at once
+     * Caches the results globally for reuse
+     * @returns {Promise<Object>} Object with categories, brands, and suppliers
+     */
+    async loadDropdownOptions() {
+        try {
+            // Check if already cached
+            if (window._cachedDropdownOptions) {
+                console.log('[loadDropdownOptions] Using cached dropdown options');
+                return window._cachedDropdownOptions;
+            }
+
+            console.log('[loadDropdownOptions] Loading dropdown options from API');
+
+            // Load all options in parallel
+            const [categories, brands, suppliers] = await Promise.all([
+                this.loadCategories(),
+                this.loadBrands(),
+                this.loadSuppliers()
+            ]);
+
+            // Cache globally
+            window._cachedDropdownOptions = {
+                categories,
+                brands,
+                suppliers
+            };
+
+            // Also cache individually for backwards compatibility
+            window._cachedCategories = categories;
+            window._cachedBrands = brands;
+            window._cachedSuppliers = suppliers;
+
+            console.log('[loadDropdownOptions] Loaded and cached:', {
+                categoriesCount: categories.length,
+                brandsCount: brands.length,
+                suppliersCount: suppliers.length
+            });
+
+            return window._cachedDropdownOptions;
+        } catch (error) {
+            console.error('[loadDropdownOptions] Error:', error);
+            throw new Error(`Failed to load dropdown options: ${error.message}`);
         }
     }
 

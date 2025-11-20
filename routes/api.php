@@ -2,6 +2,9 @@
 
 use Illuminate\Support\Facades\Route;
 use TheDiamondBox\ShopSync\Http\Controllers\ProductController;
+use TheDiamondBox\ShopSync\Http\Controllers\CategoryController;
+use TheDiamondBox\ShopSync\Http\Controllers\BrandController;
+use TheDiamondBox\ShopSync\Http\Controllers\SupplierController;
 use TheDiamondBox\ShopSync\Http\Controllers\SseController;
 use TheDiamondBox\ShopSync\Http\Controllers\ShopInfoController;
 
@@ -38,6 +41,16 @@ Route::patch('/shop-info', [ShopInfoController::class, 'updatePartial'])
 // Upload shop info image endpoint
 Route::post('/shop-info/images', [ShopInfoController::class, 'uploadImage'])
     ->name('shop-info.upload-image');
+
+// Dropdown options endpoints - provide data for AG Grid editors
+Route::get('/categories', [CategoryController::class, 'index'])
+    ->name('categories.index');
+
+Route::get('/brands', [BrandController::class, 'index'])
+    ->name('brands.index');
+
+Route::get('/suppliers', [SupplierController::class, 'index'])
+    ->name('suppliers.index');
 
 // Package status endpoint (if enabled)
 if (config('products-package.features.status_endpoint', true)) {
