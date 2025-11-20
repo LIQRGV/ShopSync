@@ -464,12 +464,23 @@ export class ProductGridApiClient {
 
     /**
      * Fetch enabled attributes for dynamic columns
+     * Uses localStorage caching with TTL to minimize API calls
      * @returns {Promise<Array>} Array of enabled attributes
      */
     async fetchEnabledAttributes() {
         try {
-            // For WTM mode (nested), fetch productAttributes to get enabled attributes
-            const url = `${this.baseUrl}?per_page=1&include=productAttributes`;
+            // Check localStorage cache first
+            const cached = this.getAttributesFromCache();
+            if (cached) {
+                console.log('[fetchEnabledAttributes] Using cached attributes');
+                return cached;
+            }
+
+            // Fetch from /attributes endpoint
+            const baseApiUrl = this.baseUrl.replace('/products', '');
+            const url = `${baseApiUrl}/attributes`;
+
+            console.log('[fetchEnabledAttributes] Fetching from API:', url);
 
             const response = await fetch(url, {
                 method: ProductGridConstants.API_CONFIG.METHODS.GET,
@@ -480,45 +491,79 @@ export class ProductGridApiClient {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const data = await response.json();
+            const responseData = await response.json();
+            const attributes = responseData.data || [];
 
-            // Extract unique attributes from included productAttributes
-            if (data.included && data.included.length > 0) {
-                const attributes = new Map();
+            // Cache attributes with 1 hour TTL
+            this.cacheAttributes(attributes, 3600000);
 
-                // Find all product_attributes in included
-                const productAttributes = data.included.filter(inc => inc.type === 'product_attributes');
+            console.log(`[fetchEnabledAttributes] Fetched ${attributes.length} attributes`);
+            return attributes;
 
-                // Extract unique attributes from productAttributes relationships
-                productAttributes.forEach(prodAttr => {
-                    if (prodAttr.relationships && prodAttr.relationships.attribute && prodAttr.relationships.attribute.data) {
-                        const attrId = prodAttr.relationships.attribute.data.id;
-
-                        // Find the actual attribute in included
-                        const attr = data.included.find(inc =>
-                            inc.type === 'attributes' && inc.id === attrId
-                        );
-
-                        if (attr && !attributes.has(attrId)) {
-                            attributes.set(attrId, {
-                                id: attr.id,
-                                name: attr.attributes.name,
-                                code: attr.attributes.code || `attr_${attr.id}`,
-                                type: attr.attributes.type || 'text',
-                                sort_order: attr.attributes.sort_order || 0
-                            });
-                        }
-                    }
-                });
-
-                const result = Array.from(attributes.values()).sort((a, b) => a.sort_order - b.sort_order);
-                return result;
-            }
-
-            return [];
         } catch (error) {
             console.error('[fetchEnabledAttributes] Error:', error);
             return [];
+        }
+    }
+
+    /**
+     * Get attributes from localStorage cache
+     * @returns {Array|null} Cached attributes or null if expired/missing
+     */
+    getAttributesFromCache() {
+        try {
+            const cacheKey = 'shopsync_attributes_cache';
+            const cached = localStorage.getItem(cacheKey);
+
+            if (!cached) {
+                return null;
+            }
+
+            const { data, expiry } = JSON.parse(cached);
+
+            // Check if expired
+            if (Date.now() > expiry) {
+                localStorage.removeItem(cacheKey);
+                return null;
+            }
+
+            return data;
+        } catch (error) {
+            console.error('[getAttributesFromCache] Error:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Cache attributes in localStorage with TTL
+     * @param {Array} attributes - Attributes to cache
+     * @param {number} ttl - Time to live in milliseconds
+     */
+    cacheAttributes(attributes, ttl) {
+        try {
+            const cacheKey = 'shopsync_attributes_cache';
+            const cacheData = {
+                data: attributes,
+                expiry: Date.now() + ttl
+            };
+
+            localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+        } catch (error) {
+            console.error('[cacheAttributes] Error:', error);
+        }
+    }
+
+    /**
+     * Clear attributes cache
+     * Useful for manual refresh or when attributes are updated
+     */
+    clearAttributesCache() {
+        try {
+            const cacheKey = 'shopsync_attributes_cache';
+            localStorage.removeItem(cacheKey);
+            console.log('[clearAttributesCache] Cache cleared');
+        } catch (error) {
+            console.error('[clearAttributesCache] Error:', error);
         }
     }
 

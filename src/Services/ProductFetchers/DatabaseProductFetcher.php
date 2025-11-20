@@ -578,16 +578,4 @@ class DatabaseProductFetcher implements ProductFetcherInterface
         }
     }
 
-    /**
-     * Get original included data from last API call
-     *
-     * In WL mode, this always returns empty array since we query the database directly
-     * and don't have an "original API response" to preserve.
-     *
-     * @return array Empty array
-     */
-    public function getOriginalIncludedData(): array
-    {
-        return [];
-    }
 }

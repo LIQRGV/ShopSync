@@ -16,7 +16,6 @@ class ApiProductFetcher implements ProductFetcherInterface
     protected $baseUrl;
     protected $apiKey;
     protected $timeout;
-    protected $originalIncludedData = [];
 
     public function __construct($client)
     {
@@ -122,9 +121,6 @@ class ApiProductFetcher implements ProductFetcherInterface
             return $this->client()->get('/products', $params);
         }, ['data' => []]);
 
-        // Store original included data before conversion
-        $this->originalIncludedData = $response['included'] ?? [];
-
         return $this->convertToProductCollection($response['data'] ?? [], $response['included'] ?? []);
     }
 
@@ -167,9 +163,6 @@ class ApiProductFetcher implements ProductFetcherInterface
             ]
         ]);
 
-        // Store original included data before conversion
-        $this->originalIncludedData = $response['included'] ?? [];
-
         $paginationMeta = $response['meta']['pagination'] ?? null;
 
         if (!$paginationMeta) {
@@ -200,17 +193,6 @@ class ApiProductFetcher implements ProductFetcherInterface
                 'pageName' => 'page'
             ]
         );
-    }
-
-    /**
-     * Get original included data from last API call
-     * This preserves ALL attributes from client shop API response
-     *
-     * @return array
-     */
-    public function getOriginalIncludedData(): array
-    {
-        return $this->originalIncludedData;
     }
 
     /**
