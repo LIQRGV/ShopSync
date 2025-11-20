@@ -368,6 +368,132 @@ export class ProductSyncGrid {
                 return;
             }
 
+            // Check if this is a brand update
+            if (data._brandUpdate) {
+                const { brandId } = data._brandUpdate;
+
+                const result = await this.apiClient.updateProduct(
+                    productId,
+                    'brand_id',
+                    brandId,
+                    'brand,supplier' // Include both brand and supplier to preserve supplier display
+                );
+
+                // Update local data with server response
+                if (result.data) {
+                    const updatedFields = result.data.attributes || result.data;
+                    // Preserve existing values for display fields if new value is null/undefined
+                    const preservedFields = ['supplier_name', 'category_name'];
+                    Object.keys(updatedFields).forEach(key => {
+                        // Only update if not a preserved field, or if the new value is not null/undefined
+                        if (!preservedFields.includes(key) || updatedFields[key] != null) {
+                            this.dataAdapter.setValue(data, key, updatedFields[key]);
+                        }
+                    });
+
+                    // Update brand relationship if included
+                    if (result.data.relationships && result.data.relationships.brand) {
+                        data.relationships = data.relationships || {};
+                        data.relationships.brand = result.data.relationships.brand;
+                    }
+
+                    // Update included brands if present
+                    if (result.included && this.currentData && this.currentData.included) {
+                        result.included.forEach(includedItem => {
+                            if (includedItem.type === 'brands') {
+                                const existingIndex = this.currentData.included.findIndex(
+                                    item => item.type === 'brands' && item.id === includedItem.id
+                                );
+
+                                if (existingIndex >= 0) {
+                                    this.currentData.included[existingIndex] = includedItem;
+                                } else {
+                                    this.currentData.included.push(includedItem);
+                                }
+                            }
+                        });
+                    }
+                }
+
+                // Clear temp data
+                delete data._brandUpdate;
+
+                // Show success notification
+                this.showNotification('success', 'Brand updated successfully');
+
+                // Refresh the cell to show updated brand name
+                this.gridApi.refreshCells({
+                    rowNodes: [event.node],
+                    columns: ['brandName'],
+                    force: true
+                });
+
+                return;
+            }
+
+            // Check if this is a supplier update
+            if (data._supplierUpdate) {
+                const { supplierId } = data._supplierUpdate;
+
+                const result = await this.apiClient.updateProduct(
+                    productId,
+                    'supplier_id',
+                    supplierId,
+                    'supplier,brand' // Include both supplier and brand to preserve brand display
+                );
+
+                // Update local data with server response
+                if (result.data) {
+                    const updatedFields = result.data.attributes || result.data;
+                    // Preserve existing values for display fields if new value is null/undefined
+                    const preservedFields = ['brand_name', 'category_name'];
+                    Object.keys(updatedFields).forEach(key => {
+                        // Only update if not a preserved field, or if the new value is not null/undefined
+                        if (!preservedFields.includes(key) || updatedFields[key] != null) {
+                            this.dataAdapter.setValue(data, key, updatedFields[key]);
+                        }
+                    });
+
+                    // Update supplier relationship if included
+                    if (result.data.relationships && result.data.relationships.supplier) {
+                        data.relationships = data.relationships || {};
+                        data.relationships.supplier = result.data.relationships.supplier;
+                    }
+
+                    // Update included suppliers if present
+                    if (result.included && this.currentData && this.currentData.included) {
+                        result.included.forEach(includedItem => {
+                            if (includedItem.type === 'suppliers') {
+                                const existingIndex = this.currentData.included.findIndex(
+                                    item => item.type === 'suppliers' && item.id === includedItem.id
+                                );
+
+                                if (existingIndex >= 0) {
+                                    this.currentData.included[existingIndex] = includedItem;
+                                } else {
+                                    this.currentData.included.push(includedItem);
+                                }
+                            }
+                        });
+                    }
+                }
+
+                // Clear temp data
+                delete data._supplierUpdate;
+
+                // Show success notification
+                this.showNotification('success', 'Supplier updated successfully');
+
+                // Refresh the cell to show updated supplier name
+                this.gridApi.refreshCells({
+                    rowNodes: [event.node],
+                    columns: ['supplierName'],
+                    force: true
+                });
+
+                return;
+            }
+
             // Check if this is an attribute update
             if (colDef.field.startsWith('attribute_') && data._attributeUpdate) {
                 const { attributeId, newValue: actualNewValue } = data._attributeUpdate;

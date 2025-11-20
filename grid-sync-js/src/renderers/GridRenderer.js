@@ -638,9 +638,50 @@ export class GridRenderer {
                     width: ProductGridConstants.COLUMN_WIDTHS.brand,
                     sortable: true,
                     filter: 'agSetColumnFilter',
-                    editable: false,
-                    valueGetter: (params) => this.getBrandName(params),
-                    cellClass: 'read-only-cell',
+                    editable: true,
+                    cellEditor: this.getBrandEditor(),
+                    cellEditorPopup: true,
+                    cellEditorParams: {},
+                    valueGetter: (params) => {
+                        if (!params.data) return '';
+                        const brandFromRelationship = this.getBrandName(params);
+                        return brandFromRelationship || params.data.brand_name || '';
+                    },
+                    valueSetter: (params) => {
+                        if (!params.data) return false;
+
+                        const newBrandId = params.newValue;
+                        const oldBrandId = params.data.brand_id;
+
+                        // No change if same brand
+                        if (newBrandId === oldBrandId) {
+                            return false;
+                        }
+
+                        // Update brand_id in row data
+                        params.data.brand_id = newBrandId;
+
+                        // Update brand_name for display - get from cached brands
+                        if (newBrandId) {
+                            // Try to get brand name from cached brands (set by BrandEditor)
+                            if (window._cachedBrands && Array.isArray(window._cachedBrands)) {
+                                const brand = window._cachedBrands.find(b => b.value === parseInt(newBrandId));
+                                params.data.brand_name = brand ? brand.label : '';
+                            } else {
+                                params.data.brand_name = '';
+                            }
+                        } else {
+                            params.data.brand_name = '';
+                        }
+
+                        // Set flag for handleCellEdit
+                        params.data._brandUpdate = {
+                            brandId: newBrandId
+                        };
+
+                        return true;
+                    },
+                    cellClass: (params) => params.data ? 'editable-cell' : 'read-only-cell',
                     cellStyle: (params) => this.getCellStyle(params)
                 },
                 {
@@ -650,9 +691,50 @@ export class GridRenderer {
                     width: ProductGridConstants.COLUMN_WIDTHS.supplier,
                     sortable: true,
                     filter: 'agSetColumnFilter',
-                    editable: false,
-                    valueGetter: (params) => this.getSupplierName(params),
-                    cellClass: 'read-only-cell',
+                    editable: true,
+                    cellEditor: this.getSupplierEditor(),
+                    cellEditorPopup: true,
+                    cellEditorParams: {},
+                    valueGetter: (params) => {
+                        if (!params.data) return '';
+                        const supplierFromRelationship = this.getSupplierName(params);
+                        return supplierFromRelationship || params.data.supplier_name || '';
+                    },
+                    valueSetter: (params) => {
+                        if (!params.data) return false;
+
+                        const newSupplierId = params.newValue;
+                        const oldSupplierId = params.data.supplier_id;
+
+                        // No change if same supplier
+                        if (newSupplierId === oldSupplierId) {
+                            return false;
+                        }
+
+                        // Update supplier_id in row data
+                        params.data.supplier_id = newSupplierId;
+
+                        // Update supplier_name for display - get from cached suppliers
+                        if (newSupplierId) {
+                            // Try to get supplier name from cached suppliers (set by SupplierEditor)
+                            if (window._cachedSuppliers && Array.isArray(window._cachedSuppliers)) {
+                                const supplier = window._cachedSuppliers.find(s => s.value === parseInt(newSupplierId));
+                                params.data.supplier_name = supplier ? supplier.label : '';
+                            } else {
+                                params.data.supplier_name = '';
+                            }
+                        } else {
+                            params.data.supplier_name = '';
+                        }
+
+                        // Set flag for handleCellEdit
+                        params.data._supplierUpdate = {
+                            supplierId: newSupplierId
+                        };
+
+                        return true;
+                    },
+                    cellClass: (params) => params.data ? 'editable-cell' : 'read-only-cell',
                     cellStyle: (params) => this.getCellStyle(params)
                 }
             ] : []),
@@ -1919,6 +2001,687 @@ export class GridRenderer {
         }
 
         return CategoryEditor;
+    }
+
+    getBrandEditor() {
+        class BrandEditor {
+            constructor() {
+                this.eGui = null;
+                this.eContainer = null;
+                this.brands = [];
+                this.selectedId = null;
+                this.searchInput = null;
+                this.isDestroyed = false;
+            }
+
+            async init(params) {
+                this.params = params;
+
+                // Load brands from cache or fetch from API
+                await this.loadBrands();
+
+                // Parse existing brand ID
+                let currentBrandId = params.data.brand_id;
+
+                // If not in brand_id, try to read from relationships (nested mode)
+                if (!currentBrandId && params.data.relationships && params.data.relationships.brand) {
+                    const brandRel = params.data.relationships.brand.data;
+                    if (brandRel && brandRel.id) {
+                        currentBrandId = brandRel.id;
+                    }
+                }
+
+                this.selectedId = currentBrandId ? parseInt(currentBrandId) : null;
+
+                // Create container
+                this.eGui = document.createElement('div');
+                this.eGui.style.position = 'relative';
+                this.eGui.style.width = '280px';
+                this.eGui.style.maxHeight = '400px';
+                this.eGui.style.backgroundColor = 'white';
+                this.eGui.style.border = '2px solid #4CAF50';
+                this.eGui.style.borderRadius = '6px';
+                this.eGui.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                this.eGui.style.display = 'flex';
+                this.eGui.style.flexDirection = 'column';
+
+                // Header with title and buttons
+                const header = document.createElement('div');
+                header.style.padding = '10px 12px';
+                header.style.borderBottom = '1px solid #dee2e6';
+                header.style.backgroundColor = '#f8f9fa';
+                header.style.display = 'flex';
+                header.style.justifyContent = 'space-between';
+                header.style.alignItems = 'center';
+                header.style.borderTopLeftRadius = '4px';
+                header.style.borderTopRightRadius = '4px';
+
+                const title = document.createElement('span');
+                title.textContent = 'Select Brand';
+                title.style.fontWeight = '600';
+                title.style.fontSize = '13px';
+                title.style.color = '#495057';
+                header.appendChild(title);
+
+                const buttonContainer = document.createElement('div');
+                buttonContainer.style.display = 'flex';
+                buttonContainer.style.gap = '6px';
+
+                // Clear button
+                const clearBtn = document.createElement('button');
+                clearBtn.textContent = 'Clear';
+                clearBtn.style.padding = '4px 8px';
+                clearBtn.style.fontSize = '11px';
+                clearBtn.style.border = '1px solid #dc3545';
+                clearBtn.style.backgroundColor = '#fff';
+                clearBtn.style.color = '#dc3545';
+                clearBtn.style.borderRadius = '4px';
+                clearBtn.style.cursor = 'pointer';
+                clearBtn.style.fontWeight = '500';
+                clearBtn.addEventListener('click', () => this.clearSelection());
+                buttonContainer.appendChild(clearBtn);
+
+                // Done button
+                const doneBtn = document.createElement('button');
+                doneBtn.textContent = 'Done';
+                doneBtn.style.padding = '4px 12px';
+                doneBtn.style.fontSize = '11px';
+                doneBtn.style.border = 'none';
+                doneBtn.style.backgroundColor = '#4CAF50';
+                doneBtn.style.color = 'white';
+                doneBtn.style.borderRadius = '4px';
+                doneBtn.style.cursor = 'pointer';
+                doneBtn.style.fontWeight = '500';
+                doneBtn.addEventListener('click', () => {
+                    params.stopEditing();
+                });
+                buttonContainer.appendChild(doneBtn);
+
+                header.appendChild(buttonContainer);
+                this.eGui.appendChild(header);
+
+                // Search box
+                const searchContainer = document.createElement('div');
+                searchContainer.style.padding = '8px 12px';
+                searchContainer.style.borderBottom = '1px solid #dee2e6';
+
+                this.searchInput = document.createElement('input');
+                this.searchInput.type = 'text';
+                this.searchInput.placeholder = 'Search brands...';
+                this.searchInput.style.width = '100%';
+                this.searchInput.style.padding = '6px 8px';
+                this.searchInput.style.fontSize = '12px';
+                this.searchInput.style.border = '1px solid #ced4da';
+                this.searchInput.style.borderRadius = '4px';
+                this.searchInput.style.boxSizing = 'border-box';
+                this.searchInput.addEventListener('input', () => this.filterBrands());
+                searchContainer.appendChild(this.searchInput);
+                this.eGui.appendChild(searchContainer);
+
+                // Scrollable container for options
+                this.eContainer = document.createElement('div');
+                this.eContainer.style.padding = '4px';
+                this.eContainer.style.maxHeight = '280px';
+                this.eContainer.style.overflowY = 'auto';
+                this.eContainer.style.overflowX = 'hidden';
+
+                // Populate options
+                this.populateOptions();
+
+                this.eGui.appendChild(this.eContainer);
+
+                // Status bar showing selection
+                const statusBar = document.createElement('div');
+                statusBar.style.padding = '8px 12px';
+                statusBar.style.borderTop = '1px solid #dee2e6';
+                statusBar.style.backgroundColor = '#f8f9fa';
+                statusBar.style.fontSize = '11px';
+                statusBar.style.color = '#6c757d';
+                statusBar.style.borderBottomLeftRadius = '4px';
+                statusBar.style.borderBottomRightRadius = '4px';
+                statusBar.id = 'brand-status-bar';
+                this.updateStatusBar(statusBar);
+                this.eGui.appendChild(statusBar);
+            }
+
+            async loadBrands() {
+                // Check if brands already cached globally
+                if (window._cachedBrands && Array.isArray(window._cachedBrands)) {
+                    this.brands = window._cachedBrands;
+                    return;
+                }
+
+                // Try to read from currentData.included
+                try {
+                    const currentData = this.params.context?.gridInstance?.currentData;
+
+                    if (currentData && currentData.included && Array.isArray(currentData.included)) {
+                        // Extract unique brands from included data
+                        const brandsMap = new Map();
+                        currentData.included
+                            .filter(item => item.type === 'brands')
+                            .forEach(brand => {
+                                const brandData = brand.attributes || brand;
+                                brandsMap.set(brand.id, {
+                                    value: parseInt(brand.id),
+                                    label: brandData.name
+                                });
+                            });
+
+                        this.brands = Array.from(brandsMap.values())
+                            .sort((a, b) => a.label.localeCompare(b.label));
+
+                        // Cache globally for reuse
+                        window._cachedBrands = this.brands;
+
+                        return;
+                    }
+
+                    console.warn('[BrandEditor] No included data available, brands list may be empty');
+                    this.brands = [];
+                } catch (error) {
+                    console.error('[BrandEditor] Failed to load brands:', error);
+                    this.brands = [];
+                }
+            }
+
+            populateOptions(filterText = '') {
+                this.eContainer.innerHTML = '';
+
+                if (this.brands.length === 0) {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.textContent = 'No brands available';
+                    emptyMsg.style.padding = '12px';
+                    emptyMsg.style.color = '#6c757d';
+                    emptyMsg.style.fontStyle = 'italic';
+                    emptyMsg.style.fontSize = '12px';
+                    this.eContainer.appendChild(emptyMsg);
+                    return;
+                }
+
+                // Filter brands based on search
+                const filteredBrands = filterText
+                    ? this.brands.filter(b => b.label.toLowerCase().includes(filterText.toLowerCase()))
+                    : this.brands;
+
+                if (filteredBrands.length === 0) {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.textContent = 'No matching brands';
+                    emptyMsg.style.padding = '12px';
+                    emptyMsg.style.color = '#6c757d';
+                    emptyMsg.style.fontStyle = 'italic';
+                    emptyMsg.style.fontSize = '12px';
+                    this.eContainer.appendChild(emptyMsg);
+                    return;
+                }
+
+                // Add brand options
+                filteredBrands.forEach(brand => {
+                    this.addOption(brand);
+                });
+            }
+
+            addOption(brand) {
+                const optionContainer = document.createElement('div');
+                optionContainer.style.display = 'flex';
+                optionContainer.style.alignItems = 'center';
+                optionContainer.style.padding = '8px 10px';
+                optionContainer.style.cursor = 'pointer';
+                optionContainer.style.borderRadius = '4px';
+                optionContainer.style.marginBottom = '2px';
+                optionContainer.style.transition = 'background-color 0.15s';
+                optionContainer.style.fontSize = '12px';
+                optionContainer.style.fontWeight = '500';
+
+                const isSelected = this.selectedId === brand.value;
+                if (isSelected) {
+                    optionContainer.style.backgroundColor = '#e3f2fd';
+                    optionContainer.style.borderLeft = '3px solid #2196F3';
+                    optionContainer.style.paddingLeft = '7px';
+                }
+
+                optionContainer.addEventListener('mouseenter', () => {
+                    if (!isSelected) {
+                        optionContainer.style.backgroundColor = '#f8f9fa';
+                    }
+                });
+                optionContainer.addEventListener('mouseleave', () => {
+                    if (!isSelected) {
+                        optionContainer.style.backgroundColor = 'transparent';
+                    }
+                });
+
+                optionContainer.addEventListener('click', () => this.selectBrand(brand.value));
+
+                const label = document.createElement('span');
+                label.textContent = brand.label;
+                label.style.userSelect = 'none';
+
+                optionContainer.appendChild(label);
+                this.eContainer.appendChild(optionContainer);
+            }
+
+            selectBrand(brandId) {
+                this.selectedId = brandId;
+
+                // Re-populate to update visual selection
+                const filterText = this.searchInput ? this.searchInput.value : '';
+                this.populateOptions(filterText);
+
+                // Update status bar
+                const statusBar = this.eGui.querySelector('#brand-status-bar');
+                if (statusBar) {
+                    this.updateStatusBar(statusBar);
+                }
+            }
+
+            clearSelection() {
+                this.selectedId = null;
+
+                // Re-populate to update visual selection
+                const filterText = this.searchInput ? this.searchInput.value : '';
+                this.populateOptions(filterText);
+
+                // Update status bar
+                const statusBar = this.eGui.querySelector('#brand-status-bar');
+                if (statusBar) {
+                    this.updateStatusBar(statusBar);
+                }
+            }
+
+            filterBrands() {
+                const filterText = this.searchInput.value;
+                this.populateOptions(filterText);
+            }
+
+            updateStatusBar(statusBar) {
+                if (this.selectedId) {
+                    const brand = this.brands.find(b => b.value === this.selectedId);
+                    statusBar.textContent = brand ? `Selected: ${brand.label}` : 'No brand selected';
+                } else {
+                    statusBar.textContent = 'No brand selected';
+                }
+            }
+
+            getGui() {
+                return this.eGui;
+            }
+
+            getValue() {
+                return this.selectedId;
+            }
+
+            destroy() {
+                this.isDestroyed = true;
+            }
+
+            isPopup() {
+                return true;
+            }
+
+            isCancelBeforeStart() {
+                return false;
+            }
+
+            isCancelAfterEnd() {
+                return false;
+            }
+
+            focusIn() {
+                // Focus on search input
+                if (this.searchInput && !this.isDestroyed) {
+                    this.searchInput.focus();
+                }
+            }
+
+            focusOut() {
+                // Nothing to do
+            }
+        }
+
+        return BrandEditor;
+    }
+
+    getSupplierEditor() {
+        class SupplierEditor {
+            constructor() {
+                this.eGui = null;
+                this.eContainer = null;
+                this.suppliers = [];
+                this.selectedId = null;
+                this.searchInput = null;
+                this.isDestroyed = false;
+            }
+
+            async init(params) {
+                this.params = params;
+
+                // Load suppliers from cache or fetch from API
+                await this.loadSuppliers();
+
+                // Parse existing supplier ID
+                let currentSupplierId = params.data.supplier_id;
+
+                // If not in supplier_id, try to read from relationships (nested mode)
+                if (!currentSupplierId && params.data.relationships && params.data.relationships.supplier) {
+                    const supplierRel = params.data.relationships.supplier.data;
+                    if (supplierRel && supplierRel.id) {
+                        currentSupplierId = supplierRel.id;
+                    }
+                }
+
+                this.selectedId = currentSupplierId ? parseInt(currentSupplierId) : null;
+
+                // Create container
+                this.eGui = document.createElement('div');
+                this.eGui.style.position = 'relative';
+                this.eGui.style.width = '280px';
+                this.eGui.style.maxHeight = '400px';
+                this.eGui.style.backgroundColor = 'white';
+                this.eGui.style.border = '2px solid #4CAF50';
+                this.eGui.style.borderRadius = '6px';
+                this.eGui.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                this.eGui.style.display = 'flex';
+                this.eGui.style.flexDirection = 'column';
+
+                // Header with title and buttons
+                const header = document.createElement('div');
+                header.style.padding = '10px 12px';
+                header.style.borderBottom = '1px solid #dee2e6';
+                header.style.backgroundColor = '#f8f9fa';
+                header.style.display = 'flex';
+                header.style.justifyContent = 'space-between';
+                header.style.alignItems = 'center';
+                header.style.borderTopLeftRadius = '4px';
+                header.style.borderTopRightRadius = '4px';
+
+                const title = document.createElement('span');
+                title.textContent = 'Select Supplier';
+                title.style.fontWeight = '600';
+                title.style.fontSize = '13px';
+                title.style.color = '#495057';
+                header.appendChild(title);
+
+                const buttonContainer = document.createElement('div');
+                buttonContainer.style.display = 'flex';
+                buttonContainer.style.gap = '6px';
+
+                // Clear button
+                const clearBtn = document.createElement('button');
+                clearBtn.textContent = 'Clear';
+                clearBtn.style.padding = '4px 8px';
+                clearBtn.style.fontSize = '11px';
+                clearBtn.style.border = '1px solid #dc3545';
+                clearBtn.style.backgroundColor = '#fff';
+                clearBtn.style.color = '#dc3545';
+                clearBtn.style.borderRadius = '4px';
+                clearBtn.style.cursor = 'pointer';
+                clearBtn.style.fontWeight = '500';
+                clearBtn.addEventListener('click', () => this.clearSelection());
+                buttonContainer.appendChild(clearBtn);
+
+                // Done button
+                const doneBtn = document.createElement('button');
+                doneBtn.textContent = 'Done';
+                doneBtn.style.padding = '4px 12px';
+                doneBtn.style.fontSize = '11px';
+                doneBtn.style.border = 'none';
+                doneBtn.style.backgroundColor = '#4CAF50';
+                doneBtn.style.color = 'white';
+                doneBtn.style.borderRadius = '4px';
+                doneBtn.style.cursor = 'pointer';
+                doneBtn.style.fontWeight = '500';
+                doneBtn.addEventListener('click', () => {
+                    params.stopEditing();
+                });
+                buttonContainer.appendChild(doneBtn);
+
+                header.appendChild(buttonContainer);
+                this.eGui.appendChild(header);
+
+                // Search box
+                const searchContainer = document.createElement('div');
+                searchContainer.style.padding = '8px 12px';
+                searchContainer.style.borderBottom = '1px solid #dee2e6';
+
+                this.searchInput = document.createElement('input');
+                this.searchInput.type = 'text';
+                this.searchInput.placeholder = 'Search suppliers...';
+                this.searchInput.style.width = '100%';
+                this.searchInput.style.padding = '6px 8px';
+                this.searchInput.style.fontSize = '12px';
+                this.searchInput.style.border = '1px solid #ced4da';
+                this.searchInput.style.borderRadius = '4px';
+                this.searchInput.style.boxSizing = 'border-box';
+                this.searchInput.addEventListener('input', () => this.filterSuppliers());
+                searchContainer.appendChild(this.searchInput);
+                this.eGui.appendChild(searchContainer);
+
+                // Scrollable container for options
+                this.eContainer = document.createElement('div');
+                this.eContainer.style.padding = '4px';
+                this.eContainer.style.maxHeight = '280px';
+                this.eContainer.style.overflowY = 'auto';
+                this.eContainer.style.overflowX = 'hidden';
+
+                // Populate options
+                this.populateOptions();
+
+                this.eGui.appendChild(this.eContainer);
+
+                // Status bar showing selection
+                const statusBar = document.createElement('div');
+                statusBar.style.padding = '8px 12px';
+                statusBar.style.borderTop = '1px solid #dee2e6';
+                statusBar.style.backgroundColor = '#f8f9fa';
+                statusBar.style.fontSize = '11px';
+                statusBar.style.color = '#6c757d';
+                statusBar.style.borderBottomLeftRadius = '4px';
+                statusBar.style.borderBottomRightRadius = '4px';
+                statusBar.id = 'supplier-status-bar';
+                this.updateStatusBar(statusBar);
+                this.eGui.appendChild(statusBar);
+            }
+
+            async loadSuppliers() {
+                // Check if suppliers already cached globally
+                if (window._cachedSuppliers && Array.isArray(window._cachedSuppliers)) {
+                    this.suppliers = window._cachedSuppliers;
+                    return;
+                }
+
+                // Try to read from currentData.included
+                try {
+                    const currentData = this.params.context?.gridInstance?.currentData;
+
+                    if (currentData && currentData.included && Array.isArray(currentData.included)) {
+                        // Extract unique suppliers from included data
+                        const suppliersMap = new Map();
+                        currentData.included
+                            .filter(item => item.type === 'suppliers')
+                            .forEach(supplier => {
+                                const supplierData = supplier.attributes || supplier;
+                                // Use company_name, or fallback to first_name + last_name
+                                const supplierName = supplierData.company_name ||
+                                    `${supplierData.first_name || ''} ${supplierData.last_name || ''}`.trim() ||
+                                    'Unnamed Supplier';
+                                suppliersMap.set(supplier.id, {
+                                    value: parseInt(supplier.id),
+                                    label: supplierName
+                                });
+                            });
+
+                        this.suppliers = Array.from(suppliersMap.values())
+                            .sort((a, b) => a.label.localeCompare(b.label));
+
+                        // Cache globally for reuse
+                        window._cachedSuppliers = this.suppliers;
+
+                        return;
+                    }
+
+                    this.suppliers = [];
+                } catch (error) {
+                    console.error('[SupplierEditor] Failed to load suppliers:', error);
+                    this.suppliers = [];
+                }
+            }
+
+            populateOptions(filterText = '') {
+                this.eContainer.innerHTML = '';
+
+                if (this.suppliers.length === 0) {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.textContent = 'No suppliers available';
+                    emptyMsg.style.padding = '12px';
+                    emptyMsg.style.color = '#6c757d';
+                    emptyMsg.style.fontStyle = 'italic';
+                    emptyMsg.style.fontSize = '12px';
+                    this.eContainer.appendChild(emptyMsg);
+                    return;
+                }
+
+                // Filter suppliers based on search
+                const filteredSuppliers = filterText
+                    ? this.suppliers.filter(s => s.label.toLowerCase().includes(filterText.toLowerCase()))
+                    : this.suppliers;
+
+                if (filteredSuppliers.length === 0) {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.textContent = 'No matching suppliers';
+                    emptyMsg.style.padding = '12px';
+                    emptyMsg.style.color = '#6c757d';
+                    emptyMsg.style.fontStyle = 'italic';
+                    emptyMsg.style.fontSize = '12px';
+                    this.eContainer.appendChild(emptyMsg);
+                    return;
+                }
+
+                // Add supplier options
+                filteredSuppliers.forEach(supplier => {
+                    this.addOption(supplier);
+                });
+            }
+
+            addOption(supplier) {
+                const optionContainer = document.createElement('div');
+                optionContainer.style.display = 'flex';
+                optionContainer.style.alignItems = 'center';
+                optionContainer.style.padding = '8px 10px';
+                optionContainer.style.cursor = 'pointer';
+                optionContainer.style.borderRadius = '4px';
+                optionContainer.style.marginBottom = '2px';
+                optionContainer.style.transition = 'background-color 0.15s';
+                optionContainer.style.fontSize = '12px';
+                optionContainer.style.fontWeight = '500';
+
+                const isSelected = this.selectedId === supplier.value;
+                if (isSelected) {
+                    optionContainer.style.backgroundColor = '#e3f2fd';
+                    optionContainer.style.borderLeft = '3px solid #2196F3';
+                    optionContainer.style.paddingLeft = '7px';
+                }
+
+                optionContainer.addEventListener('mouseenter', () => {
+                    if (!isSelected) {
+                        optionContainer.style.backgroundColor = '#f8f9fa';
+                    }
+                });
+                optionContainer.addEventListener('mouseleave', () => {
+                    if (!isSelected) {
+                        optionContainer.style.backgroundColor = 'transparent';
+                    }
+                });
+
+                optionContainer.addEventListener('click', () => this.selectSupplier(supplier.value));
+
+                const label = document.createElement('span');
+                label.textContent = supplier.label;
+                label.style.userSelect = 'none';
+
+                optionContainer.appendChild(label);
+                this.eContainer.appendChild(optionContainer);
+            }
+
+            selectSupplier(supplierId) {
+                this.selectedId = supplierId;
+
+                // Re-populate to update visual selection
+                const filterText = this.searchInput ? this.searchInput.value : '';
+                this.populateOptions(filterText);
+
+                // Update status bar
+                const statusBar = this.eGui.querySelector('#supplier-status-bar');
+                if (statusBar) {
+                    this.updateStatusBar(statusBar);
+                }
+            }
+
+            clearSelection() {
+                this.selectedId = null;
+
+                // Re-populate to update visual selection
+                const filterText = this.searchInput ? this.searchInput.value : '';
+                this.populateOptions(filterText);
+
+                // Update status bar
+                const statusBar = this.eGui.querySelector('#supplier-status-bar');
+                if (statusBar) {
+                    this.updateStatusBar(statusBar);
+                }
+            }
+
+            filterSuppliers() {
+                const filterText = this.searchInput.value;
+                this.populateOptions(filterText);
+            }
+
+            updateStatusBar(statusBar) {
+                if (this.selectedId) {
+                    const supplier = this.suppliers.find(s => s.value === this.selectedId);
+                    statusBar.textContent = supplier ? `Selected: ${supplier.label}` : 'No supplier selected';
+                } else {
+                    statusBar.textContent = 'No supplier selected';
+                }
+            }
+
+            getGui() {
+                return this.eGui;
+            }
+
+            getValue() {
+                return this.selectedId;
+            }
+
+            destroy() {
+                this.isDestroyed = true;
+            }
+
+            isPopup() {
+                return true;
+            }
+
+            isCancelBeforeStart() {
+                return false;
+            }
+
+            isCancelAfterEnd() {
+                return false;
+            }
+
+            focusIn() {
+                // Focus on search input
+                if (this.searchInput && !this.isDestroyed) {
+                    this.searchInput.focus();
+                }
+            }
+
+            focusOut() {
+                // Nothing to do
+            }
+        }
+
+        return SupplierEditor;
     }
 }
 

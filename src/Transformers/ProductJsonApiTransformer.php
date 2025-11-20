@@ -88,6 +88,18 @@ class ProductJsonApiTransformer extends JsonApiTransformer
             $this->addAllCategoriesToIncluded($result);
         }
 
+        // For WL mode: When include=brand is requested, add ALL active brands
+        // This provides all available brands for the brand dropdown in AG Grid
+        if ($mode === 'wl' && in_array('brand', $includes)) {
+            $this->addAllBrandsToIncluded($result);
+        }
+
+        // For WL mode: When include=supplier is requested, add ALL active suppliers
+        // This provides all available suppliers for the supplier dropdown in AG Grid
+        if ($mode === 'wl' && in_array('supplier', $includes)) {
+            $this->addAllSuppliersToIncluded($result);
+        }
+
         // For all modes: When include=category is requested, add each product's assigned categories
         // This supports multi-category display (comma-separated category_ids)
         if (in_array('category', $includes)) {
@@ -153,6 +165,72 @@ class ProductJsonApiTransformer extends JsonApiTransformer
                     'type' => 'categories',
                     'id' => (string) $category->id,
                     'attributes' => $this->getRelatedModelAttributes($category)
+                ];
+            }
+        }
+
+        // Update result's included array
+        if (!empty($this->included)) {
+            $result['included'] = array_values($this->included);
+        }
+    }
+
+    /**
+     * Add all active brands to included array (for WL mode)
+     * This provides all available brands for the brand dropdown in AG Grid
+     */
+    protected function addAllBrandsToIncluded(array &$result): void
+    {
+        // Get Brand model class
+        $brandModel = config('products-package.models.brand', \App\Brand::class);
+
+        // Query all active brands
+        $brands = $brandModel::whereNull('deleted_at')
+            ->orderBy('name')
+            ->get();
+
+        foreach ($brands as $brand) {
+            $key = 'brands:' . $brand->id;
+
+            // Check if already added to avoid duplicates
+            if (!isset($this->included[$key])) {
+                $this->included[$key] = [
+                    'type' => 'brands',
+                    'id' => (string) $brand->id,
+                    'attributes' => $this->getRelatedModelAttributes($brand)
+                ];
+            }
+        }
+
+        // Update result's included array
+        if (!empty($this->included)) {
+            $result['included'] = array_values($this->included);
+        }
+    }
+
+    /**
+     * Add all active suppliers to included array (for WL mode)
+     * This provides all available suppliers for the supplier dropdown in AG Grid
+     */
+    protected function addAllSuppliersToIncluded(array &$result): void
+    {
+        // Get Supplier model class
+        $supplierModel = config('products-package.models.supplier', \App\Supplier::class);
+
+        // Query all active suppliers
+        $suppliers = $supplierModel::whereNull('deleted_at')
+            ->orderBy('company_name')
+            ->get();
+
+        foreach ($suppliers as $supplier) {
+            $key = 'suppliers:' . $supplier->id;
+
+            // Check if already added to avoid duplicates
+            if (!isset($this->included[$key])) {
+                $this->included[$key] = [
+                    'type' => 'suppliers',
+                    'id' => (string) $supplier->id,
+                    'attributes' => $this->getRelatedModelAttributes($supplier)
                 ];
             }
         }
@@ -288,6 +366,23 @@ class ProductJsonApiTransformer extends JsonApiTransformer
         $attributes['is_on_sale'] = $product->isOnSale();
         $attributes['has_image'] = $product->hasImage();
         $attributes['image_url'] = $product->image_url;
+
+        // Add brand_name for grid display (flat mode support)
+        if ($product->brand_id && $product->relationLoaded('brand') && $product->brand) {
+            $attributes['brand_name'] = $product->brand->name;
+        } else {
+            $attributes['brand_name'] = null;
+        }
+
+        // Add supplier_name for grid display (flat mode support)
+        // Use company_name, or fallback to first_name + last_name
+        if ($product->supplier_id && $product->relationLoaded('supplier') && $product->supplier) {
+            $supplier = $product->supplier;
+            $attributes['supplier_name'] = $supplier->company_name ?:
+                trim(($supplier->first_name ?? '') . ' ' . ($supplier->last_name ?? '')) ?: null;
+        } else {
+            $attributes['supplier_name'] = null;
+        }
 
         // Remove cost_price if it's hidden (security)
         if (in_array('cost_price', $product->getHidden())) {

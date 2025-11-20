@@ -73,12 +73,12 @@ export class ProductGridApiClient {
 
             // Add includes for both nested and flat structures
             // For nested (WTM): includes category, brand, supplier, attributes relationships
-            // For flat (WL): includes only master attributes metadata
+            // For flat (WL): includes attributes, category, brand, supplier (for dropdowns)
             if (this.dataAdapter.getCurrentMode() === 'nested' || this.dataAdapter.mode === 'auto') {
                 url += '&include=category,brand,supplier,attributes';
             } else if (this.dataAdapter.getCurrentMode() === 'flat') {
-                // For flat mode, request attributes and category (for category dropdown)
-                url += '&include=attributes,category';
+                // For flat mode, request attributes, category, brand, supplier (for editors)
+                url += '&include=attributes,category,brand,supplier';
             }
 
             const response = await fetch(url, {
@@ -164,6 +164,46 @@ export class ProductGridApiClient {
                     // Null category: clear relationship
                     updateData.data.relationships = {
                         category: {
+                            data: null
+                        }
+                    };
+                }
+            } else if (fieldName === 'brand_id') {
+                // Handle brand_id as a relationship for JSON:API compliance
+                if (processedValue !== null && processedValue !== undefined) {
+                    // Single brand: to-one relationship
+                    updateData.data.relationships = {
+                        brand: {
+                            data: {
+                                type: 'brands',
+                                id: String(processedValue)
+                            }
+                        }
+                    };
+                } else {
+                    // Null brand: clear relationship
+                    updateData.data.relationships = {
+                        brand: {
+                            data: null
+                        }
+                    };
+                }
+            } else if (fieldName === 'supplier_id') {
+                // Handle supplier_id as a relationship for JSON:API compliance
+                if (processedValue !== null && processedValue !== undefined) {
+                    // Single supplier: to-one relationship
+                    updateData.data.relationships = {
+                        supplier: {
+                            data: {
+                                type: 'suppliers',
+                                id: String(processedValue)
+                            }
+                        }
+                    };
+                } else {
+                    // Null supplier: clear relationship
+                    updateData.data.relationships = {
+                        supplier: {
                             data: null
                         }
                     };
