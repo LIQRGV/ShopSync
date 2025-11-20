@@ -267,21 +267,6 @@ class ApiProductFetcher implements ProductFetcherInterface
         return $response ? $this->convertToProduct($response['data'] ?? $response) : null;
     }
 
-    /**
-     * Update product and return raw API response (no model conversion)
-     * Used for attribute updates in WTM mode to avoid database queries
-     *
-     * @param int|string $id
-     * @param array $data
-     * @return array|null
-     */
-    public function updateRaw($id, array $data)
-    {
-        return $this->handleRequest(function () use ($id, $data) {
-            return $this->client()->put("/products/{$id}", $data);
-        }, null);
-    }
-
     public function delete($id)
     {
         $response = $this->handleRequest(function () use ($id) {
@@ -705,21 +690,5 @@ class ApiProductFetcher implements ProductFetcherInterface
         ]);
 
         return $response ? $this->convertToProduct($response['data'] ?? $response) : null;
-    }
-
-    /**
-     * Get all enabled attributes from WL API
-     * Used for grid column rendering in WTM mode
-     *
-     * @return array
-     */
-    public function getAllEnabledAttributes(): array
-    {
-        $response = $this->handleRequest(function () {
-            return $this->client()->get('/products/attributes');
-        }, []);
-
-        // Extract data array from response
-        return $response['data'] ?? [];
     }
 }

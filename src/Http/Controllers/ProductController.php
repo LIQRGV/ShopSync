@@ -759,34 +759,4 @@ class ProductController extends Controller
 
         return false;
     }
-
-    /**
-     * Get all enabled attributes for grid rendering
-     * This endpoint is used by WTM to fetch attributes from WL without database queries
-     *
-     * @return JsonResponse
-     */
-    public function getAttributes(): JsonResponse
-    {
-        try {
-            $attributes = $this->productService->getAllEnabledAttributes();
-
-            return response()->json([
-                'data' => $attributes,
-                'meta' => [
-                    'count' => count($attributes)
-                ]
-            ], 200);
-        } catch (\Exception $e) {
-            Log::error('Error fetching attributes', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json(
-                JsonApiErrorResponse::internalError('Failed to fetch attributes: ' . $e->getMessage()),
-                500
-            );
-        }
-    }
 }

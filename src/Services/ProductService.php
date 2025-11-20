@@ -113,55 +113,49 @@ class ProductService
             $result = $this->transformer->transformProducts($products->items(), $includes);
 
             // For WTM mode (ApiProductFetcher), merge original included data
-            // This preserves ALL enabled attributes from client's shop API
-            if (method_exists($this->productFetcher, 'getOriginalIncludedData')) {
-                $originalIncluded = $this->productFetcher->getOriginalIncludedData();
+            // This preserves ALL enabled attributes from client's shop API (even those not used by products)
+            // The transformer only includes attributes actively used, but the grid needs all enabled attributes
+            $originalIncluded = $this->productFetcher->getOriginalIncludedData();
 
-                if (!empty($originalIncluded) && isset($result['included'])) {
-                    // Build map of existing included items for faster lookup and update
-                    $existingMap = [];
-                    foreach ($result['included'] as $index => $item) {
-                        if (isset($item['type']) && isset($item['id'])) {
-                            $key = $item['type'] . ':' . $item['id'];
-                            $existingMap[$key] = $index;
-                        }
+            if (!empty($originalIncluded) && isset($result['included'])) {
+                // Build map of existing included items for faster lookup and update
+                $existingMap = [];
+                foreach ($result['included'] as $index => $item) {
+                    if (isset($item['type']) && isset($item['id'])) {
+                        $key = $item['type'] . ':' . $item['id'];
+                        $existingMap[$key] = $index;
                     }
-
-                    // Merge original included data (contains ALL enabled attributes with _productValues)
-                    foreach ($originalIncluded as $item) {
-                        if (isset($item['type']) && isset($item['id'])) {
-                            $key = $item['type'] . ':' . $item['id'];
-                            if (isset($existingMap[$key])) {
-                                // UPDATE existing item - merge _productValues from WL API
-                                $existingItem = $result['included'][$existingMap[$key]];
-
-                                // Preserve _productValues from WL API (has correct pivot data)
-                                if (isset($item['_productValues'])) {
-                                    $result['included'][$existingMap[$key]]['_productValues'] = $item['_productValues'];
-                                }
-
-                                // Also update attributes if they have more complete data from WL
-                                if (isset($item['attributes']) && is_array($item['attributes'])) {
-                                    if (!isset($existingItem['attributes'])) {
-                                        $result['included'][$existingMap[$key]]['attributes'] = $item['attributes'];
-                                    } else {
-                                        // Merge attributes, WL data takes precedence for options
-                                        $result['included'][$existingMap[$key]]['attributes'] = array_merge(
-                                            $existingItem['attributes'],
-                                            $item['attributes']
-                                        );
-                                    }
-                                }
-                            } else {
-                                // ADD new item that transformer didn't include
-                                $result['included'][] = $item;
-                            }
-                        }
-                    }
-                } elseif (!empty($originalIncluded) && !isset($result['included'])) {
-                    // If no included data in result, use original
-                    $result['included'] = $originalIncluded;
                 }
+
+                // Merge original included data (contains ALL enabled attributes)
+                foreach ($originalIncluded as $item) {
+                    if (isset($item['type']) && isset($item['id'])) {
+                        $key = $item['type'] . ':' . $item['id'];
+                        if (isset($existingMap[$key])) {
+                            // UPDATE existing item - merge complete data from WL API
+                            $existingItem = $result['included'][$existingMap[$key]];
+
+                            // Update attributes if they have more complete data from WL
+                            if (isset($item['attributes']) && is_array($item['attributes'])) {
+                                if (!isset($existingItem['attributes'])) {
+                                    $result['included'][$existingMap[$key]]['attributes'] = $item['attributes'];
+                                } else {
+                                    // Merge attributes, WL data takes precedence for options
+                                    $result['included'][$existingMap[$key]]['attributes'] = array_merge(
+                                        $existingItem['attributes'],
+                                        $item['attributes']
+                                    );
+                                }
+                            }
+                        } else {
+                            // ADD new item that transformer didn't include
+                            $result['included'][] = $item;
+                        }
+                    }
+                }
+            } elseif (!empty($originalIncluded) && !isset($result['included'])) {
+                // If no included data in result, use original
+                $result['included'] = $originalIncluded;
             }
 
             // Add pagination meta
@@ -189,28 +183,26 @@ class ProductService
             $result = $this->transformer->transformProducts($products, $includes);
 
             // For WTM mode (ApiProductFetcher), merge original included data
-            if (method_exists($this->productFetcher, 'getOriginalIncludedData')) {
-                $originalIncluded = $this->productFetcher->getOriginalIncludedData();
+            $originalIncluded = $this->productFetcher->getOriginalIncludedData();
 
-                if (!empty($originalIncluded) && isset($result['included'])) {
-                    $existingIds = [];
-                    foreach ($result['included'] as $item) {
-                        if (isset($item['type']) && isset($item['id'])) {
-                            $existingIds[] = $item['type'] . ':' . $item['id'];
-                        }
+            if (!empty($originalIncluded) && isset($result['included'])) {
+                $existingIds = [];
+                foreach ($result['included'] as $item) {
+                    if (isset($item['type']) && isset($item['id'])) {
+                        $existingIds[] = $item['type'] . ':' . $item['id'];
                     }
-
-                    foreach ($originalIncluded as $item) {
-                        if (isset($item['type']) && isset($item['id'])) {
-                            $key = $item['type'] . ':' . $item['id'];
-                            if (!in_array($key, $existingIds)) {
-                                $result['included'][] = $item;
-                            }
-                        }
-                    }
-                } elseif (!empty($originalIncluded) && !isset($result['included'])) {
-                    $result['included'] = $originalIncluded;
                 }
+
+                foreach ($originalIncluded as $item) {
+                    if (isset($item['type']) && isset($item['id'])) {
+                        $key = $item['type'] . ':' . $item['id'];
+                        if (!in_array($key, $existingIds)) {
+                            $result['included'][] = $item;
+                        }
+                    }
+                }
+            } elseif (!empty($originalIncluded) && !isset($result['included'])) {
+                $result['included'] = $originalIncluded;
             }
         }
 
@@ -402,12 +394,10 @@ class ProductService
                 'value' => (string) $value
             ];
 
-            // For WTM mode, use updateRaw() to get raw API response without model conversion
-            // This avoids database queries for relationships that don't exist in WTM
-            // The client shop API already returns JSON:API format, so we return it directly
-            $response = $this->productFetcher->updateRaw($productId, $updateData);
+            // Use update() which returns Product model
+            $product = $this->productFetcher->update($productId, $updateData);
 
-            if (!$response) {
+            if (!$product) {
                 \Log::error('Failed to update attribute via WTM API', [
                     'product_id' => $productId,
                     'attribute_id' => $attributeId
@@ -415,9 +405,8 @@ class ProductService
                 return null;
             }
 
-            // Return the raw JSON:API response from client shop
-            // No need to transform since it's already in JSON:API format
-            return $response;
+            // Transform to JSON API format (consistent with WL mode)
+            return $this->transformer->transformProduct($product, $includes);
         }
     }
 
@@ -607,16 +596,5 @@ class ProductService
 
         // Transform to JSON API format without includes (keep response simple)
         return $this->transformer->transformProduct($product, []);
-    }
-
-    /**
-     * Get all enabled attributes
-     * Delegates to productFetcher which handles WL vs WTM mode
-     *
-     * @return array
-     */
-    public function getAllEnabledAttributes(): array
-    {
-        return $this->productFetcher->getAllEnabledAttributes();
     }
 }

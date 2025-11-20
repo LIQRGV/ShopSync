@@ -5,6 +5,7 @@ use TheDiamondBox\ShopSync\Http\Controllers\ProductController;
 use TheDiamondBox\ShopSync\Http\Controllers\CategoryController;
 use TheDiamondBox\ShopSync\Http\Controllers\BrandController;
 use TheDiamondBox\ShopSync\Http\Controllers\SupplierController;
+use TheDiamondBox\ShopSync\Http\Controllers\AttributeController;
 use TheDiamondBox\ShopSync\Http\Controllers\SseController;
 use TheDiamondBox\ShopSync\Http\Controllers\ShopInfoController;
 
@@ -52,6 +53,9 @@ Route::get('/brands', [BrandController::class, 'index'])
 Route::get('/suppliers', [SupplierController::class, 'index'])
     ->name('suppliers.index');
 
+Route::get('/attributes', [AttributeController::class, 'index'])
+    ->name('attributes.index');
+
 // Package status endpoint (if enabled)
 if (config('products-package.features.status_endpoint', true)) {
     Route::get('/products/status', [ProductController::class, 'status'])
@@ -75,11 +79,6 @@ if (config('products-package.features.import', true)) {
     Route::post('/products/import', [ProductController::class, 'import'])
         ->name('products.import');
 }
-
-// Get all enabled attributes - must come before {id} routes
-// Used by WTM to fetch attributes from WL without database queries
-Route::get('/products/attributes', [ProductController::class, 'getAttributes'])
-    ->name('products.attributes');
 
 // Main CRUD routes
 Route::get('/products', [ProductController::class, 'index'])

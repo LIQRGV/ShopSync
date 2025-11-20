@@ -111,11 +111,16 @@ interface ProductFetcherInterface
     public function uploadProductImage($id, $file);
 
     /**
-     * Get all enabled attributes
-     * WTM: fetch from WL API
-     * WL: query database directly
+     * Get original included data from last API call
      *
-     * @return array
+     * In WTM mode: Returns the complete included data from the WL API response,
+     * preserving ALL enabled attributes (even those not used by products on current page).
+     * This is necessary because the transformer only includes attributes that are actively
+     * used, but the grid needs all enabled attributes to show all columns.
+     *
+     * In WL mode: Returns empty array (not needed for direct database queries).
+     *
+     * @return array The original included data from API response, or empty array
      */
-    public function getAllEnabledAttributes(): array;
+    public function getOriginalIncludedData(): array;
 }
