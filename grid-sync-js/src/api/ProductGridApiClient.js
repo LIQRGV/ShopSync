@@ -77,8 +77,8 @@ export class ProductGridApiClient {
             if (this.dataAdapter.getCurrentMode() === 'nested' || this.dataAdapter.mode === 'auto') {
                 url += '&include=category,brand,supplier,attributes';
             } else if (this.dataAdapter.getCurrentMode() === 'flat') {
-                // For flat mode, only request attributes to get master attribute metadata
-                url += '&include=attributes';
+                // For flat mode, request attributes and category (for category dropdown)
+                url += '&include=attributes,category';
             }
 
             const response = await fetch(url, {
@@ -119,15 +119,13 @@ export class ProductGridApiClient {
      * @param {number} productId - Product ID
      * @param {string} fieldName - Field name to update
      * @param {*} value - New value
+     * @param {string} includes - Optional includes parameter (e.g., 'category' or 'category,brand')
      * @returns {Promise<Object>} Update result
      */
-    async updateProduct(productId, fieldName, value) {
+    async updateProduct(productId, fieldName, value, includes = null) {
         try {
             // Process value based on field type
             const processedValue = this.processFieldValue(fieldName, value);
-
-            // Transform field name and value for API based on data mode
-            const fieldData = this.dataAdapter.transformForApi(fieldName, processedValue);
 
             // Both modes use JSON:API format for updates
             // marketplace-api uses STRICT JSON:API format
@@ -135,12 +133,54 @@ export class ProductGridApiClient {
             const updateData = {
                 data: {
                     type: 'products',
-                    id: String(productId),
-                    attributes: fieldData
+                    id: String(productId)
                 }
             };
 
-            const response = await fetch(`${this.baseUrl}/${productId}`, {
+            // Handle category_id as a relationship for JSON:API compliance
+            if (fieldName === 'category_id') {
+                // Convert category IDs to JSON:API relationship format
+                if (Array.isArray(processedValue) && processedValue.length > 0) {
+                    // Multiple categories: to-many relationship
+                    updateData.data.relationships = {
+                        category: {
+                            data: processedValue.map(id => ({
+                                type: 'categories',
+                                id: String(id)
+                            }))
+                        }
+                    };
+                } else if (processedValue !== null && processedValue !== undefined) {
+                    // Single category: to-one relationship
+                    updateData.data.relationships = {
+                        category: {
+                            data: {
+                                type: 'categories',
+                                id: String(processedValue)
+                            }
+                        }
+                    };
+                } else {
+                    // Null category: clear relationship
+                    updateData.data.relationships = {
+                        category: {
+                            data: null
+                        }
+                    };
+                }
+            } else {
+                // Regular attributes
+                const fieldData = this.dataAdapter.transformForApi(fieldName, processedValue);
+                updateData.data.attributes = fieldData;
+            }
+
+            // Build URL with optional includes parameter
+            let url = `${this.baseUrl}/${productId}`;
+            if (includes) {
+                url += `?include=${includes}`;
+            }
+
+            const response = await fetch(url, {
                 method: ProductGridConstants.API_CONFIG.METHODS.PUT,
                 headers: this.getHeaders(),
                 body: JSON.stringify(updateData)

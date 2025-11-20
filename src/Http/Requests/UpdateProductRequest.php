@@ -69,6 +69,19 @@ class UpdateProductRequest extends BaseProductRequest
             return $rules;
         }
 
+        // Get table names from model instances
+        $categoryModel = config('products-package.models.category', \App\Category::class);
+        $categoryTable = (new $categoryModel)->getTable();
+
+        $brandModel = config('products-package.models.brand', \App\Brand::class);
+        $brandTable = (new $brandModel)->getTable();
+
+        $locationModel = config('products-package.models.location', \App\Location::class);
+        $locationTable = (new $locationModel)->getTable();
+
+        $supplierModel = config('products-package.models.supplier', \App\Supplier::class);
+        $supplierTable = (new $supplierModel)->getTable();
+
         return array_merge(parent::rules(), [
             'name' => 'sometimes|required|string|max:255',
             'sku_prefix' => 'nullable|string|max:50',
@@ -90,10 +103,65 @@ class UpdateProductRequest extends BaseProductRequest
             'seo_description' => 'nullable|string',
             'related_products' => 'nullable|array',
             'related_products.*' => 'integer|exists:products,id',
-            'category_id' => 'nullable|integer|exists:categories,id',
-            'brand_id' => 'nullable|integer|exists:brands,id',
-            'location_id' => 'nullable|integer|exists:locations,id',
-            'supplier_id' => 'nullable|integer|exists:suppliers,id',
+            'category_id' => [
+                'nullable',
+                function ($attribute, $value, $fail) use ($categoryTable) {
+                    // Allow null/empty
+                    if (empty($value)) {
+                        return;
+                    }
+
+                    // Parse category IDs from different formats
+                    if (is_array($value)) {
+                        // JSON:API to-many relationship: [1, 2, 3]
+                        $categoryIds = $value;
+                    } elseif (is_string($value) && strpos($value, ',') !== false) {
+                        // Comma-separated string: "1,2,3"
+                        $categoryIds = array_filter(array_map('trim', explode(',', $value)));
+                    } elseif (is_numeric($value) || is_string($value)) {
+                        // Single ID: 1 or "1"
+                        $categoryIds = [$value];
+                    } else {
+                        $fail('The category format is invalid.');
+                        return;
+                    }
+
+                    // Validate each ID is numeric
+                    foreach ($categoryIds as $categoryId) {
+                        if (!is_numeric($categoryId)) {
+                            $fail('The category must contain only valid integers.');
+                            return;
+                        }
+                    }
+
+                    // Validate all IDs exist in database
+                    $categoryModel = config('products-package.models.category', \App\Category::class);
+                    $existingIds = $categoryModel::whereIn('id', $categoryIds)->pluck('id')->toArray();
+                    $missingIds = array_diff(
+                        array_map('strval', $categoryIds),
+                        array_map('strval', $existingIds)
+                    );
+
+                    if (!empty($missingIds)) {
+                        $fail('The following category IDs do not exist: ' . implode(', ', $missingIds));
+                    }
+                }
+            ],
+            'brand_id' => [
+                'nullable',
+                'integer',
+                'exists:' . $brandTable . ',id'
+            ],
+            'location_id' => [
+                'nullable',
+                'integer',
+                'exists:' . $locationTable . ',id'
+            ],
+            'supplier_id' => [
+                'nullable',
+                'integer',
+                'exists:' . $supplierTable . ',id'
+            ],
         ]);
     }
 
@@ -136,6 +204,36 @@ class UpdateProductRequest extends BaseProductRequest
         // Convert related_products array to JSON for storage
         if (isset($validated['related_products'])) {
             $validated['related_products'] = json_encode($validated['related_products']);
+        }
+
+        // Separate category_id array into parent categories and subcategories
+        if (isset($validated['category_id']) && is_array($validated['category_id'])) {
+            $categoryIds = $validated['category_id'];
+
+            // Get category model to check parent_id
+            $categoryModel = config('products-package.models.category', \App\Category::class);
+            $categories = $categoryModel::whereIn('id', $categoryIds)->get();
+
+            // Separate parent categories (parent_id = 0 or NULL) from subcategories
+            $parentIds = [];
+            $subCategoryIds = [];
+
+            foreach ($categories as $category) {
+                if (empty($category->parent_id) || $category->parent_id == 0) {
+                    // This is a parent category
+                    $parentIds[] = $category->id;
+                } else {
+                    // This is a subcategory
+                    $subCategoryIds[] = $category->id;
+                }
+            }
+
+            // Store comma-separated values
+            $validated['category_id'] = !empty($parentIds) ? implode(',', $parentIds) : null;
+            $validated['sub_category_id'] = !empty($subCategoryIds) ? implode(',', $subCategoryIds) : null;
+        } elseif (isset($validated['category_id'])) {
+            // If it's already a string, keep it as is
+            // (backward compatibility for single category updates)
         }
 
         // Generate slug if name changed and slug not provided

@@ -20,8 +20,6 @@ export class GridRenderer {
         this.enabledAttributes = config.enabledAttributes || [];
         this.masterAttributes = config.masterAttributes || [];
 
-        console.log('[GridRenderer] Constructor: masterAttributes count =', this.masterAttributes.length);
-
         // Inject custom CSS for colored dropdowns and read-only cells
         this.injectStatusDropdownCSS();
     }
@@ -43,33 +41,17 @@ export class GridRenderer {
             return {};
         }
 
-        console.log('[GridRenderer] extractAttributeGroups: dataAdapter.mode =', this.dataAdapter.mode);
-        console.log('[GridRenderer] extractAttributeGroups: currentData keys =', Object.keys(this.currentData));
-        console.log('[GridRenderer] extractAttributeGroups: has included?', !!this.currentData.included);
-        console.log('[GridRenderer] extractAttributeGroups: has attributes?', !!this.currentData.attributes);
-
-        // Log first product structure to see where attributes are
-        if (this.currentData.data && this.currentData.data.length > 0) {
-            const firstProduct = this.currentData.data[0];
-            console.log('[GridRenderer] First product keys:', Object.keys(firstProduct));
-            console.log('[GridRenderer] First product full:', firstProduct);
-        }
-
         const attributeGroups = {};
 
         // Handle both nested and flat modes: Extract master attributes from included array
         // For nested mode (WTM): included contains product relationships + master attributes
         // For flat mode (WL): included contains only master attributes metadata
         if (this.currentData.included) {
-            console.log('[GridRenderer] Found included array, extracting attributes...');
-
             // Filter attributes that are enabled_on_dropship
             const enabledAttributes = this.currentData.included.filter(item =>
                 item.type === 'attributes' &&
                 item.attributes.enabled_on_dropship === true
             );
-
-            console.log('[GridRenderer] Enabled attributes found:', enabledAttributes.length);
 
             // Group by group_name
             enabledAttributes.forEach(attr => {
@@ -88,14 +70,11 @@ export class GridRenderer {
                     options: attr.attributes.options || []
                 });
             });
-
-            console.log('[GridRenderer] Attribute groups extracted:', Object.keys(attributeGroups));
         }
 
         // Handle flat mode (master attributes passed from backend)
         // In flat mode, master attributes are passed via blade template to JavaScript
         if (this.dataAdapter.mode === 'flat' && this.masterAttributes && this.masterAttributes.length > 0) {
-            console.log('[GridRenderer] Using masterAttributes from blade template, count:', this.masterAttributes.length);
 
             this.masterAttributes.forEach(attr => {
                 const groupName = attr.group_name || 'Other';
@@ -111,16 +90,9 @@ export class GridRenderer {
                     type: attr.input_type || 1
                 });
             });
-
-            console.log('[GridRenderer] Extracted attribute groups:', Object.keys(attributeGroups));
         }
 
         // Alternative: Extract from first product's attributes in flat mode
-        console.log('[GridRenderer] Checking product attributes extraction...');
-        console.log('[GridRenderer] - attributeGroups.length:', Object.keys(attributeGroups).length);
-        console.log('[GridRenderer] - has data?:', !!this.currentData.data);
-        console.log('[GridRenderer] - is array?:', Array.isArray(this.currentData.data));
-        console.log('[GridRenderer] - data.length:', this.currentData.data?.length);
 
         if (this.dataAdapter.mode === 'flat' &&
             Object.keys(attributeGroups).length === 0 &&
@@ -128,36 +100,15 @@ export class GridRenderer {
             Array.isArray(this.currentData.data) &&
             this.currentData.data.length > 0) {
 
-            console.log('[GridRenderer] Extracting attributes from products...');
-            console.log('[GridRenderer] First product:', this.currentData.data[0]);
-
             // Get unique attributes from all products
             const seenAttributes = new Set();
 
-            this.currentData.data.forEach((product, productIndex) => {
-                // Skip logging after first 3 products to avoid console spam
-                if (productIndex < 3) {
-                    console.log(`[GridRenderer] Product ${productIndex} keys:`, Object.keys(product));
-                    console.log(`[GridRenderer] Product ${productIndex} attributes type:`, typeof product.attributes);
-                    console.log(`[GridRenderer] Product ${productIndex} attributes isArray:`, Array.isArray(product.attributes));
-
-                    // Check for other potential attribute fields
-                    if (product.product_attributes) console.log(`[GridRenderer] Product ${productIndex} has product_attributes:`, product.product_attributes);
-                    if (product.attribute_values) console.log(`[GridRenderer] Product ${productIndex} has attribute_values:`, product.attribute_values);
-                    if (product.pivot_attributes) console.log(`[GridRenderer] Product ${productIndex} has pivot_attributes:`, product.pivot_attributes);
-                }
-
+            this.currentData.data.forEach((product) => {
                 if (product.attributes && Array.isArray(product.attributes)) {
-                    if (productIndex < 3) {
-                        console.log(`[GridRenderer] Product ${productIndex} has ${product.attributes.length} attributes`);
-                    }
-
-                    product.attributes.forEach((attr, attrIndex) => {
-                        console.log(`[GridRenderer] - Attribute ${attrIndex}:`, attr);
+                    product.attributes.forEach((attr) => {
                         const attrKey = String(attr.id);
 
                         if (!seenAttributes.has(attrKey) && attr.enabled_on_dropship === true) {
-                            console.log(`[GridRenderer] - Adding attribute ${attr.name} (${attr.id})`);
                             seenAttributes.add(attrKey);
 
                             const groupName = attr.group_name || 'Other';
@@ -177,9 +128,6 @@ export class GridRenderer {
                 }
             });
         }
-
-        console.log('[GridRenderer] Final attributeGroups:', attributeGroups);
-        console.log('[GridRenderer] Total attribute groups found:', Object.keys(attributeGroups).length);
 
         return attributeGroups;
     }
@@ -613,9 +561,63 @@ export class GridRenderer {
                     width: ProductGridConstants.COLUMN_WIDTHS.category,
                     sortable: true,
                     filter: 'agSetColumnFilter',
-                    editable: false,
-                    valueGetter: (params) => this.getCategoryName(params),
-                    cellClass: 'read-only-cell',
+                    editable: (params) => {
+                        return params.data ? true : false;
+                    },
+                    cellRenderer: (params) => {
+                        // Display category name from relationship if available, otherwise from field
+                        if (!params.data) return '';
+                        const categoryName = this.getCategoryName(params);
+                        return categoryName || params.value || '';
+                    },
+                    cellEditor: this.getCategoryEditor(),
+                    cellEditorPopup: true,
+                    cellEditorParams: {},
+                    // Simple value getter/setter that reads/writes directly to category_name field
+                    valueGetter: (params) => {
+                        if (!params.data) return '';
+                        // Try to get from relationship first, otherwise from field
+                        const categoryFromRelationship = this.getCategoryName(params);
+                        return categoryFromRelationship || params.data.category_name || '';
+                    },
+                    valueSetter: (params) => {
+                        if (!params.data) return false;
+
+                        // newValue is comma-separated string from CategoryEditor.getValue()
+                        const newCategoryValue = params.newValue;
+                        const oldCategoryId = params.data.category_id;
+
+                        // Parse newValue to array for comparison
+                        const newCategoryIds = newCategoryValue && newCategoryValue !== ''
+                            ? newCategoryValue.split(',').map(id => parseInt(id.trim()))
+                            : [];
+
+                        // Parse oldValue to array for comparison
+                        const oldCategoryIds = oldCategoryId
+                            ? (typeof oldCategoryId === 'string'
+                                ? oldCategoryId.split(',').map(id => parseInt(id.trim()))
+                                : [parseInt(oldCategoryId)])
+                            : [];
+
+                        // Compare arrays - no change if same IDs
+                        if (JSON.stringify(newCategoryIds.sort()) === JSON.stringify(oldCategoryIds.sort())) {
+                            return false;
+                        }
+
+                        // Update category_id in row data (store as comma-separated for display)
+                        params.data.category_id = newCategoryValue;
+
+                        // Update category_name for display (hierarchical comma-separated)
+                        params.data.category_name = this.buildCategoryNamesFromIds(newCategoryIds);
+
+                        // Set flag for handleCellEdit - send as array for JSON:API
+                        params.data._categoryUpdate = {
+                            categoryId: newCategoryIds.length > 0 ? newCategoryIds : null
+                        };
+
+                        return true;
+                    },
+                    cellClass: (params) => params.data ? 'editable-cell' : 'read-only-cell',
                     cellStyle: (params) => this.getCellStyle(params)
                 },
                 {
@@ -861,11 +863,191 @@ export class GridRenderer {
     }
 
     /**
-     * Get category name from included data (nested mode only)
+     * Get category name from included data (supports both nested and flat modes + multi-category)
      */
     getCategoryName(params) {
-        const categoryData = this.findIncluded(params.data, 'categories', 'category');
-        return categoryData ? this.dataAdapter.getValue(categoryData, 'name') : '';
+        if (!params.data || !this.currentData?.included) {
+            return '';
+        }
+
+        // For WL mode (flat), prioritize direct category_id/sub_category_id fields over relationships
+        // This is because WL mode uses flat data structure but still has empty relationships object
+        const hasDirectCategoryFields = params.data?.category_id || params.data?.sub_category_id;
+
+        if (hasDirectCategoryFields) {
+            // Handle flat mode (WL) - supports comma-separated category_ids
+            // Combine both category_id (parents) and sub_category_id (children)
+            const allCategoryIds = [];
+
+            if (params.data?.category_id) {
+                const parentIds = String(params.data.category_id)
+                    .split(',')
+                    .map(id => id.trim())
+                    .filter(Boolean)
+                    .map(id => parseInt(id));
+                allCategoryIds.push(...parentIds);
+            }
+
+            if (params.data?.sub_category_id) {
+                const subIds = String(params.data.sub_category_id)
+                    .split(',')
+                    .map(id => id.trim())
+                    .filter(Boolean)
+                    .map(id => parseInt(id));
+                allCategoryIds.push(...subIds);
+            }
+
+            if (allCategoryIds.length === 0) {
+                return '';
+            }
+
+            // Use grouped display format
+            const result = this.buildCategoryNamesFromIds(allCategoryIds);
+
+            return result;
+        }
+
+        // Handle nested mode (WTM) - uses relationships (only if no direct fields)
+        if (params.data?.relationships?.category) {
+            const categoryData = this.findIncluded(params.data, 'categories', 'category');
+            if (categoryData && categoryData.attributes) {
+                return this.buildHierarchicalCategoryName(categoryData);
+            }
+            return '';
+        }
+
+        // No category data found
+        return '';
+    }
+
+    /**
+     * Build hierarchical category name (Parent > Child)
+     */
+    buildHierarchicalCategoryName(categoryData) {
+        if (!categoryData || !categoryData.attributes) {
+            return '';
+        }
+
+        const categoryName = categoryData.attributes.name || '';
+        const parentId = categoryData.attributes.parent_id;
+
+        // If has parent, find and prepend parent name
+        if (parentId && this.currentData?.included) {
+            const parentData = this.currentData.included.find(item =>
+                item.type === 'categories' && String(item.id) === String(parentId)
+            );
+
+            if (parentData && parentData.attributes && parentData.attributes.name) {
+                return `${parentData.attributes.name} > ${categoryName}`;
+            }
+        }
+
+        // No parent or parent not found, return just the category name
+        return categoryName;
+    }
+
+    /**
+     * Build category names from array of IDs (for display after editor closes)
+     * Groups subcategories by parent: "Jewellery > [Rings, Necklaces], Watches > Chronograph"
+     */
+    buildCategoryNamesFromIds(categoryIds) {
+        if (!categoryIds || categoryIds.length === 0 || !this.currentData?.included) {
+            return '';
+        }
+
+        // Group categories by parent
+        const grouped = {};
+        const standalone = []; // Categories without parent (root categories)
+
+        categoryIds.forEach(categoryId => {
+            const categoryData = this.currentData.included.find(item =>
+                item.type === 'categories' && String(item.id) === String(categoryId)
+            );
+
+            if (categoryData && categoryData.attributes) {
+                const parentId = categoryData.attributes.parent_id;
+                const categoryName = categoryData.attributes.name || '';
+
+                if (parentId && parentId !== 0) {
+                    // Has parent - group by parent
+                    const parentData = this.currentData.included.find(item =>
+                        item.type === 'categories' && String(item.id) === String(parentId)
+                    );
+
+                    const parentName = parentData?.attributes?.name || 'Unknown';
+
+                    if (!grouped[parentName]) {
+                        grouped[parentName] = [];
+                    }
+                    grouped[parentName].push(categoryName);
+                } else {
+                    // Root category (no parent)
+                    standalone.push(categoryName);
+                }
+            }
+        });
+
+        // Build display string
+        const parts = [];
+
+        // Add grouped categories (parent with children)
+        Object.entries(grouped).forEach(([parentName, children]) => {
+            if (children.length === 1) {
+                // Single child: "Parent > Child"
+                parts.push(`${parentName} > ${children[0]}`);
+            } else {
+                // Multiple children: "Parent > [Child1, Child2]"
+                parts.push(`${parentName} > [${children.join(', ')}]`);
+            }
+        });
+
+        // Add standalone root categories (but exclude parents that already have children shown)
+        // This prevents showing "Jewellery, Watches" at the end when they're already shown with children
+        const parentNamesWithChildren = Object.keys(grouped);
+        const trulyStandalone = standalone.filter(name => !parentNamesWithChildren.includes(name));
+
+        if (trulyStandalone.length > 0) {
+            parts.push(...trulyStandalone);
+        }
+
+        return parts.join(', ');
+    }
+
+    /**
+     * Set category value when editor closes
+     * @param {Object} params - AG Grid value setter params
+     * @returns {boolean} - True if value changed
+     */
+    setCategoryValue(params) {
+        const newCategoryId = params.newValue;
+        const oldCategoryId = params.data.category_id;
+
+        // No change - use loose equality to handle string/number comparison
+        if (newCategoryId == oldCategoryId) {
+            return false;
+        }
+
+        // Update category_id in row data
+        params.data.category_id = newCategoryId;
+
+        // Update category_name for display
+        if (newCategoryId && window._cachedCategories) {
+            const category = window._cachedCategories.find(c => c.value == newCategoryId);
+            params.data.category_name = category ? category.label : '';
+        } else {
+            params.data.category_name = '';
+        }
+
+        // Set flag for handleCellEdit to know this is a category update
+        // Similar to _attributeUpdate pattern
+        params.data._categoryUpdate = {
+            categoryId: newCategoryId
+        };
+
+        // Return true to indicate value was set successfully
+        // AG Grid will automatically fire onCellValueChanged event
+        // which triggers handleCellEdit to update the backend
+        return true;
     }
 
     /**
@@ -1343,6 +1525,389 @@ export class GridRenderer {
         }
 
         return AutoOpenSelectCellEditor;
+    }
+
+    /**
+     * Get category editor class for multi-select category dropdown
+     * Supports comma-separated category IDs for multi-category assignment
+     */
+    getCategoryEditor() {
+        class CategoryEditor {
+            constructor() {
+                this.eGui = null;
+                this.eContainer = null;
+                this.categories = [];
+                this.selectedIds = new Set();
+                this.checkboxes = [];
+                this.isDestroyed = false;
+            }
+
+            async init(params) {
+                this.params = params;
+
+                // Load categories from cache or fetch from API
+                await this.loadCategories();
+
+                // Parse existing category IDs from BOTH category_id (parents) and sub_category_id (children)
+                let currentCategoryIds = params.data.category_id;
+                let currentSubCategoryIds = params.data.sub_category_id;
+
+                // If not in category_id, try to read from relationships (nested mode)
+                if (!currentCategoryIds && params.data.relationships && params.data.relationships.category) {
+                    const catRel = params.data.relationships.category.data;
+                    if (Array.isArray(catRel)) {
+                        // To-many relationship
+                        currentCategoryIds = catRel.map(c => c.id).join(',');
+                    } else if (catRel && catRel.id) {
+                        // To-one relationship
+                        currentCategoryIds = catRel.id;
+                    }
+                }
+
+                // Handle different formats: string with comma, single number, array, or empty
+                let categoryIdsArray = [];
+
+                // Parse parent categories from category_id
+                if (currentCategoryIds) {
+                    if (Array.isArray(currentCategoryIds)) {
+                        categoryIdsArray = currentCategoryIds.map(id => String(id).trim()).filter(Boolean);
+                    } else if (typeof currentCategoryIds === 'string' && currentCategoryIds.includes(',')) {
+                        categoryIdsArray = currentCategoryIds.split(',').map(id => id.trim()).filter(Boolean);
+                    } else if (currentCategoryIds) {
+                        categoryIdsArray = [String(currentCategoryIds).trim()];
+                    }
+                }
+
+                // Parse subcategories from sub_category_id and add to the array
+                if (currentSubCategoryIds) {
+                    let subCategoryIdsArray = [];
+                    if (Array.isArray(currentSubCategoryIds)) {
+                        subCategoryIdsArray = currentSubCategoryIds.map(id => String(id).trim()).filter(Boolean);
+                    } else if (typeof currentSubCategoryIds === 'string' && currentSubCategoryIds.includes(',')) {
+                        subCategoryIdsArray = currentSubCategoryIds.split(',').map(id => id.trim()).filter(Boolean);
+                    } else if (currentSubCategoryIds) {
+                        subCategoryIdsArray = [String(currentSubCategoryIds).trim()];
+                    }
+                    // Combine parent and subcategory IDs
+                    categoryIdsArray = categoryIdsArray.concat(subCategoryIdsArray);
+                }
+
+                this.selectedIds = new Set(categoryIdsArray.map(id => parseInt(id)));
+
+                // Auto-select parent categories for any selected child categories
+                const selectedIdsArray = Array.from(this.selectedIds);
+                selectedIdsArray.forEach(categoryId => {
+                    const category = this.categories.find(c => c.value === categoryId);
+                    if (category && category.parent_id && category.parent_id !== 0) {
+                        this.selectedIds.add(category.parent_id);
+                    }
+                });
+
+                // Create container
+                this.eGui = document.createElement('div');
+                this.eGui.style.position = 'relative';
+                this.eGui.style.width = '320px';
+                this.eGui.style.maxHeight = '400px';
+                this.eGui.style.backgroundColor = 'white';
+                this.eGui.style.border = '2px solid #4CAF50';
+                this.eGui.style.borderRadius = '6px';
+                this.eGui.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                this.eGui.style.display = 'flex';
+                this.eGui.style.flexDirection = 'column';
+
+                // Header with title and buttons
+                const header = document.createElement('div');
+                header.style.padding = '10px 12px';
+                header.style.borderBottom = '1px solid #dee2e6';
+                header.style.backgroundColor = '#f8f9fa';
+                header.style.display = 'flex';
+                header.style.justifyContent = 'space-between';
+                header.style.alignItems = 'center';
+                header.style.borderTopLeftRadius = '4px';
+                header.style.borderTopRightRadius = '4px';
+
+                const title = document.createElement('span');
+                title.textContent = 'Select Categories (multi-select)';
+                title.style.fontWeight = '600';
+                title.style.fontSize = '13px';
+                title.style.color = '#495057';
+                header.appendChild(title);
+
+                const buttonContainer = document.createElement('div');
+                buttonContainer.style.display = 'flex';
+                buttonContainer.style.gap = '6px';
+
+                // Clear All button
+                const clearBtn = document.createElement('button');
+                clearBtn.textContent = 'Clear';
+                clearBtn.style.padding = '4px 8px';
+                clearBtn.style.fontSize = '11px';
+                clearBtn.style.border = '1px solid #dc3545';
+                clearBtn.style.backgroundColor = '#fff';
+                clearBtn.style.color = '#dc3545';
+                clearBtn.style.borderRadius = '4px';
+                clearBtn.style.cursor = 'pointer';
+                clearBtn.style.fontWeight = '500';
+                clearBtn.addEventListener('click', () => this.clearAll());
+                buttonContainer.appendChild(clearBtn);
+
+                // Done button
+                const doneBtn = document.createElement('button');
+                doneBtn.textContent = 'Done';
+                doneBtn.style.padding = '4px 12px';
+                doneBtn.style.fontSize = '11px';
+                doneBtn.style.border = 'none';
+                doneBtn.style.backgroundColor = '#4CAF50';
+                doneBtn.style.color = 'white';
+                doneBtn.style.borderRadius = '4px';
+                doneBtn.style.cursor = 'pointer';
+                doneBtn.style.fontWeight = '500';
+                doneBtn.addEventListener('click', () => {
+                    params.stopEditing();
+                });
+                buttonContainer.appendChild(doneBtn);
+
+                header.appendChild(buttonContainer);
+                this.eGui.appendChild(header);
+
+                // Scrollable container for checkboxes
+                this.eContainer = document.createElement('div');
+                this.eContainer.style.padding = '8px';
+                this.eContainer.style.maxHeight = '320px';
+                this.eContainer.style.overflowY = 'auto';
+                this.eContainer.style.overflowX = 'hidden';
+
+                // Populate checkboxes
+                this.populateCheckboxes();
+
+                this.eGui.appendChild(this.eContainer);
+
+                // Status bar showing selection count
+                const statusBar = document.createElement('div');
+                statusBar.style.padding = '8px 12px';
+                statusBar.style.borderTop = '1px solid #dee2e6';
+                statusBar.style.backgroundColor = '#f8f9fa';
+                statusBar.style.fontSize = '11px';
+                statusBar.style.color = '#6c757d';
+                statusBar.style.borderBottomLeftRadius = '4px';
+                statusBar.style.borderBottomRightRadius = '4px';
+                statusBar.id = 'category-status-bar';
+                this.updateStatusBar(statusBar);
+                this.eGui.appendChild(statusBar);
+            }
+
+            async loadCategories() {
+                // Check if categories already cached globally
+                if (window._cachedCategories && Array.isArray(window._cachedCategories)) {
+                    this.categories = window._cachedCategories;
+                    return;
+                }
+
+                // Try to read from currentData.included (same pattern as attributes)
+                try {
+                    const currentData = this.params.context?.gridInstance?.currentData;
+
+                    if (currentData && currentData.included && Array.isArray(currentData.included)) {
+                        // Extract unique categories from included data
+                        const categoriesMap = new Map();
+                        currentData.included
+                            .filter(item => item.type === 'categories')
+                            .forEach(cat => {
+                                const catData = cat.attributes || cat;
+                                categoriesMap.set(cat.id, {
+                                    value: parseInt(cat.id),
+                                    label: catData.name,
+                                    parent_id: catData.parent_id || 0
+                                });
+                            });
+
+                        this.categories = Array.from(categoriesMap.values())
+                            .sort((a, b) => a.label.localeCompare(b.label));
+
+                        // Cache globally for reuse
+                        window._cachedCategories = this.categories;
+
+                        return;
+                    }
+
+                    console.warn('[CategoryEditor] No included data available, categories list may be empty');
+                    this.categories = [];
+                } catch (error) {
+                    console.error('[CategoryEditor] Failed to load categories:', error);
+                    this.categories = [];
+                }
+            }
+
+            populateCheckboxes() {
+                if (this.categories.length === 0) {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.textContent = 'No categories available';
+                    emptyMsg.style.padding = '12px';
+                    emptyMsg.style.color = '#6c757d';
+                    emptyMsg.style.fontStyle = 'italic';
+                    emptyMsg.style.fontSize = '12px';
+                    this.eContainer.appendChild(emptyMsg);
+                    return;
+                }
+
+                // Separate parents and children
+                const parents = this.categories.filter(c => !c.parent_id || c.parent_id === 0);
+                const children = this.categories.filter(c => c.parent_id && c.parent_id !== 0);
+
+                // Add parent categories and their children
+                parents.forEach(parent => {
+                    // Add parent checkbox
+                    this.addCheckbox(parent, false);
+
+                    // Add children as indented checkboxes
+                    const parentChildren = children.filter(c => c.parent_id === parent.value);
+                    parentChildren.forEach(child => {
+                        this.addCheckbox(child, true);
+                    });
+                });
+            }
+
+            addCheckbox(category, isChild) {
+                const checkboxContainer = document.createElement('label');
+                checkboxContainer.style.display = 'flex';
+                checkboxContainer.style.alignItems = 'center';
+                checkboxContainer.style.padding = '6px 8px';
+                checkboxContainer.style.cursor = 'pointer';
+                checkboxContainer.style.borderRadius = '4px';
+                checkboxContainer.style.marginBottom = '2px';
+                checkboxContainer.style.transition = 'background-color 0.15s';
+                checkboxContainer.style.paddingLeft = isChild ? '28px' : '8px';
+
+                checkboxContainer.addEventListener('mouseenter', () => {
+                    checkboxContainer.style.backgroundColor = '#f8f9fa';
+                });
+                checkboxContainer.addEventListener('mouseleave', () => {
+                    checkboxContainer.style.backgroundColor = 'transparent';
+                });
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = category.value;
+                checkbox.checked = this.selectedIds.has(category.value);
+                checkbox.style.marginRight = '8px';
+                checkbox.style.cursor = 'pointer';
+                checkbox.addEventListener('change', () => this.handleCheckboxChange(category.value, checkbox.checked));
+
+                const label = document.createElement('span');
+                label.textContent = isChild ? '└─ ' + category.label : category.label;
+                label.style.fontSize = '12px';
+                label.style.fontWeight = isChild ? 'normal' : '600';
+                label.style.color = isChild ? '#495057' : '#212529';
+                label.style.userSelect = 'none';
+
+                checkboxContainer.appendChild(checkbox);
+                checkboxContainer.appendChild(label);
+                this.eContainer.appendChild(checkboxContainer);
+
+                this.checkboxes.push({ checkbox, categoryId: category.value });
+            }
+
+            handleCheckboxChange(categoryId, checked) {
+                if (checked) {
+                    // Add this category
+                    this.selectedIds.add(categoryId);
+
+                    // Auto-select parent if this is a child category
+                    const category = this.categories.find(c => c.value === categoryId);
+                    if (category && category.parent_id && category.parent_id !== 0) {
+                        this.selectedIds.add(category.parent_id);
+
+                        // Update parent checkbox to checked
+                        const parentCheckbox = this.checkboxes.find(cb => cb.categoryId === category.parent_id);
+                        if (parentCheckbox) {
+                            parentCheckbox.checkbox.checked = true;
+                        }
+                    }
+                } else {
+                    // Remove this category
+                    this.selectedIds.delete(categoryId);
+
+                    // Auto-deselect children if this is a parent category
+                    const children = this.categories.filter(c => c.parent_id === categoryId);
+                    if (children.length > 0) {
+                        children.forEach(child => {
+                            this.selectedIds.delete(child.value);
+
+                            // Update child checkbox to unchecked
+                            const childCheckbox = this.checkboxes.find(cb => cb.categoryId === child.value);
+                            if (childCheckbox) {
+                                childCheckbox.checkbox.checked = false;
+                            }
+                        });
+                    }
+                }
+
+                // Update status bar
+                const statusBar = this.eGui.querySelector('#category-status-bar');
+                if (statusBar) {
+                    this.updateStatusBar(statusBar);
+                }
+            }
+
+            updateStatusBar(statusBar) {
+                const count = this.selectedIds.size;
+                statusBar.textContent = count === 0
+                    ? 'No categories selected'
+                    : `${count} categor${count === 1 ? 'y' : 'ies'} selected`;
+            }
+
+            clearAll() {
+                this.selectedIds.clear();
+                this.checkboxes.forEach(({ checkbox }) => {
+                    checkbox.checked = false;
+                });
+
+                // Update status bar
+                const statusBar = this.eGui.querySelector('#category-status-bar');
+                if (statusBar) {
+                    this.updateStatusBar(statusBar);
+                }
+            }
+
+            getGui() {
+                return this.eGui;
+            }
+
+            getValue() {
+                // Return comma-separated category IDs
+                const value = Array.from(this.selectedIds).sort((a, b) => a - b).join(',');
+                return value || null;
+            }
+
+            destroy() {
+                this.isDestroyed = true;
+            }
+
+            isPopup() {
+                return true;
+            }
+
+            isCancelBeforeStart() {
+                return false;
+            }
+
+            isCancelAfterEnd() {
+                return false;
+            }
+
+            focusIn() {
+                // Focus on first checkbox
+                if (this.checkboxes.length > 0 && !this.isDestroyed) {
+                    this.checkboxes[0].checkbox.focus();
+                }
+            }
+
+            focusOut() {
+                // Nothing to do
+            }
+        }
+
+        return CategoryEditor;
     }
 }
 

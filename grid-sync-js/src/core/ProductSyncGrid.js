@@ -306,14 +306,68 @@ export class ProductSyncGrid {
     async handleCellEdit(event) {
         const { data, colDef, newValue, oldValue } = event;
 
-        if (newValue === oldValue) {
-            return;
-        }
-
         const productId = data.id;
         const fieldName = colDef.field;
 
         try {
+            // Check if this is a category update (before checking value equality)
+            if (data._categoryUpdate) {
+                const { categoryId } = data._categoryUpdate;
+
+                const result = await this.apiClient.updateProduct(
+                    productId,
+                    'category_id',
+                    categoryId,
+                    'category' // Include category relationship in response
+                );
+
+                // Update local data with server response
+                if (result.data) {
+                    const updatedFields = result.data.attributes || result.data;
+                    Object.keys(updatedFields).forEach(key => {
+                        this.dataAdapter.setValue(data, key, updatedFields[key]);
+                    });
+
+                    // Update category relationship if included
+                    if (result.data.relationships && result.data.relationships.category) {
+                        data.relationships = data.relationships || {};
+                        data.relationships.category = result.data.relationships.category;
+                    }
+
+                    // Update included categories if present
+                    if (result.included && this.currentData && this.currentData.included) {
+                        result.included.forEach(includedItem => {
+                            if (includedItem.type === 'categories') {
+                                const existingIndex = this.currentData.included.findIndex(
+                                    item => item.type === 'categories' && item.id === includedItem.id
+                                );
+
+                                if (existingIndex >= 0) {
+                                    this.currentData.included[existingIndex] = includedItem;
+                                } else {
+                                    this.currentData.included.push(includedItem);
+                                }
+                            }
+                        });
+                    }
+                }
+
+                // Clear temp data
+                delete data._categoryUpdate;
+
+                // Show success notification
+                this.showNotification('success', 'Category updated successfully');
+
+                // Refresh the cell to show updated category name
+                this.gridApi.refreshCells({
+                    rowNodes: [event.node],
+                    columns: ['categoryName'],
+                    force: true
+                });
+
+                return;
+            }
+
             // Check if this is an attribute update
             if (colDef.field.startsWith('attribute_') && data._attributeUpdate) {
                 const { attributeId, newValue: actualNewValue } = data._attributeUpdate;
@@ -399,6 +453,12 @@ export class ProductSyncGrid {
                 this.showNotification('success', 'Attribute updated successfully');
             } else {
                 // Regular field update
+
+                // Skip if no actual value change
+                if (newValue === oldValue) {
+                    return;
+                }
+
                 let fieldName = colDef.field;
                 if (fieldName.startsWith('attributes.')) {
                     fieldName = fieldName.replace('attributes.', '');

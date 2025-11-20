@@ -82,6 +82,18 @@ class ProductJsonApiTransformer extends JsonApiTransformer
             $this->addMasterAttributesToIncluded($result);
         }
 
+        // For WL mode: When include=category is requested, add ALL active categories
+        // This provides all available categories for the category dropdown in AG Grid
+        if ($mode === 'wl' && in_array('category', $includes)) {
+            $this->addAllCategoriesToIncluded($result);
+        }
+
+        // For all modes: When include=category is requested, add each product's assigned categories
+        // This supports multi-category display (comma-separated category_ids)
+        if (in_array('category', $includes)) {
+            $this->addProductCategoriesToIncluded($result, $products);
+        }
+
         return $result;
     }
 
@@ -118,6 +130,94 @@ class ProductJsonApiTransformer extends JsonApiTransformer
     }
 
     /**
+     * Add all active categories to included array (for WL mode)
+     * This provides all available categories for the category dropdown in AG Grid
+     */
+    protected function addAllCategoriesToIncluded(array &$result): void
+    {
+        // Get Category model class
+        $categoryModel = config('products-package.models.category', \App\Category::class);
+
+        // Query all active categories (both parent and subcategories)
+        $categories = $categoryModel::where('status', 1)
+            ->whereNull('deleted_at')
+            ->orderBy('name')
+            ->get();
+
+        foreach ($categories as $category) {
+            $key = 'categories:' . $category->id;
+
+            // Check if already added to avoid duplicates
+            if (!isset($this->included[$key])) {
+                $this->included[$key] = [
+                    'type' => 'categories',
+                    'id' => (string) $category->id,
+                    'attributes' => $this->getRelatedModelAttributes($category)
+                ];
+            }
+        }
+
+        // Update result's included array
+        if (!empty($this->included)) {
+            $result['included'] = array_values($this->included);
+        }
+    }
+
+    /**
+     * Add each product's assigned categories to included array
+     * Supports multi-category assignment via comma-separated category_ids
+     */
+    protected function addProductCategoriesToIncluded(array &$result, $products): void
+    {
+        // Handle both single product and collection
+        $productCollection = is_iterable($products) ? $products : [$products];
+
+        foreach ($productCollection as $product) {
+            if (!$product) continue;
+
+            // Get all categories for this product (handles comma-separated category_ids)
+            $categories = $product->categories();
+
+            if ($categories && !$categories->isEmpty()) {
+                foreach ($categories as $category) {
+                    $key = 'categories:' . $category->id;
+
+                    // Check if already added to avoid duplicates
+                    if (!isset($this->included[$key])) {
+                        // Load parent category if exists
+                        if ($category->parent_id) {
+                            $category->load('parent_category');
+                        }
+
+                        $this->included[$key] = [
+                            'type' => 'categories',
+                            'id' => (string) $category->id,
+                            'attributes' => $this->getRelatedModelAttributes($category)
+                        ];
+
+                        // Also add parent category to included if exists
+                        if ($category->parent_id && $category->parent_category) {
+                            $parentKey = 'categories:' . $category->parent_id;
+                            if (!isset($this->included[$parentKey])) {
+                                $this->included[$parentKey] = [
+                                    'type' => 'categories',
+                                    'id' => (string) $category->parent_id,
+                                    'attributes' => $this->getRelatedModelAttributes($category->parent_category)
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Update result's included array
+        if (!empty($this->included)) {
+            $result['included'] = array_values($this->included);
+        }
+    }
+
+    /**
      * Get model attributes, customized for Product
      */
     protected function getModelAttributes(Model $model): array
@@ -132,8 +232,9 @@ class ProductJsonApiTransformer extends JsonApiTransformer
         unset($attributes[$model->getKeyName()]);
 
         // Remove foreign keys from attributes (they're in relationships)
+        // EXCEPT category_id which we need for multi-category comma-separated display
         $foreignKeys = [
-            'category_id',
+            // 'category_id', // Keep this for multi-category support (comma-separated values)
             'brand_id',
             'location_id',
             'supplier_id'
