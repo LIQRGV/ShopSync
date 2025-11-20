@@ -2,7 +2,7 @@
 
 namespace TheDiamondBox\ShopSync\Services;
 
-use TheDiamondBox\ShopSync\Services\AttributeFetchers\AttributeFetcherFactory;
+use TheDiamondBox\ShopSync\Services\Fetchers\Attribute\AttributeFetcherFactory;
 use Illuminate\Http\Request;
 
 /**

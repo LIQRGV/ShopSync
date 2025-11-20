@@ -1,6 +1,6 @@
 <?php
 
-namespace TheDiamondBox\ShopSync\Services\ShopInfoFetchers;
+namespace TheDiamondBox\ShopSync\Services\Fetchers\ShopInfo;
 
 use TheDiamondBox\ShopSync\Exceptions\ClientNotFoundException;
 use TheDiamondBox\ShopSync\Models\Client;

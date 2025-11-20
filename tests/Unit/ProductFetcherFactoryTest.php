@@ -3,7 +3,7 @@
 namespace TheDiamondBox\ShopSync\Tests\Unit;
 
 use TheDiamondBox\ShopSync\Exceptions\ClientNotFoundException;
-use TheDiamondBox\ShopSync\Services\ProductFetchers\ProductFetcherFactory;
+use TheDiamondBox\ShopSync\Services\Fetchers\Product\ProductFetcherFactory;
 use PHPUnit\Framework\TestCase;
 use InvalidArgumentException;
 use Mockery;

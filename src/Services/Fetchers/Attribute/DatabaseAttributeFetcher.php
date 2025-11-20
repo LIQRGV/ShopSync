@@ -1,6 +1,6 @@
 <?php
 
-namespace TheDiamondBox\ShopSync\Services\AttributeFetchers;
+namespace TheDiamondBox\ShopSync\Services\Fetchers\Attribute;
 
 use TheDiamondBox\ShopSync\Models\Attribute;
 use TheDiamondBox\ShopSync\Services\Contracts\AttributeFetcherInterface;

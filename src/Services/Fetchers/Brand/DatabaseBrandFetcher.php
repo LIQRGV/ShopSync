@@ -1,6 +1,6 @@
 <?php
 
-namespace TheDiamondBox\ShopSync\Services\BrandFetchers;
+namespace TheDiamondBox\ShopSync\Services\Fetchers\Brand;
 
 use TheDiamondBox\ShopSync\Models\Brand;
 use TheDiamondBox\ShopSync\Services\Contracts\BrandFetcherInterface;

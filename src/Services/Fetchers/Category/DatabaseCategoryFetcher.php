@@ -1,6 +1,6 @@
 <?php
 
-namespace TheDiamondBox\ShopSync\Services\CategoryFetchers;
+namespace TheDiamondBox\ShopSync\Services\Fetchers\Category;
 
 use TheDiamondBox\ShopSync\Models\Category;
 use TheDiamondBox\ShopSync\Services\Contracts\CategoryFetcherInterface;

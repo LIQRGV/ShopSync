@@ -1,21 +1,21 @@
 <?php
 
-namespace TheDiamondBox\ShopSync\Services\AttributeFetchers;
+namespace TheDiamondBox\ShopSync\Services\Fetchers\Category;
 
 use TheDiamondBox\ShopSync\Exceptions\ClientNotFoundException;
 use TheDiamondBox\ShopSync\Models\Client;
-use TheDiamondBox\ShopSync\Services\Contracts\AttributeFetcherInterface;
+use TheDiamondBox\ShopSync\Services\Contracts\CategoryFetcherInterface;
 use InvalidArgumentException;
 use Illuminate\Support\Facades\Log;
 
-class AttributeFetcherFactory
+class CategoryFetcherFactory
 {
     /**
-     * Create an attribute fetcher instance based on mode
+     * Create a category fetcher instance based on mode
      *
      * @param string $mode The mode to create a fetcher for ('wl' or 'wtm')
      * @param mixed $request The request object (required for 'wtm' mode)
-     * @return AttributeFetcherInterface
+     * @return CategoryFetcherInterface
      * @throws InvalidArgumentException When mode is invalid
      * @throws ClientNotFoundException When client is not found in 'wtm' mode
      */
@@ -23,7 +23,7 @@ class AttributeFetcherFactory
     {
         switch (strtolower($mode)) {
             case 'wl':
-                return app(DatabaseAttributeFetcher::class);
+                return app(DatabaseCategoryFetcher::class);
             case 'wtm':
                 if ($request === null) {
                     throw new InvalidArgumentException(
@@ -49,7 +49,7 @@ class AttributeFetcherFactory
                     throw ClientNotFoundException::forClientId($clientID);
                 }
 
-                return new ApiAttributeFetcher($client);
+                return new ApiCategoryFetcher($client);
             default:
                 throw new InvalidArgumentException(
                     "Invalid mode: {$mode}. Must be 'wl' (WhiteLabel) or 'wtm' (Watch the Market)."
@@ -58,30 +58,30 @@ class AttributeFetcherFactory
     }
 
     /**
-     * Create an attribute fetcher instance from config
+     * Create a category fetcher instance from config
      *
      * @param mixed $request The request object (required for 'wtm' mode)
-     * @return AttributeFetcherInterface
+     * @return CategoryFetcherInterface
      * @throws ClientNotFoundException When client is not found in 'wtm' mode
      */
     public static function makeFromConfig($request = null)
     {
         $mode = config('products-package.mode', 'wl');
 
-        Log::info('Creating AttributeFetcher', ['mode' => $mode]);
+        Log::info('Creating CategoryFetcher', ['mode' => $mode]);
 
         try {
             return static::make($mode, $request);
         } catch (InvalidArgumentException $e) {
             if (strpos($e->getMessage(), 'Invalid mode:') === 0) {
-                Log::error('Invalid AttributeFetcher mode in config, falling back to WL mode', [
+                Log::error('Invalid CategoryFetcher mode in config, falling back to WL mode', [
                     'invalid_mode' => $mode,
                     'error' => $e->getMessage()
                 ]);
 
                 return static::make('wl', $request);
             } else {
-                Log::error('AttributeFetcher creation failed due to request validation', [
+                Log::error('CategoryFetcher creation failed due to request validation', [
                     'mode' => $mode,
                     'error' => $e->getMessage()
                 ]);
@@ -89,7 +89,7 @@ class AttributeFetcherFactory
                 throw $e;
             }
         } catch (ClientNotFoundException $e) {
-            Log::error('Client not found for AttributeFetcher', [
+            Log::error('Client not found for CategoryFetcher', [
                 'mode' => $mode,
                 'client_id' => $e->getClientId(),
                 'error' => $e->getMessage(),

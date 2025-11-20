@@ -9,8 +9,8 @@ use TheDiamondBox\ShopSync\Services\ProductService;
 use TheDiamondBox\ShopSync\Services\ShopInfoService;
 use TheDiamondBox\ShopSync\Services\Contracts\ProductFetcherInterface;
 use TheDiamondBox\ShopSync\Services\Contracts\ShopInfoFetcherInterface;
-use TheDiamondBox\ShopSync\Services\ProductFetchers\ProductFetcherFactory;
-use TheDiamondBox\ShopSync\Services\ShopInfoFetchers\ShopInfoFetcherFactory;
+use TheDiamondBox\ShopSync\Services\Fetchers\Product\ProductFetcherFactory;
+use TheDiamondBox\ShopSync\Services\Fetchers\ShopInfo\ShopInfoFetcherFactory;
 use TheDiamondBox\ShopSync\Models\Product;
 use TheDiamondBox\ShopSync\Observers\ProductObserver;
 

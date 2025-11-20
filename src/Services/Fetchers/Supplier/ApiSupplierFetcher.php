@@ -1,6 +1,6 @@
 <?php
 
-namespace TheDiamondBox\ShopSync\Services\SupplierFetchers;
+namespace TheDiamondBox\ShopSync\Services\Fetchers\Supplier;
 
 use TheDiamondBox\ShopSync\Services\Contracts\SupplierFetcherInterface;
 use Illuminate\Support\Facades\Http;

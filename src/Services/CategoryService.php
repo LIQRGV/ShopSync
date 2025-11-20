@@ -2,7 +2,7 @@
 
 namespace TheDiamondBox\ShopSync\Services;
 
-use TheDiamondBox\ShopSync\Services\CategoryFetchers\CategoryFetcherFactory;
+use TheDiamondBox\ShopSync\Services\Fetchers\Category\CategoryFetcherFactory;
 use TheDiamondBox\ShopSync\Transformers\CategoryTransformer;
 use Illuminate\Http\Request;
 

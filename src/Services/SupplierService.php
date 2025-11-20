@@ -2,7 +2,7 @@
 
 namespace TheDiamondBox\ShopSync\Services;
 
-use TheDiamondBox\ShopSync\Services\SupplierFetchers\SupplierFetcherFactory;
+use TheDiamondBox\ShopSync\Services\Fetchers\Supplier\SupplierFetcherFactory;
 use TheDiamondBox\ShopSync\Transformers\SupplierTransformer;
 use Illuminate\Http\Request;
 

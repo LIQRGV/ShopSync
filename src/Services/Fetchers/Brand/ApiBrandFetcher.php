@@ -1,19 +1,20 @@
 <?php
 
-namespace TheDiamondBox\ShopSync\Services\AttributeFetchers;
+namespace TheDiamondBox\ShopSync\Services\Fetchers\Brand;
 
-use TheDiamondBox\ShopSync\Services\Contracts\AttributeFetcherInterface;
+use TheDiamondBox\ShopSync\Services\Contracts\BrandFetcherInterface;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Collection;
 
 /**
- * API Attribute Fetcher
+ * API Brand Fetcher
  *
- * Fetches attributes from WL shop API (WTM mode).
+ * Fetches brands from WL shop API (WTM mode).
  */
-class ApiAttributeFetcher implements AttributeFetcherInterface
+class ApiBrandFetcher implements BrandFetcherInterface
 {
     protected $baseUrl;
     protected $apiKey;
@@ -30,7 +31,7 @@ class ApiAttributeFetcher implements AttributeFetcherInterface
         $this->timeout = config('products-package.wtm_api_timeout', 5);
 
         if (empty($this->baseUrl) || empty($this->apiKey)) {
-            Log::warning('WTM API configuration is incomplete for attributes', [
+            Log::warning('WTM API configuration is incomplete for brands', [
                 'base_url' => $this->baseUrl,
                 'api_key_provided' => !empty($this->apiKey)
             ]);
@@ -62,26 +63,26 @@ class ApiAttributeFetcher implements AttributeFetcherInterface
             if ($response->successful()) {
                 return $response->json();
             } else {
-                Log::warning('WTM API returned error response for attributes', [
+                Log::warning('WTM API returned error response for brands', [
                     'status' => $response->status(),
                     'body' => $response->body()
                 ]);
                 return $defaultValue;
             }
         } catch (ConnectionException $e) {
-            Log::warning('WTM API timeout or connection error for attributes', [
+            Log::warning('WTM API timeout or connection error for brands', [
                 'error' => $e->getMessage(),
                 'timeout' => $this->timeout
             ]);
             return $defaultValue;
         } catch (RequestException $e) {
-            Log::error('WTM API request error for attributes', [
+            Log::error('WTM API request error for brands', [
                 'error' => $e->getMessage(),
                 'response' => $e->response ? $e->response->body() : null
             ]);
             return $defaultValue;
         } catch (\Exception $e) {
-            Log::error('WTM API unexpected error for attributes', [
+            Log::error('WTM API unexpected error for brands', [
                 'error' => $e->getMessage()
             ]);
             return $defaultValue;
@@ -89,17 +90,17 @@ class ApiAttributeFetcher implements AttributeFetcherInterface
     }
 
     /**
-     * Get all enabled attributes
+     * Get all active brands
      *
-     * @return array
+     * @return Collection
      */
-    public function getAll(): array
+    public function getAll()
     {
         $response = $this->handleRequest(function () {
-            return $this->client()->get('/attributes');
-        }, []);
+            return $this->client()->get('/brands');
+        }, ['data' => []]);
 
-        // Extract data array from response
-        return $response['data'] ?? [];
+        // Return the JSON API response data as a collection
+        return collect($response['data'] ?? []);
     }
 }

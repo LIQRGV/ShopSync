@@ -2,20 +2,17 @@
 
 namespace TheDiamondBox\ShopSync\Services;
 
-use Illuminate\Database\Eloquent\ModelNotFoundException;
-use TheDiamondBox\ShopSync\Models\Product;
-use TheDiamondBox\ShopSync\Models\Category;
-use TheDiamondBox\ShopSync\Models\Brand;
-use TheDiamondBox\ShopSync\Models\Attribute;
-use TheDiamondBox\ShopSync\Services\ProductFetchers\ProductFetcherFactory;
-use TheDiamondBox\ShopSync\Services\Contracts\ProductFetcherInterface;
-use TheDiamondBox\ShopSync\Transformers\ProductJsonApiTransformer;
-use TheDiamondBox\ShopSync\Helpers\JsonApiIncludeParser;
-use TheDiamondBox\ShopSync\Helpers\JsonApiErrorResponse;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
+use TheDiamondBox\ShopSync\Models\Brand;
+use TheDiamondBox\ShopSync\Models\Category;
+use TheDiamondBox\ShopSync\Models\Product;
+use TheDiamondBox\ShopSync\Services\Contracts\ProductFetcherInterface;
+use TheDiamondBox\ShopSync\Services\Fetchers\Product\ProductFetcherFactory;
+use TheDiamondBox\ShopSync\Transformers\ProductJsonApiTransformer;
 
 /**
  * Product Service
@@ -257,7 +254,7 @@ class ProductService
         // Check mode based on ProductFetcher type (NOT product model type)
         // ApiProductFetcher = WTM mode (proxy only)
         // DatabaseProductFetcher = WL mode (direct database)
-        $isWlMode = !($this->productFetcher instanceof \TheDiamondBox\ShopSync\Services\ProductFetchers\ApiProductFetcher);
+        $isWlMode = !($this->productFetcher instanceof \TheDiamondBox\ShopSync\Services\Fetchers\Product\ApiProductFetcher);
 
         if ($isWlMode) {
             // WL mode: Need to fetch product for database operations

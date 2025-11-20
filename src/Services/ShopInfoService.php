@@ -2,7 +2,7 @@
 
 namespace TheDiamondBox\ShopSync\Services;
 
-use TheDiamondBox\ShopSync\Services\ShopInfoFetchers\ShopInfoFetcherFactory;
+use TheDiamondBox\ShopSync\Services\Fetchers\ShopInfo\ShopInfoFetcherFactory;
 use TheDiamondBox\ShopSync\Transformers\ShopInfoJsonApiTransformer;
 use Illuminate\Http\Request;
 

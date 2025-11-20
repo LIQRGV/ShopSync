@@ -54,7 +54,7 @@ class ProductFetcherFactorySimpleTest extends TestCase
      */
     public function testGetAvailableModes()
     {
-        $reflection = new \ReflectionClass(\TheDiamondBox\ShopSync\Services\ProductFetchers\ProductFetcherFactory::class);
+        $reflection = new \ReflectionClass(\TheDiamondBox\ShopSync\Services\Fetchers\Product\ProductFetcherFactory::class);
 
         // Verify the class exists and has the getAvailableModes method
         $this->assertTrue($reflection->hasMethod('getAvailableModes'));
@@ -69,7 +69,7 @@ class ProductFetcherFactorySimpleTest extends TestCase
      */
     public function testIsValidModeMethodExists()
     {
-        $reflection = new \ReflectionClass(\TheDiamondBox\ShopSync\Services\ProductFetchers\ProductFetcherFactory::class);
+        $reflection = new \ReflectionClass(\TheDiamondBox\ShopSync\Services\Fetchers\Product\ProductFetcherFactory::class);
 
         // Verify the isValidMode method exists
         $this->assertTrue($reflection->hasMethod('isValidMode'));
@@ -91,7 +91,7 @@ class ProductFetcherFactorySimpleTest extends TestCase
      */
     public function testMakeMethodDocumentation()
     {
-        $reflection = new \ReflectionClass(\TheDiamondBox\ShopSync\Services\ProductFetchers\ProductFetcherFactory::class);
+        $reflection = new \ReflectionClass(\TheDiamondBox\ShopSync\Services\Fetchers\Product\ProductFetcherFactory::class);
 
         $this->assertTrue($reflection->hasMethod('make'));
 

@@ -2,7 +2,7 @@
 
 namespace TheDiamondBox\ShopSync\Services;
 
-use TheDiamondBox\ShopSync\Services\BrandFetchers\BrandFetcherFactory;
+use TheDiamondBox\ShopSync\Services\Fetchers\Brand\BrandFetcherFactory;
 use TheDiamondBox\ShopSync\Transformers\BrandTransformer;
 use Illuminate\Http\Request;
 
