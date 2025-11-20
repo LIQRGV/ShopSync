@@ -111,7 +111,7 @@ class ProductJsonApiTransformer extends JsonApiTransformer
                     if (!isset($this->included[$key])) {
                         // Load parent category if exists
                         if ($category->parent_id) {
-                            $category->load('parent_category');
+                            $category->load('parent');
                         }
 
                         $this->included[$key] = [
@@ -121,13 +121,13 @@ class ProductJsonApiTransformer extends JsonApiTransformer
                         ];
 
                         // Also add parent category to included if exists
-                        if ($category->parent_id && $category->parent_category) {
+                        if ($category->parent_id && $category->parent) {
                             $parentKey = 'categories:' . $category->parent_id;
                             if (!isset($this->included[$parentKey])) {
                                 $this->included[$parentKey] = [
                                     'type' => 'categories',
                                     'id' => (string) $category->parent_id,
-                                    'attributes' => $this->getRelatedModelAttributes($category->parent_category)
+                                    'attributes' => $this->getRelatedModelAttributes($category->parent)
                                 ];
                             }
                         }

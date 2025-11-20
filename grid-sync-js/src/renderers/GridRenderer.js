@@ -183,47 +183,6 @@ export class GridRenderer {
                             }
                         }
 
-                        // Handle flat mode (direct attributes array or object)
-                        if (dataAdapter.mode === 'flat') {
-                            // Get product ID for filtering
-                            const productId = String(params.data.id);
-
-                            // Check if data has attributes as array (with pivot)
-                            if (params.data.attributes && Array.isArray(params.data.attributes)) {
-                                const attr = params.data.attributes.find(a => String(a.id) === attrId);
-                                if (attr && attr.pivot) {
-                                    return attr.pivot.value || '';
-                                }
-                            }
-
-                            // Check if data has attribute values in included
-                            // Pivot is now an array of objects, find the one for this product
-                            if (currentData && currentData.included) {
-                                const includedAttr = currentData.included.find(inc =>
-                                    inc.type === 'attributes' &&
-                                    String(inc.id) === attrId
-                                );
-
-                                if (includedAttr && includedAttr.attributes && includedAttr.attributes.pivot) {
-                                    // Pivot is now an array - find the pivot for this product
-                                    const pivots = Array.isArray(includedAttr.attributes.pivot)
-                                        ? includedAttr.attributes.pivot
-                                        : [includedAttr.attributes.pivot];
-
-                                    const productPivot = pivots.find(p => String(p.product_id) === productId);
-
-                                    if (productPivot) {
-                                        return productPivot.value || '';
-                                    }
-                                }
-                            }
-
-                            // Fallback: check direct field attribute_X
-                            if (params.data[`attribute_${attrId}`]) {
-                                return params.data[`attribute_${attrId}`];
-                            }
-                        }
-
                         // For option types, show appropriate placeholder for empty values
                         return inputType !== 1 ? (isOptionWithoutValues ? noOptionsText : emptyOptionText) : '';
                     },
