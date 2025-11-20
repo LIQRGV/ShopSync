@@ -568,7 +568,9 @@ export class GridRenderer {
                         // Display category name from relationship if available, otherwise from field
                         if (!params.data) return '';
                         const categoryName = this.getCategoryName(params);
-                        return categoryName || params.value || '';
+                        const displayValue = categoryName || params.value || '';
+                        // Add dropdown icon to indicate this is a dropdown field
+                        return displayValue ? `${displayValue} <span style="color: #999; margin-left: 4px;">▼</span>` : '<span style="color: #999;">Select Category ▼</span>';
                     },
                     cellEditor: this.getCategoryEditor(),
                     cellEditorPopup: true,
@@ -639,6 +641,12 @@ export class GridRenderer {
                     sortable: true,
                     filter: 'agSetColumnFilter',
                     editable: true,
+                    cellRenderer: (params) => {
+                        if (!params.data) return '';
+                        const brandName = this.getBrandName(params) || params.data.brand_name || '';
+                        // Add dropdown icon to indicate this is a dropdown field
+                        return brandName ? `${brandName} <span style="color: #999; margin-left: 4px;">▼</span>` : '<span style="color: #999;">Select Brand ▼</span>';
+                    },
                     cellEditor: this.getBrandEditor(),
                     cellEditorPopup: true,
                     cellEditorParams: {},
@@ -692,6 +700,12 @@ export class GridRenderer {
                     sortable: true,
                     filter: 'agSetColumnFilter',
                     editable: true,
+                    cellRenderer: (params) => {
+                        if (!params.data) return '';
+                        const supplierName = this.getSupplierName(params) || params.data.supplier_name || '';
+                        // Add dropdown icon to indicate this is a dropdown field
+                        return supplierName ? `${supplierName} <span style="color: #999; margin-left: 4px;">▼</span>` : '<span style="color: #999;">Select Supplier ▼</span>';
+                    },
                     cellEditor: this.getSupplierEditor(),
                     cellEditorPopup: true,
                     cellEditorParams: {},
