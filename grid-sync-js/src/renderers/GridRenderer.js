@@ -1632,6 +1632,7 @@ export class GridRenderer {
                 this.categories = [];
                 this.selectedIds = new Set();
                 this.checkboxes = [];
+                this.searchInput = null;
                 this.isDestroyed = false;
             }
 
@@ -1763,10 +1764,28 @@ export class GridRenderer {
                 header.appendChild(buttonContainer);
                 this.eGui.appendChild(header);
 
+                // Search box
+                const searchContainer = document.createElement('div');
+                searchContainer.style.padding = '8px 12px';
+                searchContainer.style.borderBottom = '1px solid #dee2e6';
+
+                this.searchInput = document.createElement('input');
+                this.searchInput.type = 'text';
+                this.searchInput.placeholder = 'Search categories...';
+                this.searchInput.style.width = '100%';
+                this.searchInput.style.padding = '6px 8px';
+                this.searchInput.style.fontSize = '12px';
+                this.searchInput.style.border = '1px solid #ced4da';
+                this.searchInput.style.borderRadius = '4px';
+                this.searchInput.style.boxSizing = 'border-box';
+                this.searchInput.addEventListener('input', () => this.filterCategories());
+                searchContainer.appendChild(this.searchInput);
+                this.eGui.appendChild(searchContainer);
+
                 // Scrollable container for checkboxes
                 this.eContainer = document.createElement('div');
                 this.eContainer.style.padding = '8px';
-                this.eContainer.style.maxHeight = '320px';
+                this.eContainer.style.maxHeight = '280px';
                 this.eContainer.style.overflowY = 'auto';
                 this.eContainer.style.overflowX = 'hidden';
 
@@ -1831,7 +1850,11 @@ export class GridRenderer {
                 }
             }
 
-            populateCheckboxes() {
+            populateCheckboxes(filterText = '') {
+                // Clear existing checkboxes
+                this.eContainer.innerHTML = '';
+                this.checkboxes = [];
+
                 if (this.categories.length === 0) {
                     const emptyMsg = document.createElement('div');
                     emptyMsg.textContent = 'No categories available';
@@ -1843,9 +1866,26 @@ export class GridRenderer {
                     return;
                 }
 
-                // Separate parents and children
-                const parents = this.categories.filter(c => !c.parent_id || c.parent_id === 0);
-                const children = this.categories.filter(c => c.parent_id && c.parent_id !== 0);
+                // Filter categories based on search text
+                const searchLower = filterText.toLowerCase();
+                const filteredCategories = filterText
+                    ? this.categories.filter(c => c.label.toLowerCase().includes(searchLower))
+                    : this.categories;
+
+                if (filteredCategories.length === 0) {
+                    const emptyMsg = document.createElement('div');
+                    emptyMsg.textContent = 'No matching categories';
+                    emptyMsg.style.padding = '12px';
+                    emptyMsg.style.color = '#6c757d';
+                    emptyMsg.style.fontStyle = 'italic';
+                    emptyMsg.style.fontSize = '12px';
+                    this.eContainer.appendChild(emptyMsg);
+                    return;
+                }
+
+                // Separate parents and children from filtered results
+                const parents = filteredCategories.filter(c => !c.parent_id || c.parent_id === 0);
+                const children = filteredCategories.filter(c => c.parent_id && c.parent_id !== 0);
 
                 // Add parent categories and their children
                 parents.forEach(parent => {
@@ -1858,6 +1898,26 @@ export class GridRenderer {
                         this.addCheckbox(child, true);
                     });
                 });
+
+                // If filtering and a child matches, also show parent even if parent doesn't match
+                if (filterText) {
+                    const childrenWithoutParents = children.filter(child => {
+                        return !parents.some(p => p.value === child.parent_id);
+                    });
+
+                    childrenWithoutParents.forEach(child => {
+                        const parent = this.categories.find(c => c.value === child.parent_id);
+                        if (parent && !filteredCategories.includes(parent)) {
+                            this.addCheckbox(parent, false);
+                        }
+                        this.addCheckbox(child, true);
+                    });
+                }
+            }
+
+            filterCategories() {
+                const filterText = this.searchInput ? this.searchInput.value : '';
+                this.populateCheckboxes(filterText);
             }
 
             addCheckbox(category, isChild) {
