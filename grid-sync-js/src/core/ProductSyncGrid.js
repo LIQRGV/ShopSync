@@ -130,19 +130,10 @@ export class ProductSyncGrid {
                 const attributeColumnGroups = this.gridRenderer.generateAttributeColumnGroups();
 
                 if (attributeColumnGroups.length > 0) {
-                    const urlSlugIndex = initialColumnDefs.findIndex(col =>
-                        col.headerName === 'URL Slug' || col.field === 'slug' || col.field === this.dataAdapter.getFieldPath('slug')
-                    );
-
                     const newColumnDefs = [];
-                    if (urlSlugIndex > -1) {
-                        newColumnDefs.push(...initialColumnDefs.slice(0, urlSlugIndex));
-                        newColumnDefs.push(...attributeColumnGroups);
-                        newColumnDefs.push(...initialColumnDefs.slice(urlSlugIndex));
-                    } else {
-                        newColumnDefs.push(...initialColumnDefs);
-                        newColumnDefs.push(...attributeColumnGroups);
-                    }
+
+                    newColumnDefs.push(...initialColumnDefs);
+                    newColumnDefs.push(...attributeColumnGroups);
 
                     initialColumnDefs = newColumnDefs;
                 }
