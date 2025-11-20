@@ -585,19 +585,30 @@ export class GridRenderer {
 
                         // newValue is comma-separated string from CategoryEditor.getValue()
                         const newCategoryValue = params.newValue;
-                        const oldCategoryId = params.data.category_id;
 
                         // Parse newValue to array for comparison
                         const newCategoryIds = newCategoryValue && newCategoryValue !== ''
                             ? newCategoryValue.split(',').map(id => parseInt(id.trim()))
                             : [];
 
-                        // Parse oldValue to array for comparison
-                        const oldCategoryIds = oldCategoryId
-                            ? (typeof oldCategoryId === 'string'
-                                ? oldCategoryId.split(',').map(id => parseInt(id.trim()))
-                                : [parseInt(oldCategoryId)])
-                            : [];
+                        // Parse oldValue from BOTH category_id (parents) AND sub_category_id (children)
+                        const oldCategoryIds = [];
+
+                        if (params.data.category_id) {
+                            const parentIds = String(params.data.category_id)
+                                .split(',')
+                                .map(id => parseInt(id.trim()))
+                                .filter(id => !isNaN(id));
+                            oldCategoryIds.push(...parentIds);
+                        }
+
+                        if (params.data.sub_category_id) {
+                            const subIds = String(params.data.sub_category_id)
+                                .split(',')
+                                .map(id => parseInt(id.trim()))
+                                .filter(id => !isNaN(id));
+                            oldCategoryIds.push(...subIds);
+                        }
 
                         // Compare arrays - no change if same IDs
                         if (JSON.stringify(newCategoryIds.sort()) === JSON.stringify(oldCategoryIds.sort())) {

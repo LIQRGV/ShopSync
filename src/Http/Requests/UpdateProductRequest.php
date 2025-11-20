@@ -207,33 +207,39 @@ class UpdateProductRequest extends BaseProductRequest
         }
 
         // Separate category_id array into parent categories and subcategories
-        if (isset($validated['category_id']) && is_array($validated['category_id'])) {
-            $categoryIds = $validated['category_id'];
+        // Use array_key_exists instead of isset because isset returns false for null values
+        if (array_key_exists('category_id', $validated)) {
+            if (is_array($validated['category_id']) && !empty($validated['category_id'])) {
+                // Handle array of category IDs
+                $categoryIds = $validated['category_id'];
 
-            // Get category model to check parent_id
-            $categoryModel = config('products-package.models.category', \App\Category::class);
-            $categories = $categoryModel::whereIn('id', $categoryIds)->get();
+                // Get category model to check parent_id
+                $categoryModel = config('products-package.models.category', \App\Category::class);
+                $categories = $categoryModel::whereIn('id', $categoryIds)->get();
 
-            // Separate parent categories (parent_id = 0 or NULL) from subcategories
-            $parentIds = [];
-            $subCategoryIds = [];
+                // Separate parent categories (parent_id = 0 or NULL) from subcategories
+                $parentIds = [];
+                $subCategoryIds = [];
 
-            foreach ($categories as $category) {
-                if (empty($category->parent_id) || $category->parent_id == 0) {
-                    // This is a parent category
-                    $parentIds[] = $category->id;
-                } else {
-                    // This is a subcategory
-                    $subCategoryIds[] = $category->id;
+                foreach ($categories as $category) {
+                    if (empty($category->parent_id) || $category->parent_id == 0) {
+                        // This is a parent category
+                        $parentIds[] = $category->id;
+                    } else {
+                        // This is a subcategory
+                        $subCategoryIds[] = $category->id;
+                    }
                 }
-            }
 
-            // Store comma-separated values
-            $validated['category_id'] = !empty($parentIds) ? implode(',', $parentIds) : null;
-            $validated['sub_category_id'] = !empty($subCategoryIds) ? implode(',', $subCategoryIds) : null;
-        } elseif (isset($validated['category_id'])) {
-            // If it's already a string, keep it as is
-            // (backward compatibility for single category updates)
+                // Store comma-separated values
+                $validated['category_id'] = !empty($parentIds) ? implode(',', $parentIds) : null;
+                $validated['sub_category_id'] = !empty($subCategoryIds) ? implode(',', $subCategoryIds) : null;
+            } elseif (empty($validated['category_id'])) {
+                // Handle null/empty - clear both category fields
+                $validated['category_id'] = null;
+                $validated['sub_category_id'] = null;
+            }
+            // else: If it's a non-empty string, keep it as is (backward compatibility)
         }
 
         // Generate slug if name changed and slug not provided
