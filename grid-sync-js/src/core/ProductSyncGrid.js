@@ -1688,10 +1688,12 @@ export class ProductSyncGrid {
 
         switch (state) {
             case 'connected':
-                this.showNotification('success', 'Real-time sync connected');
+                // disabled for now
+                // this.showNotification('success', 'Real-time sync connected');
                 break;
             case 'disconnected':
-                this.showNotification('warning', 'Real-time sync disconnected');
+                // disabled for now
+                // this.showNotification('warning', 'Real-time sync disconnected');
                 break;
             case 'failed':
                 this.showNotification('error', 'Real-time sync connection failed');
