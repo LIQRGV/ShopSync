@@ -4,9 +4,8 @@ import { ProductGridConstants } from '../constants/ProductGridConstants.js';
 /**
  * ProductGridApiClient - Unified API client for product grid operations
  *
- * Handles API communications with support for both:
- * - Nested data structure (thediamondbox style)
- * - Flat data structure (marketplace-api style)
+ * Handles API communications using JSON:API format with nested structure.
+ * All responses follow the JSON:API specification with data wrapped in attributes.
  *
  * @class ProductGridApiClient
  */
@@ -16,7 +15,6 @@ export class ProductGridApiClient {
      * @param {string} config.baseUrl - API base URL
      * @param {string} [config.clientId] - Client ID for filtering (optional)
      * @param {string} [config.clientBaseUrl] - Client base URL for assets (optional)
-     * @param {string} [config.dataMode] - Data mode: 'nested', 'flat', or 'auto'
      * @param {GridDataAdapter} [config.dataAdapter] - Custom data adapter instance
      */
     constructor(config) {
@@ -25,8 +23,8 @@ export class ProductGridApiClient {
         this.clientBaseUrl = config.clientBaseUrl || '';
         this.csrfToken = this.getCsrfToken();
 
-        // Initialize data adapter
-        this.dataAdapter = config.dataAdapter || new GridDataAdapter(config.dataMode || 'auto');
+        // Initialize data adapter (always uses nested JSON:API format)
+        this.dataAdapter = config.dataAdapter || new GridDataAdapter();
     }
 
     /**
@@ -71,15 +69,9 @@ export class ProductGridApiClient {
                 url += `&client_id=${this.clientId}`;
             }
 
-            // Add includes for both nested and flat structures
-            // For nested (WTM): includes category, brand, supplier, attributes relationships
-            // For flat (WL): includes attributes, category, brand, supplier (for dropdowns)
-            if (this.dataAdapter.getCurrentMode() === 'nested' || this.dataAdapter.mode === 'auto') {
-                url += '&include=category,brand,supplier,attributes';
-            } else if (this.dataAdapter.getCurrentMode() === 'flat') {
-                // For flat mode, request attributes, category, brand, supplier (for editors)
-                url += '&include=attributes,category,brand,supplier';
-            }
+            // Add includes for JSON:API relationships
+            // Includes category, brand, supplier, attributes for dropdowns and dynamic columns
+            url += '&include=category,brand,supplier,attributes';
 
             const response = await fetch(url, {
                 method: ProductGridConstants.API_CONFIG.METHODS.GET,
@@ -102,11 +94,6 @@ export class ProductGridApiClient {
                 item.id = parseInt(item.id);
                 return item;
             });
-
-            // Auto-detect data mode if in auto mode
-            if (this.dataAdapter.mode === 'auto' && data.data.length > 0) {
-                this.dataAdapter.detectDataMode(data.data[0]);
-            }
 
             return data;
         } catch (error) {
@@ -453,10 +440,8 @@ export class ProductGridApiClient {
                 searchFilters.client_id = this.clientId;
             }
 
-            // Add includes for nested structure
-            if (this.dataAdapter.getCurrentMode() === 'nested' || this.dataAdapter.mode === 'auto') {
-                searchFilters.include = 'category,brand,supplier,attributes';
-            }
+            // Add includes for JSON:API relationships
+            searchFilters.include = 'category,brand,supplier,attributes';
 
             const params = new URLSearchParams(searchFilters);
 

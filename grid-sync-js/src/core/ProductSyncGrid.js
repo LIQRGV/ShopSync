@@ -1,6 +1,6 @@
 /**
  * ProductSyncGrid - Unified AG Grid orchestrator for product synchronization
- * Supports both nested and flat data structures via GridDataAdapter
+ * Uses JSON:API nested data structure via GridDataAdapter
  *
  * @module ProductSyncGrid
  */
@@ -17,26 +17,22 @@ export class ProductSyncGrid {
     /**
      * @param {Object} config - Configuration object
      * @param {string} config.apiEndpoint - API endpoint URL
-     * @param {string} [config.dataMode='auto'] - Data structure mode: 'nested', 'flat', or 'auto'
      * @param {string} [config.gridElementId='#productGrid'] - Grid container selector
      * @param {string} [config.clientId] - Client ID for multi-tenant filtering
      * @param {string} [config.clientBaseUrl=''] - Base URL for client assets
      * @param {boolean} [config.enableSSE=true] - Enable Server-Sent Events
      * @param {string} [config.sseEndpoint='/api/v1/sse/events'] - SSE endpoint URL
      * @param {string} [config.csvExportPrefix='products'] - Prefix for CSV export filename
-     * @param {Array} [config.masterAttributes=[]] - Master attributes data (for flat mode)
      */
     constructor(config) {
         // Configuration
         this.config = {
-            dataMode: 'auto',
             gridElementId: '#productGrid',
             enableSSE: true,
             sseEndpoint: '/api/v1/sse/events',
             clientId: null,
             clientBaseUrl: '',
             csvExportPrefix: 'products',
-            masterAttributes: [],
             ...config
         };
 
@@ -77,16 +73,15 @@ export class ProductSyncGrid {
      * Initialize all modular components
      */
     initializeComponents() {
-        // Initialize data adapter first
-        this.dataAdapter = new GridDataAdapter(this.config.dataMode);
+        // Initialize data adapter (always uses JSON:API nested format)
+        this.dataAdapter = new GridDataAdapter();
 
         // Initialize API client with data adapter
         this.apiClient = new ProductGridApiClient({
             baseUrl: this.config.apiEndpoint,
             clientId: this.config.clientId,
             clientBaseUrl: this.config.clientBaseUrl,
-            dataAdapter: this.dataAdapter,
-            dataMode: this.config.dataMode
+            dataAdapter: this.dataAdapter
         });
 
         // Initialize grid renderer with data adapter
@@ -94,8 +89,7 @@ export class ProductSyncGrid {
             baseUrl: this.config.clientBaseUrl || this.config.apiEndpoint,
             dataAdapter: this.dataAdapter,
             currentData: null,
-            enabledAttributes: this.enabledAttributes,
-            masterAttributes: this.config.masterAttributes
+            enabledAttributes: this.enabledAttributes
         });
 
         // Initialize SSE if enabled

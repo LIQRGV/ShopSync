@@ -1,6 +1,6 @@
 /**
  * GridRenderer - Unified cell rendering and formatting for Product Grid
- * Supports both nested and flat data structures via GridDataAdapter
+ * Uses JSON:API nested data structure via GridDataAdapter
  */
 import { ProductGridConstants } from '../constants/ProductGridConstants.js';
 
@@ -11,14 +11,12 @@ export class GridRenderer {
      * @param {GridDataAdapter} config.dataAdapter - Data adapter for field access
      * @param {Object} config.currentData - Current grid data with included relationships
      * @param {Array} config.enabledAttributes - Enabled attributes for dynamic columns
-     * @param {Array} config.masterAttributes - Master attributes data (for flat mode)
      */
     constructor(config) {
         this.baseUrl = config.baseUrl || '';
         this.dataAdapter = config.dataAdapter;
         this.currentData = config.currentData || null;
         this.enabledAttributes = config.enabledAttributes || [];
-        this.masterAttributes = config.masterAttributes || [];
 
         // Inject custom CSS for colored dropdowns and read-only cells
         this.injectStatusDropdownCSS();
@@ -43,9 +41,8 @@ export class GridRenderer {
 
         const attributeGroups = {};
 
-        // Handle both nested and flat modes: Extract master attributes from included array
-        // For nested mode (WTM): included contains product relationships + master attributes
-        // For flat mode (WL): included contains only master attributes metadata
+        // Extract master attributes from JSON:API included array
+        // The included array contains product relationships + master attributes metadata
         if (this.currentData.included) {
             // Filter attributes that are enabled_on_dropship
             const enabledAttributes = this.currentData.included.filter(item =>
@@ -69,63 +66,6 @@ export class GridRenderer {
                     input_type: attr.attributes.input_type || 1,
                     options: attr.attributes.options || []
                 });
-            });
-        }
-
-        // Handle flat mode (master attributes passed from backend)
-        // In flat mode, master attributes are passed via blade template to JavaScript
-        if (this.dataAdapter.mode === 'flat' && this.masterAttributes && this.masterAttributes.length > 0) {
-
-            this.masterAttributes.forEach(attr => {
-                const groupName = attr.group_name || 'Other';
-
-                if (!attributeGroups[groupName]) {
-                    attributeGroups[groupName] = [];
-                }
-
-                attributeGroups[groupName].push({
-                    id: attr.id,
-                    name: attr.name,
-                    code: attr.code || null,
-                    type: attr.input_type || 1
-                });
-            });
-        }
-
-        // Alternative: Extract from first product's attributes in flat mode
-
-        if (this.dataAdapter.mode === 'flat' &&
-            Object.keys(attributeGroups).length === 0 &&
-            this.currentData.data &&
-            Array.isArray(this.currentData.data) &&
-            this.currentData.data.length > 0) {
-
-            // Get unique attributes from all products
-            const seenAttributes = new Set();
-
-            this.currentData.data.forEach((product) => {
-                if (product.attributes && Array.isArray(product.attributes)) {
-                    product.attributes.forEach((attr) => {
-                        const attrKey = String(attr.id);
-
-                        if (!seenAttributes.has(attrKey) && attr.enabled_on_dropship === true) {
-                            seenAttributes.add(attrKey);
-
-                            const groupName = attr.group_name || 'Other';
-
-                            if (!attributeGroups[groupName]) {
-                                attributeGroups[groupName] = [];
-                            }
-
-                            attributeGroups[groupName].push({
-                                id: attr.id,
-                                name: attr.name,
-                                code: attr.code,
-                                type: attr.type
-                            });
-                        }
-                    });
-                }
             });
         }
 
