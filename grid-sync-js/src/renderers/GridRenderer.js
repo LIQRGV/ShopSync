@@ -456,6 +456,65 @@ export class GridRenderer {
             // Relations Group (only for flat/WL mode with relationships)
             ...(this.dataAdapter.mode === 'flat' ? [
                 {
+                    colId: 'brandName',
+                    headerName: 'Brand',
+                    field: 'brand_name',
+                    width: ProductGridConstants.COLUMN_WIDTHS.brand,
+                    sortable: true,
+                    filter: 'agSetColumnFilter',
+                    editable: true,
+                    cellRenderer: (params) => {
+                        if (!params.data) return '';
+                        const brandName = this.getBrandName(params) || params.data.brand_name || '';
+                        // Add dropdown icon to indicate this is a dropdown field
+                        return brandName ? `${brandName} <span style="color: #999; margin-left: 4px;">▼</span>` : '<span style="color: #999;">Select Brand ▼</span>';
+                    },
+                    cellEditor: this.getBrandEditor(),
+                    cellEditorPopup: true,
+                    cellEditorParams: {},
+                    valueGetter: (params) => {
+                        if (!params.data) return '';
+                        const brandFromRelationship = this.getBrandName(params);
+                        return brandFromRelationship || params.data.brand_name || '';
+                    },
+                    valueSetter: (params) => {
+                        if (!params.data) return false;
+
+                        const newBrandId = params.newValue;
+                        const oldBrandId = params.data.brand_id;
+
+                        // No change if same brand
+                        if (newBrandId === oldBrandId) {
+                            return false;
+                        }
+
+                        // Update brand_id in row data
+                        params.data.brand_id = newBrandId;
+
+                        // Update brand_name for display - get from cached brands
+                        if (newBrandId) {
+                            // Try to get brand name from cached brands (set by BrandEditor)
+                            if (window._cachedBrands && Array.isArray(window._cachedBrands)) {
+                                const brand = window._cachedBrands.find(b => b.value === parseInt(newBrandId));
+                                params.data.brand_name = brand ? brand.label : '';
+                            } else {
+                                params.data.brand_name = '';
+                            }
+                        } else {
+                            params.data.brand_name = '';
+                        }
+
+                        // Set flag for handleCellEdit
+                        params.data._brandUpdate = {
+                            brandId: newBrandId
+                        };
+
+                        return true;
+                    },
+                    cellClass: (params) => params.data ? 'editable-cell' : 'read-only-cell',
+                    cellStyle: (params) => this.getCellStyle(params)
+                },
+                {
                     colId: 'categoryName',
                     headerName: 'Category',
                     field: 'category_name',
@@ -535,65 +594,6 @@ export class GridRenderer {
                     cellStyle: (params) => this.getCellStyle(params)
                 },
                 {
-                    colId: 'brandName',
-                    headerName: 'Brand',
-                    field: 'brand_name',
-                    width: ProductGridConstants.COLUMN_WIDTHS.brand,
-                    sortable: true,
-                    filter: 'agSetColumnFilter',
-                    editable: true,
-                    cellRenderer: (params) => {
-                        if (!params.data) return '';
-                        const brandName = this.getBrandName(params) || params.data.brand_name || '';
-                        // Add dropdown icon to indicate this is a dropdown field
-                        return brandName ? `${brandName} <span style="color: #999; margin-left: 4px;">▼</span>` : '<span style="color: #999;">Select Brand ▼</span>';
-                    },
-                    cellEditor: this.getBrandEditor(),
-                    cellEditorPopup: true,
-                    cellEditorParams: {},
-                    valueGetter: (params) => {
-                        if (!params.data) return '';
-                        const brandFromRelationship = this.getBrandName(params);
-                        return brandFromRelationship || params.data.brand_name || '';
-                    },
-                    valueSetter: (params) => {
-                        if (!params.data) return false;
-
-                        const newBrandId = params.newValue;
-                        const oldBrandId = params.data.brand_id;
-
-                        // No change if same brand
-                        if (newBrandId === oldBrandId) {
-                            return false;
-                        }
-
-                        // Update brand_id in row data
-                        params.data.brand_id = newBrandId;
-
-                        // Update brand_name for display - get from cached brands
-                        if (newBrandId) {
-                            // Try to get brand name from cached brands (set by BrandEditor)
-                            if (window._cachedBrands && Array.isArray(window._cachedBrands)) {
-                                const brand = window._cachedBrands.find(b => b.value === parseInt(newBrandId));
-                                params.data.brand_name = brand ? brand.label : '';
-                            } else {
-                                params.data.brand_name = '';
-                            }
-                        } else {
-                            params.data.brand_name = '';
-                        }
-
-                        // Set flag for handleCellEdit
-                        params.data._brandUpdate = {
-                            brandId: newBrandId
-                        };
-
-                        return true;
-                    },
-                    cellClass: (params) => params.data ? 'editable-cell' : 'read-only-cell',
-                    cellStyle: (params) => this.getCellStyle(params)
-                },
-                {
                     colId: 'supplierName',
                     headerName: 'Supplier',
                     field: 'supplier_name',
@@ -653,6 +653,16 @@ export class GridRenderer {
                     cellStyle: (params) => this.getCellStyle(params)
                 }
             ] : []),
+            {
+                colId: 'urlSlug',
+                headerName: 'URL Slug',
+                field: this.dataAdapter.getFieldPath('slug'),
+                width: ProductGridConstants.COLUMN_WIDTHS.urlSlug,
+                sortable: true,
+                filter: 'agTextColumnFilter',
+                editable: true,
+                cellRenderer: (params) => this.truncatedTextRenderer(params)
+            },
 
             // SEO Group (only for flat/WL mode - thediamondbox specific)
             ...(this.dataAdapter.mode === 'flat' ? [
@@ -689,18 +699,6 @@ export class GridRenderer {
 
             // Dynamic Attribute Column Groups will be added after data loads (see ProductSyncGrid.loadProducts)
             // Removed from initial column defs to prevent empty columns
-
-            // URL Slug (both modes)
-            {
-                colId: 'urlSlug',
-                headerName: 'URL Slug',
-                field: this.dataAdapter.getFieldPath('slug'),
-                width: ProductGridConstants.COLUMN_WIDTHS.urlSlug,
-                sortable: true,
-                filter: 'agTextColumnFilter',
-                editable: true,
-                cellRenderer: (params) => this.truncatedTextRenderer(params)
-            },
 
             // Actions (pinned right)
             {
