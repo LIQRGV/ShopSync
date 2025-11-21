@@ -452,245 +452,203 @@ export class GridRenderer {
                 editable: true,
                 cellRenderer: (params) => this.truncatedTextRenderer(params)
             },
-
-            // Relations Group (only for flat/WL mode with relationships)
-            ...(this.dataAdapter.mode === 'flat' ? [
-                {
-                    colId: 'categoryName',
-                    headerName: 'Category',
-                    field: 'category_name',
-                    width: ProductGridConstants.COLUMN_WIDTHS.category,
-                    sortable: true,
-                    filter: 'agSetColumnFilter',
-                    editable: (params) => {
-                        return params.data ? true : false;
-                    },
-                    cellRenderer: (params) => {
-                        // Display category name from relationship if available, otherwise from field
-                        if (!params.data) return '';
-                        const categoryName = this.getCategoryName(params);
-                        const displayValue = categoryName || params.value || '';
-                        // Add dropdown icon to indicate this is a dropdown field
-                        return displayValue ? `${displayValue} <span style="color: #999; margin-left: 4px;">▼</span>` : '<span style="color: #999;">Select Category ▼</span>';
-                    },
-                    cellEditor: this.getCategoryEditor(),
-                    cellEditorPopup: true,
-                    cellEditorParams: {},
-                    // Simple value getter/setter that reads/writes directly to category_name field
-                    valueGetter: (params) => {
-                        if (!params.data) return '';
-                        // Try to get from relationship first, otherwise from field
-                        const categoryFromRelationship = this.getCategoryName(params);
-                        return categoryFromRelationship || params.data.category_name || '';
-                    },
-                    valueSetter: (params) => {
-                        if (!params.data) return false;
-
-                        // newValue is comma-separated string from CategoryEditor.getValue()
-                        const newCategoryValue = params.newValue;
-
-                        // Parse newValue to array for comparison
-                        const newCategoryIds = newCategoryValue && newCategoryValue !== ''
-                            ? newCategoryValue.split(',').map(id => parseInt(id.trim()))
-                            : [];
-
-                        // Parse oldValue from BOTH category_id (parents) AND sub_category_id (children)
-                        const oldCategoryIds = [];
-
-                        if (params.data.category_id) {
-                            const parentIds = String(params.data.category_id)
-                                .split(',')
-                                .map(id => parseInt(id.trim()))
-                                .filter(id => !isNaN(id));
-                            oldCategoryIds.push(...parentIds);
-                        }
-
-                        if (params.data.sub_category_id) {
-                            const subIds = String(params.data.sub_category_id)
-                                .split(',')
-                                .map(id => parseInt(id.trim()))
-                                .filter(id => !isNaN(id));
-                            oldCategoryIds.push(...subIds);
-                        }
-
-                        // Compare arrays - no change if same IDs
-                        if (JSON.stringify(newCategoryIds.sort()) === JSON.stringify(oldCategoryIds.sort())) {
-                            return false;
-                        }
-
-                        // Update category_id in row data (store as comma-separated for display)
-                        params.data.category_id = newCategoryValue;
-
-                        // Update category_name for display (hierarchical comma-separated)
-                        params.data.category_name = this.buildCategoryNamesFromIds(newCategoryIds);
-
-                        // Set flag for handleCellEdit - send as array for JSON:API
-                        params.data._categoryUpdate = {
-                            categoryId: newCategoryIds.length > 0 ? newCategoryIds : null
-                        };
-
-                        return true;
-                    },
-                    cellClass: (params) => params.data ? 'editable-cell' : 'read-only-cell',
-                    cellStyle: (params) => this.getCellStyle(params)
+            {
+                colId: 'brandName',
+                headerName: 'Brand',
+                field: 'brand_name',
+                width: ProductGridConstants.COLUMN_WIDTHS.brand,
+                sortable: true,
+                filter: 'agSetColumnFilter',
+                editable: true,
+                cellRenderer: (params) => {
+                    if (!params.data) return '';
+                    const brandName = this.getBrandName(params) || params.data.brand_name || '';
+                    // Add dropdown icon to indicate this is a dropdown field
+                    return brandName ? `${brandName} <span style="color: #999; margin-left: 4px;">▼</span>` : '<span style="color: #999;">Select Brand ▼</span>';
                 },
-                {
-                    colId: 'brandName',
-                    headerName: 'Brand',
-                    field: 'brand_name',
-                    width: ProductGridConstants.COLUMN_WIDTHS.brand,
-                    sortable: true,
-                    filter: 'agSetColumnFilter',
-                    editable: true,
-                    cellRenderer: (params) => {
-                        if (!params.data) return '';
-                        const brandName = this.getBrandName(params) || params.data.brand_name || '';
-                        // Add dropdown icon to indicate this is a dropdown field
-                        return brandName ? `${brandName} <span style="color: #999; margin-left: 4px;">▼</span>` : '<span style="color: #999;">Select Brand ▼</span>';
-                    },
-                    cellEditor: this.getBrandEditor(),
-                    cellEditorPopup: true,
-                    cellEditorParams: {},
-                    valueGetter: (params) => {
-                        if (!params.data) return '';
-                        const brandFromRelationship = this.getBrandName(params);
-                        return brandFromRelationship || params.data.brand_name || '';
-                    },
-                    valueSetter: (params) => {
-                        if (!params.data) return false;
+                cellEditor: this.getBrandEditor(),
+                cellEditorPopup: true,
+                cellEditorParams: {},
+                valueGetter: (params) => {
+                    if (!params.data) return '';
+                    const brandFromRelationship = this.getBrandName(params);
+                    return brandFromRelationship || params.data.brand_name || '';
+                },
+                valueSetter: (params) => {
+                    if (!params.data) return false;
 
-                        const newBrandId = params.newValue;
-                        const oldBrandId = params.data.brand_id;
+                    const newBrandId = params.newValue;
+                    const oldBrandId = params.data.brand_id;
 
-                        // No change if same brand
-                        if (newBrandId === oldBrandId) {
-                            return false;
-                        }
+                    // No change if same brand
+                    if (newBrandId === oldBrandId) {
+                        return false;
+                    }
 
-                        // Update brand_id in row data
-                        params.data.brand_id = newBrandId;
+                    // Update brand_id in row data
+                    params.data.brand_id = newBrandId;
 
-                        // Update brand_name for display - get from cached brands
-                        if (newBrandId) {
-                            // Try to get brand name from cached brands (set by BrandEditor)
-                            if (window._cachedBrands && Array.isArray(window._cachedBrands)) {
-                                const brand = window._cachedBrands.find(b => b.value === parseInt(newBrandId));
-                                params.data.brand_name = brand ? brand.label : '';
-                            } else {
-                                params.data.brand_name = '';
-                            }
+                    // Update brand_name for display - get from cached brands
+                    if (newBrandId) {
+                        // Try to get brand name from cached brands (set by BrandEditor)
+                        if (window._cachedBrands && Array.isArray(window._cachedBrands)) {
+                            const brand = window._cachedBrands.find(b => b.value === parseInt(newBrandId));
+                            params.data.brand_name = brand ? brand.label : '';
                         } else {
                             params.data.brand_name = '';
                         }
+                    } else {
+                        params.data.brand_name = '';
+                    }
 
-                        // Set flag for handleCellEdit
-                        params.data._brandUpdate = {
-                            brandId: newBrandId
-                        };
+                    // Set flag for handleCellEdit
+                    params.data._brandUpdate = {
+                        brandId: newBrandId
+                    };
 
-                        return true;
-                    },
-                    cellClass: (params) => params.data ? 'editable-cell' : 'read-only-cell',
-                    cellStyle: (params) => this.getCellStyle(params)
+                    return true;
                 },
-                {
-                    colId: 'supplierName',
-                    headerName: 'Supplier',
-                    field: 'supplier_name',
-                    width: ProductGridConstants.COLUMN_WIDTHS.supplier,
-                    sortable: true,
-                    filter: 'agSetColumnFilter',
-                    editable: true,
-                    cellRenderer: (params) => {
-                        if (!params.data) return '';
-                        const supplierName = this.getSupplierName(params) || params.data.supplier_name || '';
-                        // Add dropdown icon to indicate this is a dropdown field
-                        return supplierName ? `${supplierName} <span style="color: #999; margin-left: 4px;">▼</span>` : '<span style="color: #999;">Select Supplier ▼</span>';
-                    },
-                    cellEditor: this.getSupplierEditor(),
-                    cellEditorPopup: true,
-                    cellEditorParams: {},
-                    valueGetter: (params) => {
-                        if (!params.data) return '';
-                        const supplierFromRelationship = this.getSupplierName(params);
-                        return supplierFromRelationship || params.data.supplier_name || '';
-                    },
-                    valueSetter: (params) => {
-                        if (!params.data) return false;
+                cellClass: (params) => params.data ? 'editable-cell' : 'read-only-cell',
+                cellStyle: (params) => this.getCellStyle(params)
+            },
+            {
+                colId: 'categoryName',
+                headerName: 'Category',
+                field: 'category_name',
+                width: ProductGridConstants.COLUMN_WIDTHS.category,
+                sortable: true,
+                filter: 'agSetColumnFilter',
+                editable: (params) => {
+                    return params.data ? true : false;
+                },
+                cellRenderer: (params) => {
+                    // Display category name from relationship if available, otherwise from field
+                    if (!params.data) return '';
+                    const categoryName = this.getCategoryName(params);
+                    const displayValue = categoryName || params.value || '';
+                    // Add dropdown icon to indicate this is a dropdown field
+                    return displayValue ? `${displayValue} <span style="color: #999; margin-left: 4px;">▼</span>` : '<span style="color: #999;">Select Category ▼</span>';
+                },
+                cellEditor: this.getCategoryEditor(),
+                cellEditorPopup: true,
+                cellEditorParams: {},
+                // Simple value getter/setter that reads/writes directly to category_name field
+                valueGetter: (params) => {
+                    if (!params.data) return '';
+                    // Try to get from relationship first, otherwise from field
+                    const categoryFromRelationship = this.getCategoryName(params);
+                    return categoryFromRelationship || params.data.category_name || '';
+                },
+                valueSetter: (params) => {
+                    if (!params.data) return false;
 
-                        const newSupplierId = params.newValue;
-                        const oldSupplierId = params.data.supplier_id;
+                    // newValue is comma-separated string from CategoryEditor.getValue()
+                    const newCategoryValue = params.newValue;
 
-                        // No change if same supplier
-                        if (newSupplierId === oldSupplierId) {
-                            return false;
-                        }
+                    // Parse newValue to array for comparison
+                    const newCategoryIds = newCategoryValue && newCategoryValue !== ''
+                        ? newCategoryValue.split(',').map(id => parseInt(id.trim()))
+                        : [];
 
-                        // Update supplier_id in row data
-                        params.data.supplier_id = newSupplierId;
+                    // Parse oldValue from BOTH category_id (parents) AND sub_category_id (children)
+                    const oldCategoryIds = [];
 
-                        // Update supplier_name for display - get from cached suppliers
-                        if (newSupplierId) {
-                            // Try to get supplier name from cached suppliers (set by SupplierEditor)
-                            if (window._cachedSuppliers && Array.isArray(window._cachedSuppliers)) {
-                                const supplier = window._cachedSuppliers.find(s => s.value === parseInt(newSupplierId));
-                                params.data.supplier_name = supplier ? supplier.label : '';
-                            } else {
-                                params.data.supplier_name = '';
-                            }
+                    if (params.data.category_id) {
+                        const parentIds = String(params.data.category_id)
+                            .split(',')
+                            .map(id => parseInt(id.trim()))
+                            .filter(id => !isNaN(id));
+                        oldCategoryIds.push(...parentIds);
+                    }
+
+                    if (params.data.sub_category_id) {
+                        const subIds = String(params.data.sub_category_id)
+                            .split(',')
+                            .map(id => parseInt(id.trim()))
+                            .filter(id => !isNaN(id));
+                        oldCategoryIds.push(...subIds);
+                    }
+
+                    // Compare arrays - no change if same IDs
+                    if (JSON.stringify(newCategoryIds.sort()) === JSON.stringify(oldCategoryIds.sort())) {
+                        return false;
+                    }
+
+                    // Update category_id in row data (store as comma-separated for display)
+                    params.data.category_id = newCategoryValue;
+
+                    // Update category_name for display (hierarchical comma-separated)
+                    params.data.category_name = this.buildCategoryNamesFromIds(newCategoryIds);
+
+                    // Set flag for handleCellEdit - send as array for JSON:API
+                    params.data._categoryUpdate = {
+                        categoryId: newCategoryIds.length > 0 ? newCategoryIds : null
+                    };
+
+                    return true;
+                },
+                cellClass: (params) => params.data ? 'editable-cell' : 'read-only-cell',
+                cellStyle: (params) => this.getCellStyle(params)
+            },
+            {
+                colId: 'supplierName',
+                headerName: 'Supplier',
+                field: 'supplier_name',
+                width: ProductGridConstants.COLUMN_WIDTHS.supplier,
+                sortable: true,
+                filter: 'agSetColumnFilter',
+                editable: true,
+                cellRenderer: (params) => {
+                    if (!params.data) return '';
+                    const supplierName = this.getSupplierName(params) || params.data.supplier_name || '';
+                    // Add dropdown icon to indicate this is a dropdown field
+                    return supplierName ? `${supplierName} <span style="color: #999; margin-left: 4px;">▼</span>` : '<span style="color: #999;">Select Supplier ▼</span>';
+                },
+                cellEditor: this.getSupplierEditor(),
+                cellEditorPopup: true,
+                cellEditorParams: {},
+                valueGetter: (params) => {
+                    if (!params.data) return '';
+                    const supplierFromRelationship = this.getSupplierName(params);
+                    return supplierFromRelationship || params.data.supplier_name || '';
+                },
+                valueSetter: (params) => {
+                    if (!params.data) return false;
+
+                    const newSupplierId = params.newValue;
+                    const oldSupplierId = params.data.supplier_id;
+
+                    // No change if same supplier
+                    if (newSupplierId === oldSupplierId) {
+                        return false;
+                    }
+
+                    // Update supplier_id in row data
+                    params.data.supplier_id = newSupplierId;
+
+                    // Update supplier_name for display - get from cached suppliers
+                    if (newSupplierId) {
+                        // Try to get supplier name from cached suppliers (set by SupplierEditor)
+                        if (window._cachedSuppliers && Array.isArray(window._cachedSuppliers)) {
+                            const supplier = window._cachedSuppliers.find(s => s.value === parseInt(newSupplierId));
+                            params.data.supplier_name = supplier ? supplier.label : '';
                         } else {
                             params.data.supplier_name = '';
                         }
+                    } else {
+                        params.data.supplier_name = '';
+                    }
 
-                        // Set flag for handleCellEdit
-                        params.data._supplierUpdate = {
-                            supplierId: newSupplierId
-                        };
+                    // Set flag for handleCellEdit
+                    params.data._supplierUpdate = {
+                        supplierId: newSupplierId
+                    };
 
-                        return true;
-                    },
-                    cellClass: (params) => params.data ? 'editable-cell' : 'read-only-cell',
-                    cellStyle: (params) => this.getCellStyle(params)
-                }
-            ] : []),
-
-            // SEO Group (only for flat/WL mode - thediamondbox specific)
-            ...(this.dataAdapter.mode === 'flat' ? [
-                {
-                    colId: 'seoTitle',
-                    headerName: 'SEO Title',
-                    field: this.dataAdapter.getFieldPath('seo_title'),
-                    width: ProductGridConstants.COLUMN_WIDTHS.seoTitle,
-                    sortable: true,
-                    filter: 'agTextColumnFilter',
-                    editable: true,
-                    cellRenderer: (params) => this.truncatedTextRenderer(params)
+                    return true;
                 },
-                {
-                    colId: 'seoKeywords',
-                    headerName: 'SEO Keywords',
-                    field: this.dataAdapter.getFieldPath('seo_keywords'),
-                    width: ProductGridConstants.COLUMN_WIDTHS.seoKeywords,
-                    sortable: true,
-                    filter: 'agTextColumnFilter',
-                    editable: true
-                },
-                {
-                    colId: 'seoDescription',
-                    headerName: 'SEO Description',
-                    field: this.dataAdapter.getFieldPath('seo_description'),
-                    width: ProductGridConstants.COLUMN_WIDTHS.seoDescription,
-                    sortable: true,
-                    filter: 'agTextColumnFilter',
-                    editable: true,
-                    cellRenderer: (params) => this.truncatedTextRenderer(params)
-                }
-            ] : []),
-
-            // Dynamic Attribute Column Groups will be added after data loads (see ProductSyncGrid.loadProducts)
-            // Removed from initial column defs to prevent empty columns
-
-            // URL Slug (both modes)
+                cellClass: (params) => params.data ? 'editable-cell' : 'read-only-cell',
+                cellStyle: (params) => this.getCellStyle(params)
+            },
             {
                 colId: 'urlSlug',
                 headerName: 'URL Slug',
@@ -701,6 +659,38 @@ export class GridRenderer {
                 editable: true,
                 cellRenderer: (params) => this.truncatedTextRenderer(params)
             },
+            {
+                colId: 'seoTitle',
+                headerName: 'SEO Title',
+                field: this.dataAdapter.getFieldPath('seo_title'),
+                width: ProductGridConstants.COLUMN_WIDTHS.seoTitle,
+                sortable: true,
+                filter: 'agTextColumnFilter',
+                editable: true,
+                cellRenderer: (params) => this.truncatedTextRenderer(params)
+            },
+            {
+                colId: 'seoKeywords',
+                headerName: 'SEO Keywords',
+                field: this.dataAdapter.getFieldPath('seo_keywords'),
+                width: ProductGridConstants.COLUMN_WIDTHS.seoKeywords,
+                sortable: true,
+                filter: 'agTextColumnFilter',
+                editable: true
+            },
+            {
+                colId: 'seoDescription',
+                headerName: 'SEO Description',
+                field: this.dataAdapter.getFieldPath('seo_description'),
+                width: ProductGridConstants.COLUMN_WIDTHS.seoDescription,
+                sortable: true,
+                filter: 'agTextColumnFilter',
+                editable: true,
+                cellRenderer: (params) => this.truncatedTextRenderer(params)
+            },
+
+            // Dynamic Attribute Column Groups will be added after data loads (see ProductSyncGrid.loadProducts)
+            // Removed from initial column defs to prevent empty columns
 
             // Actions (pinned right)
             {
