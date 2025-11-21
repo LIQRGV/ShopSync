@@ -165,7 +165,7 @@ export class CellEditManager {
 
             // Check if this is a supplier update
             if (data._supplierUpdate) {
-                const { supplierId } = data._supplierId;
+                const { supplierId } = data._supplierUpdate;
 
                 const result = await this.apiClient.updateProduct(
                     productId,
