@@ -7,7 +7,6 @@ use TheDiamondBox\ShopSync\Http\Controllers\BrandController;
 use TheDiamondBox\ShopSync\Http\Controllers\SupplierController;
 use TheDiamondBox\ShopSync\Http\Controllers\AttributeController;
 use TheDiamondBox\ShopSync\Http\Controllers\SseController;
-use TheDiamondBox\ShopSync\Http\Controllers\ShopInfoController;
 
 /*
 |--------------------------------------------------------------------------
@@ -28,20 +27,6 @@ Route::get('/sse/events', [SseController::class, 'events'])
 
 Route::get('/sse/status', [SseController::class, 'status'])
     ->name('sse.status');
-
-// Shop Info endpoints (WL mode, proxied by WTM)
-Route::get('/shop-info', [ShopInfoController::class, 'show'])
-    ->name('shop-info.show');
-
-Route::put('/shop-info', [ShopInfoController::class, 'update'])
-    ->name('shop-info.update');
-
-Route::patch('/shop-info', [ShopInfoController::class, 'updatePartial'])
-    ->name('shop-info.update-partial');
-
-// Upload shop info image endpoint
-Route::post('/shop-info/images', [ShopInfoController::class, 'uploadImage'])
-    ->name('shop-info.upload-image');
 
 // Dropdown options endpoints - provide data for AG Grid editors
 Route::get('/categories', [CategoryController::class, 'index'])
