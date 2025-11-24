@@ -264,8 +264,7 @@ All API responses follow a consistent JSON format:
 src/
 ├── Http/
 │   ├── Controllers/
-│   │   ├── ProductController.php
-│   │   └── ShopInfoController.php
+│   │   └── ProductController.php
 │   ├── Middleware/
 │   │   └── PackageAuth.php
 │   └── Requests/
@@ -285,8 +284,7 @@ src/
 │   │   ├── DatabaseShopInfoFetcher.php
 │   │   ├── ApiShopInfoFetcher.php
 │   │   └── ShopInfoFetcherFactory.php
-│   ├── ProductService.php
-│   └── ShopInfoService.php
+│   └── ProductService.php
 ├── Models/
 │   ├── Product.php
 │   ├── ShopInfo.php

@@ -73,73 +73,7 @@ class ProductJsonApiTransformer extends JsonApiTransformer
     public function transformProducts($products, array $includes = []): array
     {
         $this->setIncludes($includes);
-        $result = $this->transformCollection($products, 'products');
-
-        // Note: Master attributes metadata is now fetched separately via /attributes endpoint
-        // and cached on the frontend. The include=attributes parameter now only includes
-        // product-specific attribute values (relationship data), not master attributes.
-
-        // When include=category is requested, add each product's assigned categories
-        // This supports multi-category display (comma-separated category_ids)
-        if (in_array('category', $includes)) {
-            $this->addProductCategoriesToIncluded($result, $products);
-        }
-
-        return $result;
-    }
-
-    /**
-     * Add each product's assigned categories to included array
-     * Supports multi-category assignment via comma-separated category_ids
-     */
-    protected function addProductCategoriesToIncluded(array &$result, $products): void
-    {
-        // Handle both single product and collection
-        $productCollection = is_iterable($products) ? $products : [$products];
-
-        foreach ($productCollection as $product) {
-            if (!$product) continue;
-
-            // Get all categories for this product (handles comma-separated category_ids)
-            $categories = $product->categories();
-
-            if ($categories && !$categories->isEmpty()) {
-                foreach ($categories as $category) {
-                    $key = 'categories:' . $category->id;
-
-                    // Check if already added to avoid duplicates
-                    if (!isset($this->included[$key])) {
-                        // Load parent category if exists
-                        if ($category->parent_id) {
-                            $category->load('parent');
-                        }
-
-                        $this->included[$key] = [
-                            'type' => 'categories',
-                            'id' => (string) $category->id,
-                            'attributes' => $this->getRelatedModelAttributes($category)
-                        ];
-
-                        // Also add parent category to included if exists
-                        if ($category->parent_id && $category->parent) {
-                            $parentKey = 'categories:' . $category->parent_id;
-                            if (!isset($this->included[$parentKey])) {
-                                $this->included[$parentKey] = [
-                                    'type' => 'categories',
-                                    'id' => (string) $category->parent_id,
-                                    'attributes' => $this->getRelatedModelAttributes($category->parent)
-                                ];
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Update result's included array
-        if (!empty($this->included)) {
-            $result['included'] = array_values($this->included);
-        }
+        return $this->transformCollection($products, 'products');
     }
 
     /**
@@ -175,10 +109,7 @@ class ProductJsonApiTransformer extends JsonApiTransformer
             unset($attributes[$key]);
         }
 
-        // Handle special transformations
-        $attributes = $this->transformProductAttributes($attributes, $model);
-
-        return $attributes;
+        return $this->transformProductAttributes($attributes, $model);
     }
 
     /**

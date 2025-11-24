@@ -29,6 +29,8 @@ class UpdateProductRequest extends BaseProductRequest
     public function rules()
     {
         $productId = $this->route('product') ?? $this->route('id');
+        $mode = config('products-package.mode', 'wl');
+        $isWlMode = $mode === 'wl';
 
         // Special case: if this is an attribute update (has attribute_id and value)
         // skip JSON:API validation and use simple validation instead
@@ -41,7 +43,7 @@ class UpdateProductRequest extends BaseProductRequest
 
             // Only validate option values in WL mode (direct database access)
             // WTM mode will validate via WL API on the backend
-            if (config('products-package.mode', 'wl') === 'wl') {
+            if ($isWlMode) {
                 // Fetch attribute to validate option-type values
                 $attribute = \TheDiamondBox\ShopSync\Models\Attribute::where('id', $attributeId)
                     ->where('enabled_on_dropship', true)
@@ -69,20 +71,7 @@ class UpdateProductRequest extends BaseProductRequest
             return $rules;
         }
 
-        // Get table names from model instances
-        $categoryModel = config('products-package.models.category', \App\Category::class);
-        $categoryTable = (new $categoryModel)->getTable();
-
-        $brandModel = config('products-package.models.brand', \App\Brand::class);
-        $brandTable = (new $brandModel)->getTable();
-
-        $locationModel = config('products-package.models.location', \App\Location::class);
-        $locationTable = (new $locationModel)->getTable();
-
-        $supplierModel = config('products-package.models.supplier', \App\Supplier::class);
-        $supplierTable = (new $supplierModel)->getTable();
-
-        return array_merge(parent::rules(), [
+        $rules = [
             'name' => 'sometimes|required|string|max:255',
             'sku_prefix' => 'nullable|string|max:50',
             'rol_number' => 'nullable|string|max:100',
@@ -99,13 +88,29 @@ class UpdateProductRequest extends BaseProductRequest
             'original_image' => 'nullable|string|max:500',
             'description' => 'nullable|string',
             'seo_keywords' => 'nullable|string',
-            'slug' => 'nullable|string|max:255|unique:products,slug,' . $productId,
             'seo_description' => 'nullable|string',
             'related_products' => 'nullable|array',
-            'related_products.*' => 'integer|exists:products,id',
-            'category_id' => [
+        ];
+
+        // Only validate slug uniqueness in WL mode
+        if ($isWlMode) {
+            $rules['slug'] = 'nullable|string|max:255|unique:products,slug,' . $productId;
+        } else {
+            $rules['slug'] = 'nullable|string|max:255';
+        }
+
+        // Only validate related products existence in WL mode
+        if ($isWlMode) {
+            $rules['related_products.*'] = 'integer|exists:products,id';
+        } else {
+            $rules['related_products.*'] = 'integer';
+        }
+
+        // Category validation - only check database in WL mode
+        if ($isWlMode) {
+            $rules['category_id'] = [
                 'nullable',
-                function ($attribute, $value, $fail) use ($categoryTable) {
+                function ($attribute, $value, $fail) {
                     // Allow null/empty
                     if (empty($value)) {
                         return;
@@ -146,23 +151,35 @@ class UpdateProductRequest extends BaseProductRequest
                         $fail('The following category IDs do not exist: ' . implode(', ', $missingIds));
                     }
                 }
-            ],
-            'brand_id' => [
-                'nullable',
-                'integer',
-                'exists:' . $brandTable . ',id'
-            ],
-            'location_id' => [
-                'nullable',
-                'integer',
-                'exists:' . $locationTable . ',id'
-            ],
-            'supplier_id' => [
-                'nullable',
-                'integer',
-                'exists:' . $supplierTable . ',id'
-            ],
-        ]);
+            ];
+        } else {
+            // WTM mode - just validate format, WL will validate existence
+            $rules['category_id'] = 'nullable';
+        }
+
+        // Foreign key validations - only check database in WL mode
+        if ($isWlMode) {
+            // Get table names from model instances
+            $brandModel = config('products-package.models.brand', \App\Brand::class);
+            $brandTable = (new $brandModel)->getTable();
+
+            $locationModel = config('products-package.models.location', \App\Location::class);
+            $locationTable = (new $locationModel)->getTable();
+
+            $supplierModel = config('products-package.models.supplier', \App\Supplier::class);
+            $supplierTable = (new $supplierModel)->getTable();
+
+            $rules['brand_id'] = ['nullable', 'integer', 'exists:' . $brandTable . ',id'];
+            $rules['location_id'] = ['nullable', 'integer', 'exists:' . $locationTable . ',id'];
+            $rules['supplier_id'] = ['nullable', 'integer', 'exists:' . $supplierTable . ',id'];
+        } else {
+            // WTM mode - just validate data type, WL will validate existence
+            $rules['brand_id'] = 'nullable|integer';
+            $rules['location_id'] = 'nullable|integer';
+            $rules['supplier_id'] = 'nullable|integer';
+        }
+
+        return array_merge(parent::rules(), $rules);
     }
 
     /**
@@ -200,6 +217,7 @@ class UpdateProductRequest extends BaseProductRequest
     {
         $validated = $this->validated();
         $productId = $this->route('product') ?? $this->route('id');
+        $mode = config('products-package.mode', 'wl');
 
         // Convert related_products array to JSON for storage
         if (isset($validated['related_products'])) {
@@ -208,7 +226,8 @@ class UpdateProductRequest extends BaseProductRequest
 
         // Separate category_id array into parent categories and subcategories
         // Use array_key_exists instead of isset because isset returns false for null values
-        if (array_key_exists('category_id', $validated)) {
+        // Only do this in WL mode where we have direct database access
+        if ($mode === 'wl' && array_key_exists('category_id', $validated)) {
             if (is_array($validated['category_id']) && !empty($validated['category_id'])) {
                 // Handle array of category IDs
                 $categoryIds = $validated['category_id'];

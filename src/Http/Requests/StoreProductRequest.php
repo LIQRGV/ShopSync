@@ -28,7 +28,10 @@ class StoreProductRequest extends BaseProductRequest
      */
     public function rules()
     {
-        return array_merge(parent::rules(), [
+        $mode = config('products-package.mode', 'wl');
+        $isWlMode = $mode === 'wl';
+
+        $rules = [
             'name' => 'required|string|max:255',
             'sku_prefix' => 'nullable|string|max:50',
             'rol_number' => 'nullable|string|max:100',
@@ -45,11 +48,27 @@ class StoreProductRequest extends BaseProductRequest
             'original_image' => 'nullable|string|max:500',
             'description' => 'nullable|string',
             'seo_keywords' => 'nullable|string',
-            'slug' => 'nullable|string|max:255|unique:products,slug',
             'seo_description' => 'nullable|string',
             'related_products' => 'nullable|array',
-            'related_products.*' => 'integer|exists:products,id',
-            'category_id' => [
+        ];
+
+        // Only validate slug uniqueness in WL mode
+        if ($isWlMode) {
+            $rules['slug'] = 'nullable|string|max:255|unique:products,slug';
+        } else {
+            $rules['slug'] = 'nullable|string|max:255';
+        }
+
+        // Only validate related products existence in WL mode
+        if ($isWlMode) {
+            $rules['related_products.*'] = 'integer|exists:products,id';
+        } else {
+            $rules['related_products.*'] = 'integer';
+        }
+
+        // Category validation - only check database in WL mode
+        if ($isWlMode) {
+            $rules['category_id'] = [
                 'nullable',
                 function ($attribute, $value, $fail) {
                     // Allow null/empty
@@ -92,11 +111,25 @@ class StoreProductRequest extends BaseProductRequest
                         $fail('The following category IDs do not exist: ' . implode(', ', $missingIds));
                     }
                 }
-            ],
-            'brand_id' => 'nullable|integer|exists:brands,id',
-            'location_id' => 'nullable|integer|exists:locations,id',
-            'supplier_id' => 'nullable|integer|exists:suppliers,id',
-        ]);
+            ];
+        } else {
+            // WTM mode - just validate format, WL will validate existence
+            $rules['category_id'] = 'nullable';
+        }
+
+        // Foreign key validations - only check database in WL mode
+        if ($isWlMode) {
+            $rules['brand_id'] = 'nullable|integer|exists:brands,id';
+            $rules['location_id'] = 'nullable|integer|exists:locations,id';
+            $rules['supplier_id'] = 'nullable|integer|exists:suppliers,id';
+        } else {
+            // WTM mode - just validate data type, WL will validate existence
+            $rules['brand_id'] = 'nullable|integer';
+            $rules['location_id'] = 'nullable|integer';
+            $rules['supplier_id'] = 'nullable|integer';
+        }
+
+        return array_merge(parent::rules(), $rules);
     }
 
     /**
@@ -133,6 +166,7 @@ class StoreProductRequest extends BaseProductRequest
     public function getValidatedDataWithDefaults()
     {
         $validated = $this->validated();
+        $mode = config('products-package.mode', 'wl');
 
         // Convert related_products array to JSON for storage
         if (isset($validated['related_products'])) {
@@ -140,7 +174,8 @@ class StoreProductRequest extends BaseProductRequest
         }
 
         // Separate category_id array into parent categories and subcategories
-        if (isset($validated['category_id']) && is_array($validated['category_id'])) {
+        // Only do this in WL mode where we have direct database access
+        if ($mode === 'wl' && isset($validated['category_id']) && is_array($validated['category_id'])) {
             $categoryIds = $validated['category_id'];
 
             // Get category model to check parent_id
