@@ -37,6 +37,9 @@ export class ProductSyncGrid {
             ...config
         };
 
+        // Inject AG Grid icon font fix (prevents Sora font override from breaking icons)
+        this.injectAgGridIconFix();
+
         // Grid APIs
         this.gridApi = null;
         this.columnApi = null;
@@ -1548,6 +1551,27 @@ export class ProductSyncGrid {
         if (this.gridApi) {
             this.gridApi.destroy();
         }
+    }
+
+    /**
+     * Inject CSS fix for AG Grid icons
+     * Prevents external font-family overrides (e.g., Sora) from breaking AG Grid icons
+     */
+    injectAgGridIconFix() {
+        const styleId = 'ag-grid-icon-fix';
+        // Only inject once
+        if (document.getElementById(styleId)) {
+            return;
+        }
+
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+            .ag-icon {
+                font-family: 'agGridAlpine' !important;
+            }
+        `;
+        document.head.appendChild(style);
     }
 }
 
