@@ -694,6 +694,7 @@ export class GridRenderer {
 
             // Actions (pinned right)
             {
+                colId: 'actions',
                 headerName: 'Actions',
                 width: ProductGridConstants.COLUMN_WIDTHS.actions,
                 pinned: 'right',

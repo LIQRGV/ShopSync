@@ -95,8 +95,11 @@ export class CsvPreviewHandler {
                         return;
                     }
 
+                    // Auto-detect delimiter from header line
+                    const delimiter = this.detectDelimiter(lines[0]);
+
                     // Parse header (first line)
-                    const rawHeader = this.parseCsvLine(lines[0]);
+                    const rawHeader = this.parseCsvLine(lines[0], delimiter);
 
                     // Exclude image-related columns (case-insensitive)
                     const excludedColumns = ['image', 'images', 'image_url', 'image url', 'image_path', 'image path'];
@@ -120,7 +123,7 @@ export class CsvPreviewHandler {
                     // Parse preview rows
                     const previewRows = [];
                     for (let i = 1; i <= rowsToShow; i++) {
-                        const rawRowData = this.parseCsvLine(lines[i]);
+                        const rawRowData = this.parseCsvLine(lines[i], delimiter);
 
                         // Filter out excluded column values
                         const rowData = rawRowData.filter((val, index) => !excludedIndices.includes(index));
@@ -158,11 +161,24 @@ export class CsvPreviewHandler {
     }
 
     /**
-     * Parse a single CSV line (handle quoted values and commas)
+     * Detect CSV delimiter from header line (comma or tab)
+     * @param {string} headerLine - First line of CSV
+     * @returns {string} The detected delimiter (',' or '\t')
+     */
+    detectDelimiter(headerLine) {
+        const commaCount = headerLine.split(',').length;
+        const tabCount = headerLine.split('\t').length;
+
+        return tabCount > commaCount ? '\t' : ',';
+    }
+
+    /**
+     * Parse a single CSV line (handle quoted values and dynamic delimiter)
      * @param {string} line - CSV line to parse
+     * @param {string} delimiter - Delimiter character (',' or '\t')
      * @returns {Array<string>} Parsed values
      */
-    parseCsvLine(line) {
+    parseCsvLine(line, delimiter = ',') {
         const result = [];
         let current = '';
         let inQuotes = false;
@@ -172,7 +188,7 @@ export class CsvPreviewHandler {
 
             if (char === '"') {
                 inQuotes = !inQuotes;
-            } else if (char === ',' && !inQuotes) {
+            } else if (char === delimiter && !inQuotes) {
                 result.push(current.trim());
                 current = '';
             } else {
