@@ -695,8 +695,12 @@ class ProductController extends Controller
                 return false;
             }
 
+            // Auto-detect delimiter from header (comma or tab)
+            $headerLine = $lines[0];
+            $delimiter = $this->detectCsvDelimiter($headerLine);
+
             // Check if first line looks like a header
-            $header = str_getcsv($lines[0]);
+            $header = str_getcsv($headerLine, $delimiter);
             if (empty($header) || count($header) < 2) {
                 return false;
             }
@@ -707,7 +711,7 @@ class ProductController extends Controller
 
             for ($i = 1; $i <= $samplesToCheck; $i++) {
                 if (isset($lines[$i])) {
-                    $parsed = str_getcsv($lines[$i]);
+                    $parsed = str_getcsv($lines[$i], $delimiter);
                     if (is_array($parsed) && !empty($parsed)) {
                         $validLines++;
                     }
@@ -723,6 +727,20 @@ class ProductController extends Controller
             ]);
             return false;
         }
+    }
+
+    /**
+     * Detect CSV delimiter from header line (comma or tab)
+     *
+     * @param string $headerLine
+     * @return string The detected delimiter (',' or "\t")
+     */
+    protected function detectCsvDelimiter($headerLine)
+    {
+        $commaCount = count(str_getcsv($headerLine, ','));
+        $tabCount = count(str_getcsv($headerLine, "\t"));
+
+        return $tabCount > $commaCount ? "\t" : ',';
     }
 
     /**
