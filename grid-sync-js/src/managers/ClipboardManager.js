@@ -540,19 +540,22 @@ export class ClipboardManager {
             // Small delay to ensure grid is updated
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            // Get all column keys except image column
+            // Define export columns matching import format for round-trip compatibility
+            // Exclude: image, fullSku (computed), actions (UI only)
+            const excludedColumns = ['image', 'fullSku', 'actions'];
+
             const allColumns = this.columnApi.getAllDisplayedColumns();
             const exportColumnKeys = allColumns
                 .filter(col => {
                     const colId = col.getColId();
-                    // Exclude image column
-                    return colId !== 'image';
+                    return !excludedColumns.includes(colId);
                 })
                 .map(col => col.getColId());
 
             this.gridApi.exportDataAsCsv({
                 fileName: filename || defaultFilename,
-                columnKeys: exportColumnKeys  // Only export non-image columns
+                columnKeys: exportColumnKeys,  // Only export import-compatible columns
+                skipColumnGroupHeaders: true   // Don't export group header row (Watches, Jewellery, etc.)
             });
 
             // Step 8: Restore original pagination
