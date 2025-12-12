@@ -272,6 +272,7 @@ export class GridRenderer {
                 sortable: true,
                 filter: 'agTextColumnFilter',
                 editable: true,
+                suppressClickEdit: true,  // Prevent single-click edit, use double-click or Enter key
                 cellEditor: 'agTextCellEditor',
                 cellRenderer: (params) => this.nameCellRenderer(params)
             },
@@ -739,15 +740,49 @@ export class GridRenderer {
     }
 
     /**
-     * Render product name cell with link
+     * Render product name cell with link and hover icons
      */
     nameCellRenderer(params) {
         const productId = params.data.id;
         const name = this.dataAdapter.getValue(params.data, 'name') || 'Unnamed Product';
+        const slug = this.dataAdapter.getValue(params.data, 'slug') || '';
         const baseUrl = (window.ShopProductGridConfig && window.ShopProductGridConfig.baseUrl) ||
                        (window.ProductGridConfig && window.ProductGridConfig.baseUrl) ||
                        this.baseUrl;
-        return `<a href="${baseUrl}/admin/products/${productId}" target="_blank" class="text-decoration-none" title="${name}" style="color: #727cf5;">${name}</a>`;
+
+        // SVG icons (inline for reliability)
+        const outIcon = `<svg width="14" height="14" viewBox="0 0 515.283 515.283" xmlns="http://www.w3.org/2000/svg"><path d="m372.149 515.283h-286.268c-22.941 0-44.507-8.934-60.727-25.155s-25.153-37.788-25.153-60.726v-286.268c0-22.94 8.934-44.506 25.154-60.726s37.786-25.154 60.727-25.154h114.507c15.811 0 28.627 12.816 28.627 28.627s-12.816 28.627-28.627 28.627h-114.508c-7.647 0-14.835 2.978-20.241 8.384s-8.385 12.595-8.385 20.242v286.268c0 7.647 2.978 14.835 8.385 20.243 5.406 5.405 12.594 8.384 20.241 8.384h286.267c7.647 0 14.835-2.978 20.242-8.386 5.406-5.406 8.384-12.595 8.384-20.242v-114.506c0-15.811 12.817-28.626 28.628-28.626s28.628 12.816 28.628 28.626v114.507c0 22.94-8.934 44.505-25.155 60.727-16.221 16.22-37.788 25.154-60.726 25.154zm-171.76-171.762c-7.327 0-14.653-2.794-20.242-8.384-11.179-11.179-11.179-29.306 0-40.485l237.397-237.398h-102.648c-15.811 0-28.626-12.816-28.626-28.627s12.815-28.627 28.626-28.627h171.761c3.959 0 7.73.804 11.16 2.257 3.201 1.354 6.207 3.316 8.837 5.887l.002.002.056.056.017.016.044.044.029.029.032.032.062.062.062.062.031.032.029.029.044.045.016.016.056.057.002.002c2.57 2.632 4.533 5.638 5.886 8.838 1.453 3.43 2.258 7.2 2.258 11.16v171.761c0 15.811-12.817 28.627-28.628 28.627s-28.626-12.816-28.626-28.627v-102.648l-237.4 237.399c-5.585 5.59-12.911 8.383-20.237 8.383z" fill="currentColor"/></svg>`;
+        const pencilIcon = `<svg width="14" height="14" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="m18 84.2c1 0 1.2-.1 2.1-.3l18-3.6c1.9-.5 3.8-1.4 5.3-2.9l43.6-43.6c6.7-6.7 6.7-18.2 0-24.9l-3.7-3.9c-6.7-6.7-18.3-6.7-25 0l-43.6 43.7c-1.4 1.4-2.4 3.4-2.9 5.3l-3.8 18.2c-.5 3.4.5 6.7 2.9 9.1 1.9 1.9 4.7 2.9 7.1 2.9zm3.4-28.3 43.6-43.7c2.9-2.9 8.2-2.9 11 0l3.8 3.8c3.4 3.4 3.4 8.2 0 11.5l-43.5 43.7-18.5 3.1z" fill="currentColor"/><path d="m86.6 90.4h-73.8c-2.9 0-4.8 1.9-4.8 4.8s2.4 4.8 4.8 4.8h73.4c2.9 0 5.3-1.9 5.3-4.8-.1-2.9-2.5-4.8-4.9-4.8z" fill="currentColor"/></svg>`;
+
+        const frontendUrl = slug ? `${baseUrl}/${slug}` : '#';
+        const adminUrl = `${baseUrl}/admin/products/${productId}`;
+
+        const disabledStyle = !slug ? 'opacity: 0.3; cursor: not-allowed; pointer-events: none;' : '';
+
+        return `
+            <div class="product-name-cell"
+                 style="display: flex; align-items: center; justify-content: space-between; width: 100%; height: 100%;"
+                 onmouseover="this.querySelector('.product-name-icons').style.display='flex'"
+                 onmouseout="this.querySelector('.product-name-icons').style.display='none'">
+                <span class="product-name-link" title="${name}"
+                   style="color: #727cf5; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; cursor: pointer;"
+                   onclick="event.stopPropagation(); window.open('${adminUrl}', '_blank');">${name}</span>
+                <div class="product-name-icons" style="display: none; gap: 4px; margin-left: 8px; flex-shrink: 0;"
+                     onmousedown="event.stopPropagation(); event.preventDefault();"
+                     ondblclick="event.stopPropagation(); event.preventDefault();">
+                    <span class="product-icon-btn" title="View on frontend"
+                       style="color: #6c757d; padding: 2px; display: inline-flex; align-items: center; cursor: pointer; ${disabledStyle}"
+                       onclick="event.stopPropagation(); event.preventDefault(); ${slug ? `window.open('${frontendUrl}', '_blank');` : ''}"
+                       onmouseover="this.style.color='#727cf5'"
+                       onmouseout="this.style.color='#6c757d'">${outIcon}</span>
+                    <span class="product-icon-btn" title="Edit product"
+                          style="color: #6c757d; padding: 2px; display: inline-flex; align-items: center; cursor: pointer;"
+                          onclick="event.stopPropagation(); event.preventDefault();"
+                          onmouseover="this.style.color='#727cf5'"
+                          onmouseout="this.style.color='#6c757d'">${pencilIcon}</span>
+                </div>
+            </div>
+        `.replace(/\s+/g, ' ').trim();
     }
 
     /**
