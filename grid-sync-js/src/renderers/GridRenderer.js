@@ -186,6 +186,52 @@ export class GridRenderer {
                         // For option types, show appropriate placeholder for empty values
                         return inputType !== 1 ? (isOptionWithoutValues ? noOptionsText : emptyOptionText) : '';
                     },
+                    filterValueGetter: (params) => {
+                        if (!params.data) return '';
+
+                        // Get currentData and dataAdapter from context
+                        const currentData = params.context?.gridInstance?.currentData || this.currentData;
+                        const dataAdapter = params.context?.gridInstance?.dataAdapter || this.dataAdapter;
+
+                        // First check if there's a locally updated value (from recent edit)
+                        if (params.data._attributeValues && params.data._attributeValues[attrId] !== undefined) {
+                            const value = params.data._attributeValues[attrId];
+                            // Return empty string for placeholder values to allow proper filtering
+                            return (inputType !== 1 && !value) ? '' : value;
+                        }
+
+                        // Handle nested mode (JSON:API with relationships + included)
+                        if (dataAdapter && dataAdapter.mode === 'nested' && params.data.relationships && params.data.relationships.attributes) {
+                            const attributeIds = params.data.relationships.attributes.data.map(a => String(a.id));
+
+                            // Check if this attribute is in the product
+                            if (!attributeIds.includes(attrId)) {
+                                return '';
+                            }
+
+                            if (currentData && currentData.included) {
+                                const includedAttr = currentData.included.find(inc =>
+                                    inc.type === 'attributes' &&
+                                    String(inc.id) === attrId &&
+                                    attributeIds.includes(String(inc.id))
+                                );
+
+                                if (includedAttr && includedAttr._productValues) {
+                                    const productIdStr = String(params.data.id);
+                                    const productIdNum = Number(params.data.id);
+
+                                    if (includedAttr._productValues[productIdStr] !== undefined) {
+                                        return includedAttr._productValues[productIdStr] || '';
+                                    }
+                                    if (includedAttr._productValues[productIdNum] !== undefined) {
+                                        return includedAttr._productValues[productIdNum] || '';
+                                    }
+                                }
+                            }
+                        }
+
+                        return '';
+                    },
                     valueSetter: (params) => {
                         // Convert "- Select -" to empty string for clearing attribute
                         const actualValue = params.newValue === '- Select -' ? '' : params.newValue;
@@ -345,6 +391,10 @@ export class GridRenderer {
                     const status = this.dataAdapter.getValue(params.data, 'status');
                     return ProductGridConstants.getProductStatusText(status);
                 },
+                filterValueGetter: (params) => {
+                    const status = this.dataAdapter.getValue(params.data, 'status');
+                    return ProductGridConstants.getProductStatusText(status);
+                },
                 valueSetter: (params) => {
                     const numericValue = ProductGridConstants.getProductStatusNumeric(params.newValue);
                     this.dataAdapter.setValue(params.data, 'status', numericValue);
@@ -366,6 +416,10 @@ export class GridRenderer {
                     values: ProductGridConstants.SELL_STATUS.OPTIONS
                 },
                 valueGetter: (params) => {
+                    const sellStatus = this.dataAdapter.getValue(params.data, 'sell_status');
+                    return ProductGridConstants.getSellStatusText(sellStatus);
+                },
+                filterValueGetter: (params) => {
                     const sellStatus = this.dataAdapter.getValue(params.data, 'sell_status');
                     return ProductGridConstants.getSellStatusText(sellStatus);
                 },
@@ -395,6 +449,16 @@ export class GridRenderer {
                 sortable: true,
                 filter: 'agNumberColumnFilter',
                 editable: true,
+                valueGetter: (params) => {
+                    if (!params.data) return null;
+                    const value = this.dataAdapter.getValue(params.data, 'price');
+                    return value !== null && value !== undefined ? parseFloat(value) : null;
+                },
+                filterValueGetter: (params) => {
+                    if (!params.data) return null;
+                    const value = this.dataAdapter.getValue(params.data, 'price');
+                    return value !== null && value !== undefined ? parseFloat(value) : null;
+                },
                 valueFormatter: (params) => this.currencyFormatter(params)
             },
             {
@@ -405,6 +469,16 @@ export class GridRenderer {
                 sortable: true,
                 filter: 'agNumberColumnFilter',
                 editable: true,
+                valueGetter: (params) => {
+                    if (!params.data) return null;
+                    const value = this.dataAdapter.getValue(params.data, 'sale_price');
+                    return value !== null && value !== undefined ? parseFloat(value) : null;
+                },
+                filterValueGetter: (params) => {
+                    if (!params.data) return null;
+                    const value = this.dataAdapter.getValue(params.data, 'sale_price');
+                    return value !== null && value !== undefined ? parseFloat(value) : null;
+                },
                 valueFormatter: (params) => this.currencyFormatter(params)
             },
             {
@@ -415,6 +489,16 @@ export class GridRenderer {
                 sortable: true,
                 filter: 'agNumberColumnFilter',
                 editable: true,
+                valueGetter: (params) => {
+                    if (!params.data) return null;
+                    const value = this.dataAdapter.getValue(params.data, 'trade_price');
+                    return value !== null && value !== undefined ? parseFloat(value) : null;
+                },
+                filterValueGetter: (params) => {
+                    if (!params.data) return null;
+                    const value = this.dataAdapter.getValue(params.data, 'trade_price');
+                    return value !== null && value !== undefined ? parseFloat(value) : null;
+                },
                 valueFormatter: (params) => this.currencyFormatter(params)
             },
             {
@@ -432,6 +516,10 @@ export class GridRenderer {
                     values: ProductGridConstants.VAT_SCHEME.OPTIONS
                 },
                 valueGetter: (params) => {
+                    const vatScheme = this.dataAdapter.getValue(params.data, 'vat_scheme');
+                    return ProductGridConstants.getVatSchemeText(vatScheme);
+                },
+                filterValueGetter: (params) => {
                     const vatScheme = this.dataAdapter.getValue(params.data, 'vat_scheme');
                     return ProductGridConstants.getVatSchemeText(vatScheme);
                 },
@@ -471,6 +559,11 @@ export class GridRenderer {
                 cellEditorPopup: true,
                 cellEditorParams: {},
                 valueGetter: (params) => {
+                    if (!params.data) return '';
+                    const brandFromRelationship = this.getBrandName(params);
+                    return brandFromRelationship || params.data.brand_name || '';
+                },
+                filterValueGetter: (params) => {
                     if (!params.data) return '';
                     const brandFromRelationship = this.getBrandName(params);
                     return brandFromRelationship || params.data.brand_name || '';
@@ -537,6 +630,11 @@ export class GridRenderer {
                 valueGetter: (params) => {
                     if (!params.data) return '';
                     // Try to get from relationship first, otherwise from field
+                    const categoryFromRelationship = this.getCategoryName(params);
+                    return categoryFromRelationship || params.data.category_name || '';
+                },
+                filterValueGetter: (params) => {
+                    if (!params.data) return '';
                     const categoryFromRelationship = this.getCategoryName(params);
                     return categoryFromRelationship || params.data.category_name || '';
                 },
@@ -609,6 +707,11 @@ export class GridRenderer {
                 cellEditorPopup: true,
                 cellEditorParams: {},
                 valueGetter: (params) => {
+                    if (!params.data) return '';
+                    const supplierFromRelationship = this.getSupplierName(params);
+                    return supplierFromRelationship || params.data.supplier_name || '';
+                },
+                filterValueGetter: (params) => {
                     if (!params.data) return '';
                     const supplierFromRelationship = this.getSupplierName(params);
                     return supplierFromRelationship || params.data.supplier_name || '';
