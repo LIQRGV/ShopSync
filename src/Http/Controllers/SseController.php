@@ -3,8 +3,11 @@
 namespace TheDiamondBox\ShopSync\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Str;
 use TheDiamondBox\ShopSync\Services\SseService;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -56,6 +59,50 @@ class SseController extends Controller
             return response()->json([
                 'status' => 'error',
                 'error' => $e->getMessage(),
+                'timestamp' => now()->toISOString()
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate SSE authentication token for Go SSE server
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function token(Request $request): JsonResponse
+    {
+        try {
+            // Get user ID from authenticated user or use a default identifier
+            $userId = $request->user()?->id ?? $request->ip();
+
+            // Generate a random token
+            $token = Str::random(64);
+
+            // Store token in Redis with 1 hour TTL
+            $key = 'sse:tokens:' . $token;
+            Redis::setex($key, 3600, (string) $userId);
+
+            Log::info('SSE token generated', [
+                'user_id' => $userId,
+                'token_prefix' => substr($token, 0, 8) . '...',
+                'expires_in' => 3600
+            ]);
+
+            return response()->json([
+                'token' => $token,
+                'expires_in' => 3600,
+                'timestamp' => now()->toISOString()
+            ]);
+        } catch (\Exception $e) {
+            Log::error('SSE token generation failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'error' => 'Failed to generate token',
+                'message' => $e->getMessage(),
                 'timestamp' => now()->toISOString()
             ], 500);
         }

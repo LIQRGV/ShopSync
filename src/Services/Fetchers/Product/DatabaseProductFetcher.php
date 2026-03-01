@@ -301,7 +301,13 @@ class DatabaseProductFetcher implements ProductFetcherInterface
         // Remove UTF-8 BOM if present
         $csvContent = preg_replace('/^\xEF\xBB\xBF/', '', $csvContent);
 
-        $rows = array_map('str_getcsv', explode("\n", $csvContent));
+        // Detect delimiter (comma or tab) from first line
+        $firstLine = strtok($csvContent, "\n");
+        $delimiter = $this->detectCsvDelimiter($firstLine);
+
+        $rows = array_map(function($line) use ($delimiter) {
+            return str_getcsv($line, $delimiter);
+        }, explode("\n", $csvContent));
         $header = array_shift($rows);
 
         if (empty($header)) {
@@ -368,9 +374,6 @@ class DatabaseProductFetcher implements ProductFetcherInterface
                         'seo_description' => isset($data['SEO Description']) ? trim($data['SEO Description']) : null,
                         'slug' => isset($data['URL Slug']) ? trim($data['URL Slug']) : null,
                     ];
-
-                    // TODO: Handle Category, Brand, Supplier lookups/creation (they need IDs, not names)
-                    // category_id, brand_id, supplier_id would need to be resolved from names
 
                     // Use updateOrCreate with sku_prefix + rol_number (SKU Value) if provided
                     $uniqueKey = !empty($productData['sku_prefix']) && !empty($productData['rol_number'])
@@ -576,6 +579,19 @@ class DatabaseProductFetcher implements ProductFetcherInterface
             ]);
             return null;
         }
+    }
+
+    /**
+     * Detect CSV delimiter from the first line (header).
+     * Supports comma and tab delimiters.
+     */
+    protected function detectCsvDelimiter(string $firstLine): string
+    {
+        $commaCount = substr_count($firstLine, ',');
+        $tabCount = substr_count($firstLine, "\t");
+
+        // Use tab if it appears more frequently than comma
+        return $tabCount > $commaCount ? "\t" : ',';
     }
 
 }
