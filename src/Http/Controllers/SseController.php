@@ -6,8 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Redis;
-use Illuminate\Support\Str;
+use TheDiamondBox\ShopSync\Models\Client;
 use TheDiamondBox\ShopSync\Services\SseService;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -73,26 +72,53 @@ class SseController extends Controller
     public function token(Request $request): JsonResponse
     {
         try {
-            // Get user ID from authenticated user or use a default identifier
-            $userId = $request->user()?->id ?? $request->ip();
+            $mode = config('products-package.mode', 'wl');
+            $ttl = 60;
 
-            // Generate a random token
-            $token = Str::random(64);
+            $payload = [
+                'mode' => $mode,
+                'client_id' => null,
+                'upstream_url' => '',
+                'upstream_token' => '',
+                'iat' => time(),
+                'exp' => time() + $ttl,
+            ];
 
-            // Store token in Redis with 1 hour TTL
-            $key = 'sse:tokens:' . $token;
-            Redis::setex($key, 3600, (string) $userId);
+            if ($mode === 'wtm') {
+                $clientId = $request->header('client-id');
+
+                if (empty($clientId)) {
+                    return response()->json([
+                        'error' => 'Client ID header is required in WTM mode',
+                    ], 422);
+                }
+
+                $client = Client::query()->find($clientId);
+
+                if (!$client) {
+                    return response()->json([
+                        'error' => 'Client not found',
+                    ], 404);
+                }
+
+                $payload['client_id'] = (int) $client->id;
+                $payload['upstream_url'] = $client->getActiveUrl() . '/' . config('products-package.route_prefix', 'api/v1');
+                $payload['upstream_token'] = decrypt($client->access_token);
+            }
+
+            $json = json_encode($payload);
+            $b64 = base64_encode($json);
+            $signature = hash_hmac('sha256', $b64, config('app.key'));
+            $token = $b64 . '.' . $signature;
 
             Log::info('SSE token generated', [
-                'user_id' => $userId,
-                'token_prefix' => substr($token, 0, 8) . '...',
-                'expires_in' => 3600
+                'mode' => $mode,
+                'expires_in' => $ttl,
             ]);
 
             return response()->json([
                 'token' => $token,
-                'expires_in' => 3600,
-                'timestamp' => now()->toISOString()
+                'expires_in' => $ttl,
             ]);
         } catch (\Exception $e) {
             Log::error('SSE token generation failed', [
@@ -103,7 +129,6 @@ class SseController extends Controller
             return response()->json([
                 'error' => 'Failed to generate token',
                 'message' => $e->getMessage(),
-                'timestamp' => now()->toISOString()
             ], 500);
         }
     }
