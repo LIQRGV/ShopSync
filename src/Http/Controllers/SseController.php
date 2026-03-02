@@ -74,6 +74,16 @@ class SseController extends Controller
     public function token(Request $request): JsonResponse
     {
         try {
+            // Optional Bearer auth for cross-domain requests (e.g. WTM relay).
+            // Same-origin browser requests are protected by CORS policy.
+            $bearerToken = $request->bearerToken();
+            if ($bearerToken) {
+                $expectedKey = config('products-package.package_auth_key');
+                if (!$expectedKey || $expectedKey !== $bearerToken) {
+                    return response()->json(['error' => 'Unauthorized'], 401);
+                }
+            }
+
             $mode = config('products-package.mode', 'wl');
             $ttl = 60;
 

@@ -3,10 +3,18 @@ package stream
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 )
+
+// tokenResponse is the JSON shape returned by the upstream /sse/token endpoint.
+type tokenResponse struct {
+	Token     string `json:"token"`
+	ExpiresIn int    `json:"expires_in"`
+}
 
 // UpstreamRelay connects to an upstream WL SSE server and relays events
 // to a local WTM client. Each WTM connection gets its own relay.
@@ -39,9 +47,14 @@ func NewUpstreamRelay(upstreamURL, upstreamToken string, httpClient *http.Client
 // If the writer returns an error (e.g., the downstream client
 // disconnected), Relay stops and returns that error.
 func (u *UpstreamRelay) Relay(ctx context.Context, writer func(event, data string) error) error {
-	url := fmt.Sprintf("%s/sse/events?token=%s", u.upstreamURL, u.upstreamToken)
+	sseToken, err := u.fetchSSEToken(ctx)
+	if err != nil {
+		return fmt.Errorf("upstream relay: %w", err)
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	sseURL := fmt.Sprintf("%s/sse/events?token=%s", u.upstreamURL, url.QueryEscape(sseToken))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sseURL, nil)
 	if err != nil {
 		return fmt.Errorf("upstream relay: failed to create request: %w", err)
 	}
@@ -59,6 +72,38 @@ func (u *UpstreamRelay) Relay(ctx context.Context, writer func(event, data strin
 	}
 
 	return u.parseSSEStream(ctx, resp, writer)
+}
+
+// fetchSSEToken exchanges the upstream Bearer token for a signed HMAC
+// token by POSTing to the upstream /sse/token endpoint.
+func (u *UpstreamRelay) fetchSSEToken(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.upstreamURL+"/sse/token", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create token request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+u.upstreamToken)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := u.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("token request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("token endpoint returned status %d", resp.StatusCode)
+	}
+
+	var tok tokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tok); err != nil {
+		return "", fmt.Errorf("failed to decode token response: %w", err)
+	}
+
+	if tok.Token == "" {
+		return "", fmt.Errorf("token endpoint returned empty token")
+	}
+
+	return tok.Token, nil
 }
 
 // parseSSEStream reads the response body line by line, accumulating SSE

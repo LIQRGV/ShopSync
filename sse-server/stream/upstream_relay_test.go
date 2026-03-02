@@ -2,6 +2,7 @@ package stream
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -46,6 +47,28 @@ func collectEvents() (func(event, data string) error, func() []sseEvent) {
 	return writer, getter
 }
 
+// twoStepMux returns an http.ServeMux that serves both /sse/token (POST)
+// and /sse/events (GET). The token endpoint returns a signed token string
+// in JSON. The events handler receives the signed token and serves SSE.
+// This mirrors the real two-step flow.
+func twoStepMux(sseToken string, eventsHandler http.HandlerFunc) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/sse/token", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(tokenResponse{
+			Token:     sseToken,
+			ExpiresIn: 60,
+		})
+	})
+	mux.HandleFunc("/sse/events", eventsHandler)
+	return mux
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -53,8 +76,9 @@ func collectEvents() (func(event, data string) error, func() []sseEvent) {
 func TestUpstreamRelay_ParsesAndForwardsEvents(t *testing.T) {
 	t.Parallel()
 
-	// Simulate an upstream SSE server that sends two events then closes.
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	const signedToken = "signed-hmac-token-abc"
+
+	mux := twoStepMux(signedToken, func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Accept") != "text/event-stream" {
 			t.Errorf("expected Accept: text/event-stream, got %q", r.Header.Get("Accept"))
 		}
@@ -62,10 +86,10 @@ func TestUpstreamRelay_ParsesAndForwardsEvents(t *testing.T) {
 			t.Errorf("expected Cache-Control: no-cache, got %q", r.Header.Get("Cache-Control"))
 		}
 
-		// Verify the token is passed as a query parameter.
+		// Verify the signed token (from the token endpoint) is used.
 		token := r.URL.Query().Get("token")
-		if token != "test-token-123" {
-			t.Errorf("expected token=test-token-123, got %q", token)
+		if token != signedToken {
+			t.Errorf("expected token=%s, got %q", signedToken, token)
 		}
 
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -88,12 +112,14 @@ func TestUpstreamRelay_ParsesAndForwardsEvents(t *testing.T) {
 		fmt.Fprint(w, "data: {\"product_id\":2}\n")
 		fmt.Fprint(w, "\n")
 		flusher.Flush()
-	}))
+	})
+
+	server := httptest.NewServer(mux)
 	defer server.Close()
 
 	writer, getEvents := collectEvents()
 
-	relay := NewUpstreamRelay(server.URL, "test-token-123", server.Client())
+	relay := NewUpstreamRelay(server.URL, "bearer-token-123", server.Client())
 
 	err := relay.Relay(context.Background(), writer)
 	// The server closes the connection, so we expect the "upstream closed"
@@ -125,7 +151,7 @@ func TestUpstreamRelay_ParsesAndForwardsEvents(t *testing.T) {
 func TestUpstreamRelay_SkipsCommentLines(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux := twoStepMux("tok", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
@@ -138,11 +164,13 @@ func TestUpstreamRelay_SkipsCommentLines(t *testing.T) {
 		fmt.Fprint(w, "data: {\"id\":1}\n")
 		fmt.Fprint(w, "\n")
 		flusher.Flush()
-	}))
+	})
+
+	server := httptest.NewServer(mux)
 	defer server.Close()
 
 	writer, getEvents := collectEvents()
-	relay := NewUpstreamRelay(server.URL, "tok", server.Client())
+	relay := NewUpstreamRelay(server.URL, "bearer-tok", server.Client())
 
 	_ = relay.Relay(context.Background(), writer)
 
@@ -167,7 +195,7 @@ func TestUpstreamRelay_SkipsCommentLines(t *testing.T) {
 func TestUpstreamRelay_HandlesUpstreamDisconnect(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux := twoStepMux("tok", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
@@ -180,11 +208,13 @@ func TestUpstreamRelay_HandlesUpstreamDisconnect(t *testing.T) {
 
 		// Close the connection immediately after one event
 		// (the handler returns, closing the response body).
-	}))
+	})
+
+	server := httptest.NewServer(mux)
 	defer server.Close()
 
 	writer, getEvents := collectEvents()
-	relay := NewUpstreamRelay(server.URL, "tok", server.Client())
+	relay := NewUpstreamRelay(server.URL, "bearer-tok", server.Client())
 
 	err := relay.Relay(context.Background(), writer)
 
@@ -205,7 +235,7 @@ func TestUpstreamRelay_ContextCancellationStopsRelay(t *testing.T) {
 	t.Parallel()
 
 	// Server that sends events indefinitely until the client disconnects.
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux := twoStepMux("tok", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
@@ -221,11 +251,13 @@ func TestUpstreamRelay_ContextCancellationStopsRelay(t *testing.T) {
 			flusher.Flush()
 			time.Sleep(10 * time.Millisecond)
 		}
-	}))
+	})
+
+	server := httptest.NewServer(mux)
 	defer server.Close()
 
 	writer, _ := collectEvents()
-	relay := NewUpstreamRelay(server.URL, "tok", server.Client())
+	relay := NewUpstreamRelay(server.URL, "bearer-tok", server.Client())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -245,9 +277,10 @@ func TestUpstreamRelay_ContextCancellationStopsRelay(t *testing.T) {
 	}
 }
 
-func TestUpstreamRelay_NonOKStatus(t *testing.T) {
+func TestUpstreamRelay_NonOKStatus_TokenEndpoint(t *testing.T) {
 	t.Parallel()
 
+	// Token endpoint returns 401.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
@@ -255,6 +288,29 @@ func TestUpstreamRelay_NonOKStatus(t *testing.T) {
 
 	writer, _ := collectEvents()
 	relay := NewUpstreamRelay(server.URL, "bad-token", server.Client())
+
+	err := relay.Relay(context.Background(), writer)
+	if err == nil {
+		t.Fatal("expected error for 401 response")
+	}
+	if !strings.Contains(err.Error(), "token endpoint returned status 401") {
+		t.Errorf("expected 'token endpoint returned status 401' error, got: %v", err)
+	}
+}
+
+func TestUpstreamRelay_NonOKStatus_EventsEndpoint(t *testing.T) {
+	t.Parallel()
+
+	// Token endpoint succeeds, but SSE events endpoint returns 401.
+	mux := twoStepMux("signed-tok", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	writer, _ := collectEvents()
+	relay := NewUpstreamRelay(server.URL, "bearer-tok", server.Client())
 
 	err := relay.Relay(context.Background(), writer)
 	if err == nil {
@@ -268,7 +324,7 @@ func TestUpstreamRelay_NonOKStatus(t *testing.T) {
 func TestUpstreamRelay_WriterErrorStopsRelay(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux := twoStepMux("tok", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
@@ -279,7 +335,9 @@ func TestUpstreamRelay_WriterErrorStopsRelay(t *testing.T) {
 		flusher.Flush()
 		fmt.Fprint(w, "event: second\ndata: 2\n\n")
 		flusher.Flush()
-	}))
+	})
+
+	server := httptest.NewServer(mux)
 	defer server.Close()
 
 	writerErr := errors.New("client disconnected")
@@ -287,7 +345,7 @@ func TestUpstreamRelay_WriterErrorStopsRelay(t *testing.T) {
 		return writerErr
 	}
 
-	relay := NewUpstreamRelay(server.URL, "tok", server.Client())
+	relay := NewUpstreamRelay(server.URL, "bearer-tok", server.Client())
 	err := relay.Relay(context.Background(), writer)
 
 	if err == nil {
@@ -301,20 +359,24 @@ func TestUpstreamRelay_WriterErrorStopsRelay(t *testing.T) {
 func TestUpstreamRelay_URLConstruction(t *testing.T) {
 	t.Parallel()
 
-	// Capture the actual URL the relay requests.
+	const signedToken = "my-signed-token"
+
+	// Capture the actual URL the relay requests on the events endpoint.
 	var requestedURL string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux := twoStepMux(signedToken, func(w http.ResponseWriter, r *http.Request) {
 		requestedURL = r.URL.String()
 		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "text/event-stream")
-	}))
+	})
+
+	server := httptest.NewServer(mux)
 	defer server.Close()
 
 	writer, _ := collectEvents()
-	relay := NewUpstreamRelay(server.URL, "my-token", server.Client())
+	relay := NewUpstreamRelay(server.URL, "bearer-tok", server.Client())
 	_ = relay.Relay(context.Background(), writer)
 
-	expected := "/sse/events?token=my-token"
+	expected := "/sse/events?token=" + signedToken
 	if requestedURL != expected {
 		t.Errorf("URL = %q, want %q", requestedURL, expected)
 	}
@@ -323,7 +385,7 @@ func TestUpstreamRelay_URLConstruction(t *testing.T) {
 func TestUpstreamRelay_MultiLineData(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux := twoStepMux("tok", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
@@ -335,11 +397,13 @@ func TestUpstreamRelay_MultiLineData(t *testing.T) {
 		fmt.Fprint(w, "data: line2\n")
 		fmt.Fprint(w, "\n")
 		flusher.Flush()
-	}))
+	})
+
+	server := httptest.NewServer(mux)
 	defer server.Close()
 
 	writer, getEvents := collectEvents()
-	relay := NewUpstreamRelay(server.URL, "tok", server.Client())
+	relay := NewUpstreamRelay(server.URL, "bearer-tok", server.Client())
 
 	_ = relay.Relay(context.Background(), writer)
 
@@ -360,5 +424,87 @@ func TestNewUpstreamRelay_DefaultHTTPClient(t *testing.T) {
 	relay := NewUpstreamRelay("http://example.com", "tok", nil)
 	if relay.httpClient != http.DefaultClient {
 		t.Error("expected default http.Client when nil is passed")
+	}
+}
+
+func TestUpstreamRelay_TokenEndpointAuthHeader(t *testing.T) {
+	t.Parallel()
+
+	const bearerToken = "my-laravel-bearer-token"
+
+	var receivedAuth string
+	var receivedAccept string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/sse/token" {
+			receivedAuth = r.Header.Get("Authorization")
+			receivedAccept = r.Header.Get("Accept")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(tokenResponse{
+				Token:     "signed-tok",
+				ExpiresIn: 60,
+			})
+			return
+		}
+		// SSE endpoint — just close immediately.
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	writer, _ := collectEvents()
+	relay := NewUpstreamRelay(server.URL, bearerToken, server.Client())
+	_ = relay.Relay(context.Background(), writer)
+
+	expectedAuth := "Bearer " + bearerToken
+	if receivedAuth != expectedAuth {
+		t.Errorf("Authorization header = %q, want %q", receivedAuth, expectedAuth)
+	}
+	if receivedAccept != "application/json" {
+		t.Errorf("Accept header = %q, want %q", receivedAccept, "application/json")
+	}
+}
+
+func TestUpstreamRelay_TokenEndpointEmptyToken(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(tokenResponse{Token: "", ExpiresIn: 60})
+	}))
+	defer server.Close()
+
+	writer, _ := collectEvents()
+	relay := NewUpstreamRelay(server.URL, "bearer-tok", server.Client())
+	err := relay.Relay(context.Background(), writer)
+
+	if err == nil {
+		t.Fatal("expected error for empty token")
+	}
+	if !strings.Contains(err.Error(), "empty token") {
+		t.Errorf("expected 'empty token' error, got: %v", err)
+	}
+}
+
+func TestUpstreamRelay_TokenEndpointInvalidJSON(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "not valid json")
+	}))
+	defer server.Close()
+
+	writer, _ := collectEvents()
+	relay := NewUpstreamRelay(server.URL, "bearer-tok", server.Client())
+	err := relay.Relay(context.Background(), writer)
+
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+	if !strings.Contains(err.Error(), "failed to decode token response") {
+		t.Errorf("expected 'failed to decode token response' error, got: %v", err)
 	}
 }

@@ -457,8 +457,18 @@ func TestSSEHandler_WTM_ModeMismatchReverse(t *testing.T) {
 func TestSSEHandler_WTM_ConnectsToUpstreamAndRelays(t *testing.T) {
 	t.Parallel()
 
-	// Create a fake upstream SSE server.
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Create a fake upstream SSE server that implements the two-step token flow.
+	upstreamMux := http.NewServeMux()
+
+	// Step 1: Token endpoint — returns a signed token.
+	upstreamMux.HandleFunc("/sse/token", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"token":"fake-signed-token","expires_in":60}`)
+	})
+
+	// Step 2: SSE events endpoint — streams events using the signed token.
+	upstreamMux.HandleFunc("/sse/events", func(w http.ResponseWriter, r *http.Request) {
 		flusher, ok := w.(http.Flusher)
 		if !ok {
 			http.Error(w, "no flusher", 500)
@@ -479,7 +489,9 @@ func TestSSEHandler_WTM_ConnectsToUpstreamAndRelays(t *testing.T) {
 		flusher.Flush()
 
 		// Close the connection (upstream disconnect).
-	}))
+	})
+
+	upstream := httptest.NewServer(upstreamMux)
 	defer upstream.Close()
 
 	// Create WTM token pointing to our fake upstream.
