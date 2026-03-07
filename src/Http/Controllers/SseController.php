@@ -79,7 +79,7 @@ class SseController extends Controller
             $bearerToken = $request->bearerToken();
             if ($bearerToken) {
                 $expectedKey = config('products-package.package_auth_key');
-                if (!$expectedKey || $expectedKey !== $bearerToken) {
+                if (!$expectedKey || !hash_equals($expectedKey, $bearerToken)) {
                     return response()->json(['error' => 'Unauthorized'], 401);
                 }
             }

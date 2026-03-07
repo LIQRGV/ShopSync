@@ -47,7 +47,7 @@ return [
     */
     'auth_middleware' => env('PRODUCT_PACKAGE_AUTH_MIDDLEWARE'),
     'enable_package_auth' => env('PRODUCT_PACKAGE_ENABLE_PACKAGE_AUTH', false),
-    'package_auth_key' => env('PRODUCT_PACKAGE_AUTH_KEY'),
+    'package_auth_key' => env('PRODUCT_PACKAGE_AUTH_KEY', env('MARKETPLACE_TOKEN')),
 
     /*
     |--------------------------------------------------------------------------
