@@ -296,19 +296,40 @@ class DatabaseProductFetcher implements ProductFetcherInterface
         return implode(',', $columns);
     }
 
+    /**
+     * Detect CSV delimiter from header line (comma or tab)
+     *
+     * @param string $headerLine
+     * @return string The detected delimiter (',' or "\t")
+     */
+    protected function detectDelimiter($headerLine)
+    {
+        $commaCount = count(str_getcsv($headerLine, ','));
+        $tabCount = count(str_getcsv($headerLine, "\t"));
+
+        return $tabCount > $commaCount ? "\t" : ',';
+    }
+
     public function importFromCsv($csvContent)
     {
         // Remove UTF-8 BOM if present
         $csvContent = preg_replace('/^\xEF\xBB\xBF/', '', $csvContent);
 
-        // Detect delimiter (comma or tab) from first line
-        $firstLine = strtok($csvContent, "\n");
-        $delimiter = $this->detectCsvDelimiter($firstLine);
+        $lines = explode("\n", $csvContent);
+        $headerLine = array_shift($lines);
 
+        if (empty($headerLine)) {
+            return ['imported' => 0, 'errors' => ['Invalid CSV format: No header row found']];
+        }
+
+        // Auto-detect delimiter from header
+        $delimiter = $this->detectDelimiter($headerLine);
+
+        // Parse header and rows with detected delimiter
+        $header = str_getcsv($headerLine, $delimiter);
         $rows = array_map(function($line) use ($delimiter) {
             return str_getcsv($line, $delimiter);
-        }, explode("\n", $csvContent));
-        $header = array_shift($rows);
+        }, $lines);
 
         if (empty($header)) {
             return ['imported' => 0, 'errors' => ['Invalid CSV format: No header row found']];
@@ -579,19 +600,6 @@ class DatabaseProductFetcher implements ProductFetcherInterface
             ]);
             return null;
         }
-    }
-
-    /**
-     * Detect CSV delimiter from the first line (header).
-     * Supports comma and tab delimiters.
-     */
-    protected function detectCsvDelimiter(string $firstLine): string
-    {
-        $commaCount = substr_count($firstLine, ',');
-        $tabCount = substr_count($firstLine, "\t");
-
-        // Use tab if it appears more frequently than comma
-        return $tabCount > $commaCount ? "\t" : ',';
     }
 
 }
