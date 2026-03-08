@@ -3,8 +3,8 @@
  * Handles Server-Sent Events connection and message processing
  */
 export class ProductSSEClient {
-    constructor(endpoint, clientId) {
-        this.endpoint = endpoint;
+    constructor(baseUrl, clientId) {
+        this.baseUrl = baseUrl;
         this.clientId = clientId;
         this.eventSource = null;
         this.abortController = null;
@@ -29,19 +29,39 @@ export class ProductSSEClient {
     /**
      * Connect to SSE endpoint
      */
-    connect() {
+    async connect() {
         if (this.eventSource) {
             this.disconnect();
         }
 
         try {
-            const url = new URL(this.endpoint, window.location.origin);
-            // Use custom EventSource implementation that supports headers
-            this.createCustomEventSource(url.toString());
+            // Step 1: Get signed SSE token from Laravel
+            const tokenUrl = new URL(`${this.baseUrl}/token`, window.location.origin);
+            const tokenHeaders = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+            };
+            if (this.clientId) {
+                tokenHeaders['client-id'] = this.clientId;
+            }
 
-            // Start heartbeat monitoring
+            const tokenResponse = await fetch(tokenUrl.toString(), {
+                method: 'POST',
+                headers: tokenHeaders,
+            });
+
+            if (!tokenResponse.ok) {
+                throw new Error(`Token request failed: ${tokenResponse.status}`);
+            }
+
+            const { token } = await tokenResponse.json();
+
+            // Step 2: Connect to SSE with token as query param
+            const eventsUrl = new URL(`${this.baseUrl}/events`, window.location.origin);
+            eventsUrl.searchParams.set('token', token);
+
+            this.createCustomEventSource(eventsUrl.toString());
             this.startHeartbeatMonitoring();
-
             return true;
         } catch (error) {
             console.error('[SSE] Connection error:', error);
@@ -57,18 +77,11 @@ export class ProductSSEClient {
         const controller = new AbortController();
         this.abortController = controller;
 
-        // Headers to send with the request
         const headers = {
             'Accept': 'text/event-stream',
             'Cache-Control': 'no-cache',
         };
 
-        // Add client-id header if available
-        if (this.clientId) {
-            headers['client-id'] = this.clientId;
-        }
-
-        // Create a fetch-based EventSource
         fetch(url, {
             method: 'GET',
             headers: headers,

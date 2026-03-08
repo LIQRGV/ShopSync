@@ -28,6 +28,9 @@ Route::get('/sse/events', [SseController::class, 'events'])
 Route::get('/sse/status', [SseController::class, 'status'])
     ->name('sse.status');
 
+Route::post('/sse/token', [SseController::class, 'token'])
+    ->name('sse.token');
+
 // Dropdown options endpoints - provide data for AG Grid editors
 Route::get('/categories', [CategoryController::class, 'index'])
     ->name('categories.index');

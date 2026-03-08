@@ -22,7 +22,7 @@ export class ProductSyncGrid {
      * @param {string} [config.clientId] - Client ID for multi-tenant filtering
      * @param {string} [config.clientBaseUrl=''] - Base URL for client assets
      * @param {boolean} [config.enableSSE=true] - Enable Server-Sent Events
-     * @param {string} [config.sseEndpoint='/api/v1/sse/events'] - SSE endpoint URL
+     * @param {string} [config.sseBaseUrl='/api/v1/sse'] - SSE base URL
      * @param {string} [config.csvExportPrefix='products'] - Prefix for CSV export filename
      */
     constructor(config) {
@@ -30,7 +30,7 @@ export class ProductSyncGrid {
         this.config = {
             gridElementId: '#productGrid',
             enableSSE: true,
-            sseEndpoint: '/api/v1/sse/events',
+            sseBaseUrl: '/api/v1/sse',
             clientId: null,
             clientBaseUrl: '',
             csvExportPrefix: 'products',
@@ -1023,7 +1023,7 @@ export class ProductSyncGrid {
 
         try {
             this.sseClient = new ProductSSEClient(
-                this.config.sseEndpoint,
+                this.config.sseBaseUrl,
                 this.config.clientId
             );
 

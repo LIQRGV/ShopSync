@@ -396,9 +396,6 @@ class DatabaseProductFetcher implements ProductFetcherInterface
                         'slug' => isset($data['URL Slug']) ? trim($data['URL Slug']) : null,
                     ];
 
-                    // TODO: Handle Category, Brand, Supplier lookups/creation (they need IDs, not names)
-                    // category_id, brand_id, supplier_id would need to be resolved from names
-
                     // Use updateOrCreate with sku_prefix + rol_number (SKU Value) if provided
                     $uniqueKey = !empty($productData['sku_prefix']) && !empty($productData['rol_number'])
                         ? ['sku_prefix' => $productData['sku_prefix'], 'rol_number' => $productData['rol_number']]
